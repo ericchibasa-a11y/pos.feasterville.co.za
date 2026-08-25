@@ -236,16 +236,20 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 
 
 <section class="panel" id="userPanel" style="grid-column:1/-1;display:none">
-<h2>Salesperson & User Management</h2>
+<h2>Salesperson &amp; User Management</h2>
 <p class="small">Manager only. Create individual salesperson accounts, activate/deactivate users and reset passwords.</p>
 <div class="order-head">
-<input id="newEmpName" placeholder="Employee name">
-<input id="newUsername" placeholder="Username">
-<input id="newPassword" placeholder="Temporary password" type="password">
-<select id="newRole"><option value="salesperson">Salesperson</option><option value="manager">Manager</option></select>
-<button class="primary" onclick="createUser()">CREATE USER</button>
+<input id="staffEmail" type="email" placeholder="Salesperson email">
+<input id="staffDisplayName" placeholder="Display name">
+<input id="staffPassword" type="password" placeholder="Temporary password (min 6)">
+<button class="primary" type="button" id="createStaffBtn">CREATE SALESPERSON</button>
+<button type="button" id="refreshStaffBtn">REFRESH USERS</button>
 </div>
-<div id="userList"></div>
+<p id="staffMessage" class="small"></p>
+<div style="overflow:auto"><table class="inv-table">
+<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Sign In</th><th>Actions</th></tr></thead>
+<tbody id="staffRows"><tr><td colspan="6">Open this section to load live users.</td></tr></tbody>
+</table></div>
 </section>
 
 
@@ -448,6 +452,19 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 <div id="reportContent"></div>
 </section>
 
+
+<div id="managerInventoryNav" class="panel" style="grid-column:1/-1;display:none">
+  <h2>Manager — Inventory & Reports</h2>
+  <p class="small">Quick access to production inputs, usage, stock movements, reconciliation and reports.</p>
+  <div class="inventory-actions">
+    <button type="button" class="cat" data-manager-target="productionInputsPanel">PRODUCTION INPUT STOCK</button>
+    <button type="button" class="cat" data-manager-target="usagePanel">USAGE FROM SALES</button>
+    <button type="button" class="cat" data-manager-target="stockMovementPanel">STOCK MOVEMENTS</button>
+    <button type="button" class="cat" data-manager-target="reconPanel">STOCK RECONCILIATION</button>
+    <button type="button" class="cat" data-manager-target="reportsPanel">SALES & INVENTORY REPORTS</button>
+  </div>
+</div>
+
 <section class="panel" id="accessPanel" style="grid-column:1/-1;display:none">
   <h2>Access Rights & User Management</h2>
   <table class="inv-table">
@@ -635,7 +652,7 @@ function applyRights(){
  document.getElementById('loginScreen').style.display='none';
  document.getElementById('userBadge').textContent=currentUser.label;
  const manager=currentUser.role==='manager';
- document.getElementById('accessPanel').style.display=manager?'block':'none'; document.getElementById('recipePanel').style.display=manager?'block':'none'; document.getElementById('reportsPanel').style.display=manager?'block':'none'; document.getElementById('userPanel').style.display=manager?'block':'none'; document.getElementById('reconPanel').style.display=manager?'block':'none'; document.getElementById('productionInputsPanel').style.display=manager?'block':'none'; document.getElementById('stockMovementPanel').style.display=manager?'block':'none'; document.getElementById('usagePanel').style.display=manager?'block':'none'; document.getElementById('easyLinkPanel').style.display=manager?'block':'none'; if(manager)renderUsers();
+ document.getElementById('accessPanel').style.display=manager?'block':'none'; document.getElementById('recipePanel').style.display=manager?'block':'none'; document.getElementById('reportsPanel').style.display=manager?'block':'none'; document.getElementById('userPanel').style.display=manager?'block':'none'; document.getElementById('reconPanel').style.display=manager?'block':'none'; document.getElementById('productionInputsPanel').style.display=manager?'block':'none'; document.getElementById('stockMovementPanel').style.display=manager?'block':'none'; document.getElementById('usagePanel').style.display=manager?'block':'none'; document.getElementById('easyLinkPanel').style.display=manager?'block':'none'; if(manager && document.getElementById('userList') && typeof renderUsers==='function'){try{renderUsers();}catch(e){console.warn(e);}}
  document.querySelectorAll('.inventory-panel').forEach(el=>el.style.display=manager?'block':'none');
  // Salesperson can use selling screen, but discount is manager-controlled.
  const discount=document.getElementById('discount');
@@ -1771,7 +1788,7 @@ document.addEventListener('DOMContentLoaded',function(){
     currentLiveUser = user;
     currentProfile = profile;
 
-    window.currentUser = {
+    currentUser = window.currentUser = {
       id: user.id,
       username: user.email,
       name: profile.display_name || user.email,
@@ -1792,6 +1809,9 @@ document.addEventListener('DOMContentLoaded',function(){
 
     try {
       if (typeof applyRights === 'function') applyRights();
+    } catch (_) {}
+    try {
+      if (typeof window.restoreLiveManagerPanels === 'function') window.restoreLiveManagerPanels();
     } catch (_) {}
   }
 
@@ -2110,6 +2130,103 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   },800);
 });
+</script>
+
+<script>
+(function(){
+const U='https://sflyjcgbxbcwspfuzone.supabase.co',K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM',TK='feastervilleCloudAccessToken';
+const $=id=>document.getElementById(id);
+function sm(t,b){if($('staffMessage')){$('staffMessage').textContent=t||'';$('staffMessage').style.color=b?'#a00':'#155b00';}}
+async function ac(p){const t=sessionStorage.getItem(TK)||'';if(!t)throw Error('Sign in as Manager first.');const r=await fetch(U+'/functions/v1/pos-user-admin',{method:'POST',headers:{apikey:K,Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(p)});const x=await r.text();let d={};try{d=x?JSON.parse(x):{};}catch(_){d={error:x};}if(!r.ok)throw Error(d.error||x||('HTTP '+r.status));return d;}
+async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="6">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="6">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
+window.ftStaffActive=async(id,a)=>{try{await ac({action:'active',user_id:id,active:a});sm(a?'User activated.':'User deactivated.');await loadStaff();}catch(e){sm(e.message,true);}};
+window.ftStaffPassword=async(id,email)=>{const p=prompt('New temporary password for '+email+' (minimum 6 characters):');if(p===null)return;if(p.length<6)return alert('Password must be at least 6 characters.');try{await ac({action:'password',user_id:id,password:p});alert('Password reset successfully.');}catch(e){alert(e.message);}};
+document.addEventListener('DOMContentLoaded',()=>{$('createStaffBtn')?.addEventListener('click',async()=>{try{const email=$('staffEmail').value.trim(),display=$('staffDisplayName').value.trim(),password=$('staffPassword').value;if(!email||!display||password.length<6)throw Error('Enter email, display name and a password of at least 6 characters.');sm('Creating salesperson...');await ac({action:'create',email,display_name:display,password});$('staffEmail').value='';$('staffDisplayName').value='';$('staffPassword').value='';sm('Salesperson created.');await loadStaff();}catch(e){sm(e.message,true);}});$('refreshStaffBtn')?.addEventListener('click',loadStaff);setTimeout(()=>{if(sessionStorage.getItem(TK))loadStaff();},1200);});
+window.loadLiveStaffUsers=loadStaff;
+})();
+</script>
+
+<script>
+(function(){
+  const managerPanelIds=[
+    'managerInventoryNav',
+    'productionInputsPanel',
+    'usagePanel',
+    'stockMovementPanel',
+    'reconPanel',
+    'reportsPanel',
+    'userPanel',
+    'recipePanel',
+    'easyLinkPanel',
+    'masterProductionEditorPanel'
+  ];
+
+  function restoreLiveManagerPanels(){
+    const u=window.currentUser;
+    const manager=!!(u && u.role==='manager');
+
+    managerPanelIds.forEach(function(id){
+      const panel=document.getElementById(id);
+      if(panel)panel.style.display=manager?'block':'none';
+    });
+
+    if(!manager)return;
+
+    // Initialize every restored manager section independently.
+    const functions=[
+      'showProductionInputs',
+      'initStockMovement',
+      'refreshProductionInputs',
+      'renderProductionInputUsageFromSales',
+      'renderOldMasterEditor',
+      'showRecon',
+      'showReport',
+      'summary'
+    ];
+    functions.forEach(function(name){
+      try{
+        if(typeof window[name]==='function'){
+          if(name==='showRecon') window[name]('finished',null);
+          else if(name==='showReport') window[name]('sales',null);
+          else window[name]();
+        }
+      }catch(e){console.warn('Manager panel init:',name,e);}
+    });
+
+    try{
+      if(typeof window.loadLiveStaffUsers==='function')window.loadLiveStaffUsers();
+    }catch(e){console.warn(e);}
+  }
+
+  document.addEventListener('DOMContentLoaded',function(){
+    document.querySelectorAll('[data-manager-target]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const panel=document.getElementById(btn.getAttribute('data-manager-target'));
+        if(panel){
+          panel.style.display='block';
+          panel.scrollIntoView({behavior:'smooth',block:'start'});
+        }
+      });
+    });
+
+    // Live authentication may complete after DOMContentLoaded.
+    let attempts=0;
+    const timer=setInterval(function(){
+      attempts++;
+      if(window.currentUser){
+        restoreLiveManagerPanels();
+        clearInterval(timer);
+      }else if(attempts>60){
+        clearInterval(timer);
+      }
+    },250);
+
+    setTimeout(restoreLiveManagerPanels,1200);
+  });
+
+  // Expose it so the Supabase auth layer can explicitly refresh Manager visibility.
+  window.restoreLiveManagerPanels=restoreLiveManagerPanels;
+})();
 </script>
 
 </body>
