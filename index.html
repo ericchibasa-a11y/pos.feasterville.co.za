@@ -334,8 +334,19 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 <section class="panel" id="usagePanel" style="grid-column:1/-1;display:none">
 <h2>Production Input Usage From Sales</h2>
 <p class="small">Shows which sold products consumed each production input based on the recipes configured by the Manager.</p>
-<table class="inv-table"><thead><tr><th>Input</th><th>Sold Product</th><th>Units Sold</th><th>Qty per Product</th><th>Total Used</th><th>Unit</th></tr></thead>
-<tbody id="usageFromSalesBody"></tbody></table>
+<div class="row" style="margin:8px 0">
+  <button type="button" class="primary" id="refreshUsageFromSalesBtn">REFRESH LIVE USAGE</button>
+  <span id="usageFromSalesStatus" class="small"></span>
+</div>
+<div style="overflow:auto">
+<table class="inv-table">
+<thead><tr>
+  <th>Date</th><th>Order</th><th>Final Product</th><th>Units Sold</th>
+  <th>Production Input</th><th>Qty per Product</th><th>Total Used</th><th>Unit</th>
+</tr></thead>
+<tbody id="usageFromSalesBody"></tbody>
+</table>
+</div>
 </section>
 
 
@@ -1348,60 +1359,157 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 });
 </script><script>
-function renderProductionInputUsageFromSales(){
+async function renderProductionInputUsageFromSales(){
   const body=document.getElementById('usageFromSalesBody');
+  const status=document.getElementById('usageFromSalesStatus');
   if(!body)return;
 
-  let salesData=[];
-  let recipeMap={};
-  let inputs=[];
+  body.innerHTML='<tr><td colspan="8">Loading live production usage...</td></tr>';
+  if(status)status.textContent='Loading from shared database...';
 
-  try{ salesData=JSON.parse(localStorage.getItem('feastervilleSales')||'[]')||[]; }catch(e){ salesData=[]; }
-  try{ recipeMap=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{}; }catch(e){ recipeMap={}; }
-  try{
-    const saved=JSON.parse(localStorage.getItem('feastervilleMasterProductionInputs')||'null');
-    if(Array.isArray(saved)&&saved.length)inputs=saved;
-  }catch(e){}
+  const SUPABASE_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const API_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const accessToken=sessionStorage.getItem('feastervilleCloudAccessToken')||'';
 
-  if(!inputs.length && typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)){
-    inputs=rawMaterials;
+  function fmtQty(v){
+    const n=Number(v||0);
+    return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
   }
 
-  const inputMap={};
-  inputs.forEach(function(x){inputMap[x.code]=x;});
+  try{
+    let salesData=[];
+    let recipeMap={};
+    let inputs=[];
 
-  const rows=[];
-  salesData.forEach(function(sale){
-    (sale.items||[]).forEach(function(item){
-      const links=recipeMap[item.code]||[];
-      links.forEach(function(link){
-        const input=inputMap[link.inputCode]||{name:link.inputCode,unit:''};
-        rows.push({
-          date:sale.date||'',
-          order:sale.orderNo||'',
-          product:item.name||item.code,
-          units:Number(item.qty||0),
-          input:input.name||link.inputCode,
-          per:Number(link.qty||0),
-          total:Number(link.qty||0)*Number(item.qty||0),
-          unit:input.unit||''
+    // Prefer the live Supabase database whenever the user is signed in.
+    if(accessToken){
+      const headers={
+        'apikey':API_KEY,
+        'Authorization':'Bearer '+accessToken,
+        'Content-Type':'application/json'
+      };
+
+      const [salesRes,stateRes]=await Promise.all([
+        fetch(
+          SUPABASE_URL+
+          '/rest/v1/pos_sales?select=id,order_no,sale_date,sale_time,cashier,total,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=2000',
+          {headers}
+        ),
+        fetch(
+          SUPABASE_URL+
+          '/rest/v1/pos_state?select=key,value&key=in.(recipes,master_inputs)',
+          {headers}
+        )
+      ]);
+
+      if(!salesRes.ok){
+        throw new Error('Could not load live sales: '+await salesRes.text());
+      }
+      if(!stateRes.ok){
+        throw new Error('Could not load live recipes: '+await stateRes.text());
+      }
+
+      const liveSales=await salesRes.json();
+      const liveState=await stateRes.json();
+      const stateMap={};
+      (liveState||[]).forEach(r=>stateMap[r.key]=r.value);
+
+      recipeMap=stateMap.recipes||{};
+      inputs=Array.isArray(stateMap.master_inputs)?stateMap.master_inputs:[];
+
+      salesData=(liveSales||[]).map(s=>({
+        date:s.sale_date||'',
+        orderNo:s.order_no||'',
+        items:(s.pos_sale_items||[]).map(i=>({
+          code:i.code,
+          name:i.name,
+          category:i.category,
+          qty:Number(i.qty||0),
+          price:Number(i.price||0)
+        }))
+      }));
+
+      // Keep local copies aligned for the rest of the older POS.
+      localStorage.setItem('feastervilleSales',JSON.stringify(salesData));
+      localStorage.setItem('feastervilleRecipes',JSON.stringify(recipeMap));
+      localStorage.setItem('feastervilleMasterProductionInputs',JSON.stringify(inputs));
+    }else{
+      try{salesData=JSON.parse(localStorage.getItem('feastervilleSales')||'[]')||[];}catch(e){salesData=[];}
+      try{recipeMap=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(e){recipeMap={};}
+      try{
+        inputs=JSON.parse(localStorage.getItem('feastervilleMasterProductionInputs')||'[]')||[];
+      }catch(e){inputs=[];}
+    }
+
+    if(!inputs.length && typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)){
+      inputs=rawMaterials;
+    }
+
+    const inputMap={};
+    inputs.forEach(x=>inputMap[x.code]=x);
+
+    const rows=[];
+    let soldItemCount=0;
+    let recipeLinkedSaleLines=0;
+
+    salesData.forEach(sale=>{
+      (sale.items||[]).forEach(item=>{
+        soldItemCount++;
+        const links=recipeMap[item.code]||[];
+        if(links.length)recipeLinkedSaleLines++;
+
+        links.forEach(link=>{
+          const input=inputMap[link.inputCode]||{
+            code:link.inputCode,
+            name:link.inputCode,
+            unit:''
+          };
+          const units=Number(item.qty||0);
+          const per=Number(link.qty||0);
+
+          rows.push({
+            date:sale.date||sale.sale_date||'',
+            order:sale.orderNo||sale.order_no||'',
+            productCode:item.code||'',
+            product:item.name||item.code||'',
+            units:units,
+            inputCode:link.inputCode||'',
+            input:input.name||link.inputCode||'',
+            per:per,
+            total:per*units,
+            unit:input.unit||''
+          });
         });
       });
     });
-  });
 
-  body.innerHTML=rows.length ? rows.map(function(r){
-    return `<tr>
+    body.innerHTML=rows.length ? rows.map(r=>`<tr>
       <td>${r.date}</td>
       <td>${r.order}</td>
-      <td>${r.product}</td>
-      <td>${r.units}</td>
-      <td>${r.input}</td>
-      <td>${r.per}</td>
-      <td><b>${r.total}</b></td>
+      <td><b>${r.productCode}</b><br><span class="small">${r.product}</span></td>
+      <td>${fmtQty(r.units)}</td>
+      <td><b>${r.inputCode}</b><br><span class="small">${r.input}</span></td>
+      <td>${fmtQty(r.per)}</td>
+      <td><b>${fmtQty(r.total)}</b></td>
       <td>${r.unit}</td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="8">No recipe-linked sales usage found yet.</td></tr>';
+    </tr>`).join('') :
+    `<tr><td colspan="8">
+      No production-input usage can be calculated yet.
+      ${soldItemCount===0
+        ? 'No completed live sales were found.'
+        : 'Sales exist, but the sold products do not yet have saved recipes under Final Product → Production Inputs.'}
+    </td></tr>`;
+
+    if(status){
+      status.textContent=rows.length
+        ? `${rows.length} production-usage line(s) calculated from ${recipeLinkedSaleLines} recipe-linked sold product line(s).`
+        : `${soldItemCount} sold product line(s) checked; ${recipeLinkedSaleLines} had recipes.`;
+    }
+  }catch(err){
+    console.error('Production Input Usage From Sales',err);
+    body.innerHTML='<tr><td colspan="8">Unable to load live production usage: '+String(err.message||err)+'</td></tr>';
+    if(status)status.textContent='Live usage load failed.';
+  }
 }
 
 document.addEventListener('DOMContentLoaded',renderProductionInputUsageFromSales);
@@ -1983,6 +2091,25 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   })();
 })();
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  const btn=document.getElementById('refreshUsageFromSalesBtn');
+  if(btn){
+    btn.addEventListener('click',function(){
+      renderProductionInputUsageFromSales();
+    });
+  }
+
+  // Refresh shortly after the POS becomes interactive.
+  setTimeout(function(){
+    if(sessionStorage.getItem('feastervilleCloudAccessToken')){
+      renderProductionInputUsageFromSales();
+    }
+  },800);
+});
 </script>
 
 </body>
