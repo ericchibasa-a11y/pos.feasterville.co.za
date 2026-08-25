@@ -85,36 +85,55 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
  body.print-production #productionInputsPanel{display:block!important;position:absolute!important;left:0!important;top:0!important;width:100%!important;background:#fff!important}
  body.print-production #receiptPrint{display:none!important}
 }
+
+<style>
+#loginScreen{display:none!important}
+#liveLoginOverlay{position:fixed;inset:0;background:#111;z-index:100000;display:flex;align-items:center;justify-content:center;padding:15px}
+#liveLoginCard{background:#fff;color:#111;border:4px solid #8cc63f;border-radius:12px;padding:24px;width:min(440px,96%)}
+#liveLoginCard input{width:100%;padding:10px;margin:5px 0 10px;border:1px solid #bbb;border-radius:6px}
+#liveLoginCard .actions{display:flex;gap:8px;flex-wrap:wrap}
+#liveLoginCard button{padding:10px 14px}
+#liveTopBar{background:#111;color:#fff;padding:8px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+</style>
 </head>
 <body>
 
-<div id="cloudLiveBar" style="background:#111;color:#fff;padding:8px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<div id="liveTopBar">
   <b>FEASTERVILLE LIVE POS</b>
-  <span id="cloudStatus">Sign in required</span>
-  <span id="cloudUser"></span>
-  <button type="button" id="cloudLogout" style="display:none">SIGN OUT</button>
+  <span id="liveStatus">Sign in required</span>
+  <span id="liveUser"></span>
+  <button type="button" id="liveLogout" style="display:none">SIGN OUT</button>
 </div>
 
-<div id="cloudAuth" style="position:fixed;inset:0;background:#111;z-index:999999;display:flex;align-items:center;justify-content:center;padding:14px">
-  <div style="background:#fff;color:#111;width:min(440px,96%);padding:24px;border-radius:12px;border:4px solid #8cc63f">
+<div id="liveLoginOverlay">
+  <div id="liveLoginCard">
     <h2 style="margin-top:0">FEASTERVILLE LIVE POS LOGIN</h2>
     <p style="font-size:13px">Use an email address and password for the live shared POS.</p>
-    <label><b>Email</b><br><input id="cloudEmail" type="email" style="width:100%;padding:10px;margin:5px 0 10px"></label>
-    <label><b>Password</b><br><input id="cloudPassword" type="password" style="width:100%;padding:10px;margin:5px 0 10px"></label>
-    <label><b>Display Name</b> <span style="font-size:11px">(for new account)</span><br>
-      <input id="cloudDisplayName" type="text" style="width:100%;padding:10px;margin:5px 0 10px">
+
+    <label><b>Email</b>
+      <input id="liveEmail" type="email" autocomplete="username">
     </label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button type="button" id="cloudLogin" style="background:#8cc63f;padding:10px 14px;font-weight:bold">SIGN IN</button>
-      <button type="button" id="cloudSignup" style="padding:10px 14px">CREATE ACCOUNT</button>
+
+    <label><b>Password</b>
+      <input id="livePassword" type="password" autocomplete="current-password">
+    </label>
+
+    <label><b>Display Name</b> <span style="font-size:11px">(for a new account)</span>
+      <input id="liveDisplayName" type="text">
+    </label>
+
+    <div class="actions">
+      <button type="button" id="liveSignIn" class="primary">SIGN IN</button>
+      <button type="button" id="liveCreate">CREATE ACCOUNT</button>
     </div>
-    <div id="cloudManagerBox" style="margin-top:14px;padding-top:10px;border-top:1px solid #ddd">
-      <label><b>Manager Setup Code</b><br>
-        <input id="cloudManagerCode" type="password" placeholder="Only for first manager" style="width:100%;padding:10px;margin:5px 0">
-      </label>
-      <button type="button" id="cloudClaimManager">MAKE THIS ACCOUNT MANAGER</button>
-    </div>
-    <p id="cloudMessage" style="font-weight:bold"></p>
+
+    <hr>
+    <label><b>Manager Setup Code</b>
+      <input id="liveManagerCode" type="password" placeholder="Only for first manager">
+    </label>
+    <button type="button" id="liveClaimManager">MAKE THIS ACCOUNT MANAGER</button>
+
+    <p id="liveMessage" style="font-weight:bold"></p>
   </div>
 </div>
 
@@ -707,215 +726,7 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div>
-<script>
-(function(){
-  const SUPABASE_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
-  const API_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-  const K_TOKEN='feastervilleCloudAccessToken';
-  const K_REFRESH='feastervilleCloudRefreshToken';
-
-  const $=id=>document.getElementById(id);
-  function msg(t,bad=false){const e=$('cloudMessage');if(e){e.textContent=t;e.style.color=bad?'#a00':'#155b00';}}
-  function status(t){const e=$('cloudStatus');if(e)e.textContent=t;}
-  function token(){return sessionStorage.getItem(K_TOKEN)||'';}
-
-  async function request(path,options={}){
-    const headers=Object.assign({
-      'apikey':API_KEY,
-      'Content-Type':'application/json'
-    },options.headers||{});
-    if(token())headers['Authorization']='Bearer '+token();
-    const res=await fetch(SUPABASE_URL+path,Object.assign({},options,{headers}));
-    let body=null;
-    const txt=await res.text();
-    if(txt){try{body=JSON.parse(txt)}catch(e){body=txt}}
-    if(!res.ok){
-      const detail=(body&&typeof body==='object'&&(body.msg||body.message||body.error_description||body.error))||txt||('HTTP '+res.status);
-      throw new Error(detail);
-    }
-    return body;
-  }
-
-  async function profile(user){
-    const rows=await request('/rest/v1/pos_profiles?user_id=eq.'+encodeURIComponent(user.id)+'&select=user_id,display_name,role');
-    return Array.isArray(rows)&&rows[0]?rows[0]:{user_id:user.id,display_name:user.email,role:'salesperson'};
-  }
-
-  async function activate(authData){
-    if(!authData?.access_token||!authData?.user)throw new Error('No login session returned.');
-    sessionStorage.setItem(K_TOKEN,authData.access_token);
-    if(authData.refresh_token)sessionStorage.setItem(K_REFRESH,authData.refresh_token);
-    const p=await profile(authData.user);
-    window.currentUser={
-      id:authData.user.id,
-      username:authData.user.email,
-      name:p.display_name||authData.user.email,
-      role:p.role||'salesperson',
-      label:(p.role==='manager'?'Manager: ':'Salesperson: ')+(p.display_name||authData.user.email)
-    };
-    $('cloudAuth').style.display='none';
-    $('cloudLogout').style.display='';
-    $('cloudUser').textContent=window.currentUser.label;
-    status('ONLINE • shared database');
-    const badge=document.getElementById('userBadge');if(badge)badge.textContent=window.currentUser.label;
-    try{if(typeof applyRights==='function')applyRights();}catch(e){}
-    await pullCloudState();
-    await pullCloudSales();
-  }
-
-  async function login(){
-    try{
-      msg('Signing in…');
-      const email=$('cloudEmail').value.trim();
-      const password=$('cloudPassword').value;
-      if(!email||!password)throw new Error('Enter email and password.');
-      const data=await request('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email,password})});
-      await activate(data);
-      msg('');
-    }catch(e){msg(e.message,true);status('Login failed');}
-  }
-
-  async function signup(){
-    try{
-      msg('Creating account…');
-      const email=$('cloudEmail').value.trim();
-      const password=$('cloudPassword').value;
-      const display_name=$('cloudDisplayName').value.trim();
-      if(!email||!password||!display_name)throw new Error('Enter email, password and display name.');
-      const data=await request('/auth/v1/signup',{method:'POST',body:JSON.stringify({email,password,data:{display_name}})});
-      if(data?.access_token){await activate(data);msg('Account created and signed in.');}
-      else msg('Account created. Check your email to confirm it, then sign in.');
-    }catch(e){msg(e.message,true);}
-  }
-
-  async function claimManager(){
-    try{
-      if(!token())throw new Error('Sign in first.');
-      const code=$('cloudManagerCode').value;
-      const result=await request('/rest/v1/rpc/claim_pos_manager',{method:'POST',body:JSON.stringify({setup_code:code})});
-      if(result!==true)throw new Error('Manager setup code is incorrect.');
-      const user=await request('/auth/v1/user');
-      const p=await profile(user);
-      window.currentUser.role=p.role;
-      window.currentUser.name=p.display_name||user.email;
-      window.currentUser.label='Manager: '+window.currentUser.name;
-      $('cloudUser').textContent=window.currentUser.label;
-      const badge=document.getElementById('userBadge');if(badge)badge.textContent=window.currentUser.label;
-      try{if(typeof applyRights==='function')applyRights();}catch(e){}
-      msg('Manager access enabled.');
-    }catch(e){msg(e.message,true);}
-  }
-
-  async function pullCloudState(){
-    try{
-      const rows=await request('/rest/v1/pos_state?select=key,value');
-      const map={products:'feastervilleProducts',recipes:'feastervilleRecipes',master_inputs:'feastervilleMasterProductionInputs',raw_inventory:'feastervilleRawInventory'};
-      (rows||[]).forEach(r=>{if(map[r.key])localStorage.setItem(map[r.key],JSON.stringify(r.value));});
-      try{if(typeof renderOldMasterEditor==='function')renderOldMasterEditor();}catch(e){}
-      try{if(typeof renderProductionInputUsageFromSales==='function')renderProductionInputUsageFromSales();}catch(e){}
-    }catch(e){console.error('State pull',e);}
-  }
-
-  async function pushState(key,value){
-    try{
-      await request('/rest/v1/pos_state?on_conflict=key',{
-        method:'POST',
-        headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({key,value,updated_at:new Date().toISOString()})
-      });
-    }catch(e){console.error('State push',e);}
-  }
-
-  async function pullCloudSales(){
-    try{
-      const rows=await request('/rest/v1/pos_sales?select=id,order_no,sale_date,sale_time,cashier,order_type,payment,received,total,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=1000');
-      const ss=(rows||[]).map(s=>({
-        cloudId:s.id,orderNo:s.order_no,date:s.sale_date,time:String(s.sale_time||'').slice(0,8),
-        cashier:s.cashier||'',orderType:s.order_type||'',payment:s.payment||'',
-        received:Number(s.received||0),total:Number(s.total||0),
-        items:(s.pos_sale_items||[]).map(i=>({code:i.code,name:i.name,category:i.category,qty:Number(i.qty||0),price:Number(i.price||0)}))
-      }));
-      localStorage.setItem('feastervilleSales',JSON.stringify(ss));
-      try{if(typeof summary==='function')summary();}catch(e){}
-      try{if(typeof renderProductionInputUsageFromSales==='function')renderProductionInputUsageFromSales();}catch(e){}
-    }catch(e){console.error('Sales pull',e);}
-  }
-
-  // Live sale writer: database assigns the order number atomically.
-  window.completeSale=async function(){
-    try{
-      if(!token())throw new Error('Please sign in to the live POS.');
-      if(typeof cart==='undefined'||!Array.isArray(cart)||!cart.length)throw new Error('Please add items to the order.');
-      const subtotal=cart.reduce((a,i)=>a+(Number(i.qty)||0)*(Number(i.price)||0),0);
-      const discount=Math.max(Number(document.getElementById('discount')?.value||0),0);
-      const total=Math.max(subtotal-discount,0);
-      const payment=document.getElementById('payment')?.value||'Cash';
-      const received=Number(document.getElementById('received')?.value||0);
-      if(payment==='Cash'&&received<total)throw new Error('Amount received is less than the total.');
-
-      const items=cart.map(i=>({code:String(i.code||''),name:String(i.name||i.code||''),category:String(i.category||''),qty:Number(i.qty)||0,price:Number(i.price)||0}));
-      const result=await request('/rest/v1/rpc/create_pos_sale',{method:'POST',body:JSON.stringify({
-        p_order_type:document.getElementById('orderType')?.value||'Take Away',
-        p_payment:payment,p_received:received,p_total:total,p_cashier:window.currentUser?.name||'POS User',p_items:items
-      })});
-      const saved=Array.isArray(result)?result[0]:result;
-      if(!saved)throw new Error('Live database did not return the saved sale.');
-
-      const sale={orderNo:saved.order_no,date:saved.sale_date,time:String(saved.sale_time||'').slice(0,8),cashier:window.currentUser?.name||'',orderType:document.getElementById('orderType')?.value||'Take Away',payment,received,total,items};
-      localStorage.setItem('feastervilleLastReceipt',JSON.stringify(sale));
-
-      let recipes={},inv={};
-      try{recipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')}catch(e){}
-      try{inv=JSON.parse(localStorage.getItem('feastervilleRawInventory')||'{}')}catch(e){}
-      sale.items.forEach(item=>{(recipes[item.code]||[]).forEach(link=>{
-        if(!inv[link.inputCode])inv[link.inputCode]={opening:0,stockIn:0,used:0,count:0,reorder:5};
-        inv[link.inputCode].used=Number(inv[link.inputCode].used||0)+(Number(link.qty)||0)*(Number(item.qty)||0);
-      })});
-      localStorage.setItem('feastervilleRawInventory',JSON.stringify(inv));
-      await pushState('raw_inventory',inv);
-
-      try{if(typeof showReceipt==='function')showReceipt(sale);}catch(e){console.error(e);}
-      cart=[];
-      const d=document.getElementById('discount');if(d)d.value=0;
-      const r=document.getElementById('received');if(r)r.value=0;
-      try{if(typeof render==='function')render();}catch(e){}
-      await pullCloudSales();
-      alert('LIVE sale completed — Order #'+String(saved.order_no).padStart(4,'0'));
-    }catch(e){alert('The live sale could not be completed. Error: '+e.message);}
-  };
-
-  // Sync master/inventory changes when local POS writes them.
-  const oldSet=Storage.prototype.setItem;
-  let internal=false;
-  Storage.prototype.setItem=function(k,v){
-    oldSet.call(this,k,v);
-    if(this===localStorage&&!internal&&token()){
-      const map={feastervilleProducts:'products',feastervilleRecipes:'recipes',feastervilleMasterProductionInputs:'master_inputs',feastervilleRawInventory:'raw_inventory'};
-      if(map[k]){try{pushState(map[k],JSON.parse(v));}catch(e){}}
-    }
-  };
-
-  $('cloudLogin').addEventListener('click',login);
-  $('cloudSignup').addEventListener('click',signup);
-  $('cloudClaimManager').addEventListener('click',claimManager);
-  $('cloudLogout').addEventListener('click',function(){sessionStorage.removeItem(K_TOKEN);sessionStorage.removeItem(K_REFRESH);location.reload();});
-
-  // Poll for changes so two different locations stay in sync without module/realtime dependencies.
-  setInterval(function(){if(token()){pullCloudState();pullCloudSales();}},5000);
-
-  // Validate saved token on load.
-  (async function(){
-    if(!token())return;
-    try{
-      const user=await request('/auth/v1/user');
-      await activate({access_token:token(),refresh_token:sessionStorage.getItem(K_REFRESH),user});
-    }catch(e){sessionStorage.removeItem(K_TOKEN);sessionStorage.removeItem(K_REFRESH);status('Sign in required');}
-  })();
-})();
-</script>
-
-</body></html>';
+    '</div></body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -1782,6 +1593,397 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 </script>
 
+
+<script>
+(function(){
+  'use strict';
+
+  const SUPABASE_URL = 'https://sflyjcgbxbcwspfuzone.supabase.co';
+  const API_KEY = 'sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const TOKEN_KEY = 'feastervilleCloudAccessToken';
+  const REFRESH_KEY = 'feastervilleCloudRefreshToken';
+
+  const el = id => document.getElementById(id);
+  let accessToken = sessionStorage.getItem(TOKEN_KEY) || '';
+  let currentLiveUser = null;
+  let currentProfile = null;
+
+  function setMessage(text, bad) {
+    const node = el('liveMessage');
+    if (!node) return;
+    node.textContent = text || '';
+    node.style.color = bad ? '#a00' : '#155b00';
+  }
+
+  function setStatus(text) {
+    const node = el('liveStatus');
+    if (node) node.textContent = text;
+  }
+
+  async function api(path, options) {
+    options = options || {};
+    const headers = Object.assign({
+      'apikey': API_KEY,
+      'Content-Type': 'application/json'
+    }, options.headers || {});
+
+    if (accessToken) headers.Authorization = 'Bearer ' + accessToken;
+
+    const response = await fetch(SUPABASE_URL + path, Object.assign({}, options, {headers}));
+    const raw = await response.text();
+    let body = null;
+
+    if (raw) {
+      try { body = JSON.parse(raw); }
+      catch (_) { body = raw; }
+    }
+
+    if (!response.ok) {
+      const detail =
+        (body && typeof body === 'object' &&
+          (body.msg || body.message || body.error_description || body.error)) ||
+        raw || ('HTTP ' + response.status);
+      throw new Error(detail);
+    }
+    return body;
+  }
+
+  async function getProfile(user) {
+    const rows = await api(
+      '/rest/v1/pos_profiles?user_id=eq.' +
+      encodeURIComponent(user.id) +
+      '&select=user_id,display_name,role'
+    );
+    return Array.isArray(rows) && rows.length
+      ? rows[0]
+      : {user_id:user.id, display_name:user.email, role:'salesperson'};
+  }
+
+  function applyProfile(user, profile) {
+    currentLiveUser = user;
+    currentProfile = profile;
+
+    window.currentUser = {
+      id: user.id,
+      username: user.email,
+      name: profile.display_name || user.email,
+      role: profile.role || 'salesperson',
+      label: (profile.role === 'manager' ? 'Manager: ' : 'Salesperson: ') +
+             (profile.display_name || user.email)
+    };
+
+    const badge = document.getElementById('userBadge');
+    if (badge) badge.textContent = window.currentUser.label;
+
+    const cloudUser = el('liveUser');
+    if (cloudUser) cloudUser.textContent = window.currentUser.label;
+
+    document.querySelectorAll('.manager-only').forEach(function(node) {
+      node.style.display = profile.role === 'manager' ? '' : 'none';
+    });
+
+    try {
+      if (typeof applyRights === 'function') applyRights();
+    } catch (_) {}
+  }
+
+  async function pullState() {
+    const rows = await api('/rest/v1/pos_state?select=key,value');
+    const keyMap = {
+      products: 'feastervilleProducts',
+      recipes: 'feastervilleRecipes',
+      master_inputs: 'feastervilleMasterProductionInputs',
+      raw_inventory: 'feastervilleRawInventory'
+    };
+
+    (rows || []).forEach(function(row) {
+      if (keyMap[row.key]) {
+        localStorage.setItem(keyMap[row.key], JSON.stringify(row.value));
+      }
+    });
+
+    try { if (typeof rebuildSalesCatalogueReliable === 'function') rebuildSalesCatalogueReliable(); } catch (_) {}
+    try { if (typeof renderProducts === 'function') renderProducts(); } catch (_) {}
+    try { if (typeof renderOldMasterEditor === 'function') renderOldMasterEditor(); } catch (_) {}
+    try { if (typeof renderProductionInputUsageFromSales === 'function') renderProductionInputUsageFromSales(); } catch (_) {}
+  }
+
+  async function pullSales() {
+    const rows = await api(
+      '/rest/v1/pos_sales?select=id,order_no,sale_date,sale_time,cashier,order_type,payment,received,total,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=1000'
+    );
+
+    const sales = (rows || []).map(function(s) {
+      return {
+        cloudId: s.id,
+        orderNo: s.order_no,
+        date: s.sale_date,
+        time: String(s.sale_time || '').slice(0,8),
+        cashier: s.cashier || '',
+        orderType: s.order_type || '',
+        payment: s.payment || '',
+        received: Number(s.received || 0),
+        total: Number(s.total || 0),
+        items: (s.pos_sale_items || []).map(function(i) {
+          return {
+            code:i.code, name:i.name, category:i.category,
+            qty:Number(i.qty || 0), price:Number(i.price || 0)
+          };
+        })
+      };
+    });
+
+    localStorage.setItem('feastervilleSales', JSON.stringify(sales));
+    try { if (typeof summary === 'function') summary(); } catch (_) {}
+    try { if (typeof refreshSalesInventoryReports === 'function') refreshSalesInventoryReports(); } catch (_) {}
+    try { if (typeof renderProductionInputUsageFromSales === 'function') renderProductionInputUsageFromSales(); } catch (_) {}
+  }
+
+  async function activate(authData) {
+    if (!authData || !authData.access_token || !authData.user) {
+      throw new Error('No login session was returned.');
+    }
+
+    accessToken = authData.access_token;
+    sessionStorage.setItem(TOKEN_KEY, accessToken);
+    if (authData.refresh_token) sessionStorage.setItem(REFRESH_KEY, authData.refresh_token);
+
+    const profile = await getProfile(authData.user);
+    applyProfile(authData.user, profile);
+
+    el('liveLoginOverlay').style.display = 'none';
+    el('liveLogout').style.display = '';
+    setStatus('ONLINE - shared database');
+
+    await pullState();
+    await pullSales();
+  }
+
+  async function signIn() {
+    try {
+      setMessage('Signing in...');
+      const email = el('liveEmail').value.trim();
+      const password = el('livePassword').value;
+
+      if (!email || !password) throw new Error('Enter email and password.');
+
+      const data = await api('/auth/v1/token?grant_type=password', {
+        method:'POST',
+        body:JSON.stringify({email:email, password:password})
+      });
+
+      await activate(data);
+      setMessage('');
+    } catch (err) {
+      console.error(err);
+      setMessage(err.message, true);
+      setStatus('Login failed');
+    }
+  }
+
+  async function createAccount() {
+    try {
+      setMessage('Creating account...');
+      const email = el('liveEmail').value.trim();
+      const password = el('livePassword').value;
+      const displayName = el('liveDisplayName').value.trim();
+
+      if (!email || !password || !displayName) {
+        throw new Error('Enter email, password and display name.');
+      }
+
+      const data = await api('/auth/v1/signup', {
+        method:'POST',
+        body:JSON.stringify({
+          email:email,
+          password:password,
+          data:{display_name:displayName}
+        })
+      });
+
+      if (data && data.access_token) {
+        await activate(data);
+        setMessage('Account created and signed in.');
+      } else {
+        setMessage('Account created. If email confirmation is enabled, confirm your email and then sign in.');
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage(err.message, true);
+    }
+  }
+
+  async function claimManager() {
+    try {
+      if (!accessToken) throw new Error('Sign in first.');
+      const code = el('liveManagerCode').value;
+
+      const result = await api('/rest/v1/rpc/claim_pos_manager', {
+        method:'POST',
+        body:JSON.stringify({setup_code:code})
+      });
+
+      if (result !== true) throw new Error('Manager setup code is incorrect.');
+
+      const user = await api('/auth/v1/user');
+      const profile = await getProfile(user);
+      applyProfile(user, profile);
+      setMessage('Manager access enabled.');
+    } catch (err) {
+      console.error(err);
+      setMessage(err.message, true);
+    }
+  }
+
+  async function pushState(key, value) {
+    if (!accessToken) return;
+    try {
+      await api('/rest/v1/pos_state?on_conflict=key', {
+        method:'POST',
+        headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({
+          key:key,
+          value:value,
+          updated_at:new Date().toISOString()
+        })
+      });
+    } catch (err) {
+      console.error('Cloud state sync failed', key, err);
+    }
+  }
+
+  window.completeSale = async function() {
+    try {
+      if (!accessToken) throw new Error('Please sign in to the live POS.');
+      if (typeof cart === 'undefined' || !Array.isArray(cart) || !cart.length) {
+        throw new Error('Please add items to the order.');
+      }
+
+      const subtotal = cart.reduce(function(sum, item) {
+        return sum + (Number(item.qty) || 0) * (Number(item.price) || 0);
+      }, 0);
+
+      const discount = Math.max(Number(document.getElementById('discount')?.value || 0), 0);
+      const total = Math.max(subtotal - discount, 0);
+      const payment = document.getElementById('payment')?.value || 'Cash';
+      const received = Number(document.getElementById('received')?.value || 0);
+
+      if (payment === 'Cash' && received < total) {
+        throw new Error('Amount received is less than the total.');
+      }
+
+      const items = cart.map(function(item) {
+        return {
+          code:String(item.code || ''),
+          name:String(item.name || item.description || item.code || ''),
+          category:String(item.category || ''),
+          qty:Number(item.qty) || 0,
+          price:Number(item.price) || 0
+        };
+      });
+
+      const result = await api('/rest/v1/rpc/create_pos_sale', {
+        method:'POST',
+        body:JSON.stringify({
+          p_order_type:document.getElementById('orderType')?.value || 'Take Away',
+          p_payment:payment,
+          p_received:received,
+          p_total:total,
+          p_cashier:window.currentUser?.name || 'POS User',
+          p_items:items
+        })
+      });
+
+      const saved = Array.isArray(result) ? result[0] : result;
+      if (!saved) throw new Error('Live database did not return the saved sale.');
+
+      const sale = {
+        cloudId:saved.sale_id,
+        orderNo:saved.order_no,
+        date:saved.sale_date,
+        time:String(saved.sale_time || '').slice(0,8),
+        cashier:window.currentUser?.name || '',
+        orderType:document.getElementById('orderType')?.value || 'Take Away',
+        payment:payment,
+        received:received,
+        total:total,
+        items:items
+      };
+
+      localStorage.setItem('feastervilleLastReceipt', JSON.stringify(sale));
+
+      let recipes = {};
+      let inv = {};
+      try { recipes = JSON.parse(localStorage.getItem('feastervilleRecipes') || '{}') || {}; } catch (_) {}
+      try { inv = JSON.parse(localStorage.getItem('feastervilleRawInventory') || '{}') || {}; } catch (_) {}
+
+      sale.items.forEach(function(item) {
+        (recipes[item.code] || []).forEach(function(link) {
+          if (!inv[link.inputCode]) {
+            inv[link.inputCode] = {opening:0,stockIn:0,used:0,count:0,reorder:5};
+          }
+          inv[link.inputCode].used =
+            Number(inv[link.inputCode].used || 0) +
+            (Number(link.qty) || 0) * (Number(item.qty) || 0);
+        });
+      });
+
+      localStorage.setItem('feastervilleRawInventory', JSON.stringify(inv));
+      await pushState('raw_inventory', inv);
+
+      try { if (typeof showReceipt === 'function') showReceipt(sale); } catch (err) { console.error(err); }
+
+      cart = [];
+      const d = document.getElementById('discount');
+      const r = document.getElementById('received');
+      if (d) d.value = 0;
+      if (r) r.value = 0;
+
+      try { if (typeof render === 'function') render(); } catch (_) {}
+      try { if (typeof renderCartReliable === 'function') renderCartReliable(); } catch (_) {}
+
+      await pullSales();
+      alert('LIVE sale completed - Order #' + String(saved.order_no).padStart(4,'0'));
+    } catch (err) {
+      console.error(err);
+      alert('The live sale could not be completed. Error: ' + err.message);
+    }
+  };
+
+  el('liveSignIn').addEventListener('click', signIn);
+  el('liveCreate').addEventListener('click', createAccount);
+  el('liveClaimManager').addEventListener('click', claimManager);
+  el('liveLogout').addEventListener('click', function() {
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_KEY);
+    location.reload();
+  });
+
+  setInterval(function() {
+    if (!accessToken) return;
+    pullState().catch(function(err) { console.error(err); });
+    pullSales().catch(function(err) { console.error(err); });
+  }, 5000);
+
+  (async function restoreSession() {
+    if (!accessToken) return;
+    try {
+      const user = await api('/auth/v1/user');
+      await activate({
+        access_token:accessToken,
+        refresh_token:sessionStorage.getItem(REFRESH_KEY),
+        user:user
+      });
+    } catch (err) {
+      console.error(err);
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(REFRESH_KEY);
+      accessToken = '';
+      setStatus('Sign in required');
+    }
+  })();
+})();
+</script>
+
 </body>
 </html>
-<style>#loginScreen{display:none!important}</style>
