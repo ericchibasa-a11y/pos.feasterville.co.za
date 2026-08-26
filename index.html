@@ -2423,7 +2423,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const $id=id=>document.getElementById(id);
   const msg=(t,bad=false)=>{const e=$id('sellableMessage');if(e){e.textContent=t;e.style.color=bad?'#a00':'#185b00';}};
   async function req(path,opt={}){
-    const token=sessionStorage.getItem('feasterville_live_token')||sessionStorage.getItem('ftok')||'';
+    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||'';
     const headers={'apikey':SELLABLE_ANON_KEY,'Content-Type':'application/json',...(opt.headers||{})};
     if(token)headers.Authorization='Bearer '+token;
     const r=await fetch(SELLABLE_SUPABASE_URL+path,{...opt,headers});
@@ -2432,8 +2432,8 @@ document.addEventListener('DOMContentLoaded',function(){
     return data;
   }
   async function adminProduct(action,payload={}){
-    const token=sessionStorage.getItem('feasterville_live_token')||sessionStorage.getItem('ftok')||'';
-    if(!token)throw new Error('Please sign in again.');
+    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+    if(!token)throw new Error('Your POS cloud session is missing. Sign out, then sign in again once.');
     const r=await fetch(SELLABLE_SUPABASE_URL+'/functions/v1/pos-product-admin',{
       method:'POST',
       headers:{'apikey':SELLABLE_ANON_KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
