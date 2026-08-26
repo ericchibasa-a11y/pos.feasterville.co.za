@@ -2002,10 +2002,15 @@ document.addEventListener('DOMContentLoaded',function(){
       const discount = Math.max(Number(document.getElementById('discount')?.value || 0), 0);
       const total = Math.max(subtotal - discount, 0);
       const payment = document.getElementById('payment')?.value || 'Cash';
-      const received = Number(document.getElementById('received')?.value || 0);
+      let received = Number(document.getElementById('received')?.value || 0);
 
-      if (payment === 'Cash' && received < total) {
-        throw new Error('Amount received is less than the total.');
+      if (payment === 'Cash') {
+        if (received < total) {
+          throw new Error('Amount received is less than the total.');
+        }
+      } else {
+        // Card / Mr D / Uber Eats are treated as fully paid electronically.
+        received = total;
       }
 
       const items = cart.map(function(item) {
@@ -2274,6 +2279,25 @@ window.loadLiveStaffUsers=loadStaff;
     location.reload();
   });
 })();
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const payment = document.getElementById('payment');
+  const received = document.getElementById('received');
+  if(!payment || !received) return;
+
+  function syncReceivedField(){
+    const nonCash = payment.value !== 'Cash';
+    received.disabled = nonCash;
+    received.title = nonCash ? 'Not required for electronic payments' : 'Enter cash received';
+    if(nonCash) received.value = '0';
+  }
+
+  payment.addEventListener('change', syncReceivedField);
+  syncReceivedField();
+});
 </script>
 
 </body>
