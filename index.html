@@ -694,7 +694,8 @@ const selectedStoreCode=()=>window.currentUser?.role==='manager'?(localStorage.g
 const baseProductsForStore=(store)=>store==='NDAYENI'?ndayeniProducts:products;
 const activeProducts=()=>{
   const store=selectedStoreCode();
-  return Array.isArray(liveStoreProducts[store])&&liveStoreProducts[store].length?liveStoreProducts[store].filter(p=>p.active!==false):baseProductsForStore(store);
+  const live=(typeof liveStoreProducts!=='undefined'&&liveStoreProducts[store])||(window.liveStoreProducts&&window.liveStoreProducts[store]);
+  return Array.isArray(live)&&live.length?live.filter(p=>p.active!==false):baseProductsForStore(store);
 };
 
 let cart=[];
@@ -2503,6 +2504,88 @@ document.addEventListener('DOMContentLoaded',function(){
     $id('refreshSellableItems')?.addEventListener('click',loadSellableItems);
     $id('itemStore')?.addEventListener('change',()=>{ $id('itemCode').readOnly=false; renderManagerItems();});
     let n=0,t=setInterval(()=>{n++;if(window.currentUser){const p=$id('sellableItemsPanel');if(p)p.style.display=window.currentUser.role==='manager'?'block':'none';loadSellableItems();clearInterval(t);}else if(n>80)clearInterval(t);},250);
+  });
+})();
+</script>
+
+
+<script>
+(function(){
+  const POS_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const POS_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const TOKEN_KEY='feastervilleCloudAccessToken';
+
+  function currentStore(){
+    const u=window.currentUser;
+    return u?.role==='manager'
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : (u?.store_code||'NDAYENI');
+  }
+
+  async function loadLiveMenuForStore(){
+    const token=sessionStorage.getItem(TOKEN_KEY)||'';
+    if(!token || !window.currentUser) return;
+
+    const store=currentStore();
+    const r=await fetch(
+      POS_URL+'/rest/v1/pos_store_products?store_code=eq.'+encodeURIComponent(store)+
+      '&select=code,name,category,price,active&order=category.asc,code.asc',
+      {
+        headers:{
+          'apikey':POS_KEY,
+          'Authorization':'Bearer '+token,
+          'Content-Type':'application/json'
+        }
+      }
+    );
+
+    const text=await r.text();
+    if(!r.ok) throw new Error(text||('HTTP '+r.status));
+
+    const items=text?JSON.parse(text):[];
+    if(!window.liveStoreProducts) window.liveStoreProducts={};
+    window.liveStoreProducts[store]=items;
+
+    // Keep the lexical object used by the existing POS in sync if present.
+    try{
+      if(typeof liveStoreProducts!=='undefined'){
+        liveStoreProducts[store]=items;
+      }
+    }catch(_){}
+
+    try{ if(typeof cats==='function') cats(); }catch(_){}
+    try{ if(typeof renderProducts==='function') renderProducts(); }catch(_){}
+    try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(_){}
+
+    const badge=document.getElementById('storeLocationBadge');
+    if(badge){
+      const name=store==='SIVANA'?'Sivana':'Ndayeni';
+      badge.textContent=name+' POS'+(window.currentUser.role==='manager'?' — MANAGER':' — LOCKED TO YOUR ACCOUNT');
+    }
+  }
+
+  window.loadLiveMenuForStore=loadLiveMenuForStore;
+
+  document.addEventListener('DOMContentLoaded',function(){
+    let tries=0;
+    const timer=setInterval(function(){
+      tries++;
+      if(window.currentUser && sessionStorage.getItem(TOKEN_KEY)){
+        loadLiveMenuForStore().catch(console.error);
+        clearInterval(timer);
+      }else if(tries>80){
+        clearInterval(timer);
+      }
+    },250);
+
+    const sel=document.getElementById('storeLocationSelect');
+    if(sel){
+      sel.addEventListener('change',function(){
+        setTimeout(function(){
+          loadLiveMenuForStore().catch(console.error);
+        },150);
+      });
+    }
   });
 })();
 </script>
