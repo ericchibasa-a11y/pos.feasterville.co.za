@@ -1639,11 +1639,15 @@ document.addEventListener('DOMContentLoaded',function(){
       const discount=Number(document.getElementById('discount')?.value||0);
       const total=Math.max(subtotal-discount,0);
       const payment=document.getElementById('payment')?.value||'Cash';
-      const received=Number(document.getElementById('received')?.value||0);
-
-      if(payment==='Cash'&&received<total){
-        alert('Amount received is less than the total.');
-        return;
+      let received=Number(document.getElementById('received')?.value||0);
+      const isCash=String(payment).trim().toLowerCase()==='cash';
+      if(isCash){
+        if(received<total){
+          alert('Amount received is less than the total.');
+          return;
+        }
+      }else{
+        received=total;
       }
 
       let ss=[];
@@ -2008,13 +2012,13 @@ document.addEventListener('DOMContentLoaded',function(){
       const total = Math.max(subtotal - discount, 0);
       const payment = document.getElementById('payment')?.value || 'Cash';
       let received = Number(document.getElementById('received')?.value || 0);
+      const isCash = String(payment).trim().toLowerCase() === 'cash';
 
-      if (payment === 'Cash') {
+      if (isCash) {
         if (received < total) {
           throw new Error('Amount received is less than the total.');
         }
       } else {
-        // Card / Mr D / Uber Eats are treated as fully paid electronically.
         received = total;
       }
 
@@ -2360,6 +2364,27 @@ document.addEventListener('DOMContentLoaded', function(){
     },250);
   });
 })();
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  const payment=document.getElementById('payment');
+  const received=document.getElementById('received');
+  if(!payment||!received)return;
+
+  function syncPayment(){
+    const isCash=String(payment.value||'').trim().toLowerCase()==='cash';
+    received.disabled=!isCash;
+    if(!isCash){
+      const totalText=(document.getElementById('total')?.textContent||'0').replace(/[^0-9.]/g,'');
+      const total=Number(totalText||0);
+      received.value=String(total||0);
+    }
+  }
+  payment.addEventListener('change',syncPayment);
+  syncPayment();
+});
 </script>
 
 </body>
