@@ -730,7 +730,7 @@ function completeSale(){
 }
 function showReceipt(s){
  const r=document.getElementById('receiptPrint'); r.style.display='block'; r.scrollIntoView({behavior:'smooth',block:'center'});
- r.innerHTML='<h2>FEASTERVILLE FOOD</h2><div>51 Senagal Street, Isivana Section, Tembisa</div><div>Order #'+String(s.orderNo).padStart(4,'0')+'</div><div>Date: '+s.date+' | Time: '+(s.time||'')+'</div><div>'+s.orderType+'</div><hr>'+
+ r.innerHTML='<h2>FEASTERVILLE FOOD — POS</h2><div>'+(((window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI'))==='NDAYENI')?'1st Street, Ndayini Section, Tembisa':'51 Senagal Street, Isivana Section, Tembisa')+'</div><div>Order #'+String(s.orderNo).padStart(4,'0')+'</div><div>Date: '+s.date+' | Time: '+(s.time||'')+'</div><div>'+s.orderType+'</div><hr>'+
  s.items.map(i=>`${i.code}  x${i.qty}  ${money(i.qty*i.price)}`).join('<br>')+
  '<hr><b>TOTAL: '+money(s.total)+'</b><br>Payment: '+s.payment+'<br>Received: '+money(s.received)+'<br>Change: '+money(Math.max(s.received-s.total,0));
 }
@@ -1603,7 +1603,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
     box.innerHTML=
       '<div style="font-family:monospace;max-width:80mm;margin:auto">'+
-      '<div style="text-align:center"><b>FEASTERVILLE FOOD</b><br>51 Senagal Street, Isivana Section, Tembisa</div>'+
+      '<div style="text-align:center"><b>FEASTERVILLE FOOD — POS</b><br>'+(((window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI'))==='NDAYENI')?'1st Street, Ndayini Section, Tembisa':'51 Senagal Street, Isivana Section, Tembisa')+'</div>'+
       '<hr>'+
       '<div>Order #'+String(sale.orderNo||'').padStart(4,'0')+'</div>'+
       '<div>Date: '+(sale.date||'')+'</div>'+
