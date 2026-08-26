@@ -246,7 +246,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 <input id="staffEmail" type="email" placeholder="Salesperson email">
 <input id="staffDisplayName" placeholder="Display name">
 <input id="staffPassword" type="password" placeholder="Temporary password (min 6)">
-<select id="staffStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select>
+<label><b>Assigned Store</b><br><select id="staffStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label>
 <button class="primary" type="button" id="createStaffBtn">CREATE SALESPERSON</button>
 <button type="button" id="refreshStaffBtn">REFRESH USERS</button>
 </div>
@@ -2144,9 +2144,22 @@ const U='https://sflyjcgbxbcwspfuzone.supabase.co',K='sb_publishable_iASq-tni6KY
 const $=id=>document.getElementById(id);
 function sm(t,b){if($('staffMessage')){$('staffMessage').textContent=t||'';$('staffMessage').style.color=b?'#a00':'#155b00';}}
 async function ac(p){const t=sessionStorage.getItem(TK)||'';if(!t)throw Error('Sign in as Manager first.');const r=await fetch(U+'/functions/v1/pos-user-admin',{method:'POST',headers:{apikey:K,Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(p)});const x=await r.text();let d={};try{d=x?JSON.parse(x):{};}catch(_){d={error:x};}if(!r.ok)throw Error(d.error||x||('HTTP '+r.status));return d;}
-async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="7">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td>${x.role==='manager'?'ALL STORES':`<select onchange="ftStaffStore('${x.id}',this.value)"><option value="NDAYENI" ${x.store_code==='NDAYENI'?'selected':''}>Ndayeni</option><option value="SIVANA" ${x.store_code==='SIVANA'?'selected':''}>Sivana</option></select>`}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="7">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
+async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="7">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td>${x.role==='manager'?'ALL STORES':`<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><select id="staffStore_${x.id}"><option value="NDAYENI" ${x.store_code==='NDAYENI'?'selected':''}>Ndayeni</option><option value="SIVANA" ${x.store_code==='SIVANA'?'selected':''}>Sivana</option></select><button type="button" onclick="ftSaveStaffStore('${x.id}')">SAVE STORE</button></div>`}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="7">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
 window.ftStaffActive=async(id,a)=>{try{await ac({action:'active',user_id:id,active:a});sm(a?'User activated.':'User deactivated.');await loadStaff();}catch(e){sm(e.message,true);}};
-window.ftStaffStore=async(id,store_code)=>{try{await ac({action:'store',user_id:id,store_code});sm('Salesperson store changed to '+(store_code==='SIVANA'?'Sivana':'Ndayeni')+'.');}catch(e){sm(e.message,true);await loadStaff();}};
+window.ftSaveStaffStore=async function(id){
+  const sel=document.getElementById('staffStore_'+id);
+  if(!sel){sm('Store selector not found.',true);return;}
+  const store_code=sel.value;
+  try{
+    sm('Saving store assignment...');
+    await ac({action:'store',user_id:id,store_code:store_code});
+    sm('Store assignment saved: '+(store_code==='SIVANA'?'Sivana':'Ndayeni')+'.');
+    await loadStaff();
+  }catch(e){
+    sm(e.message,true);
+    await loadStaff();
+  }
+};
 window.ftStaffPassword=async(id,email)=>{const p=prompt('New temporary password for '+email+' (minimum 6 characters):');if(p===null)return;if(p.length<6)return alert('Password must be at least 6 characters.');try{await ac({action:'password',user_id:id,password:p});alert('Password reset successfully.');}catch(e){alert(e.message);}};
 document.addEventListener('DOMContentLoaded',()=>{$('createStaffBtn')?.addEventListener('click',async()=>{try{const email=$('staffEmail').value.trim(),display=$('staffDisplayName').value.trim(),password=$('staffPassword').value,store_code=$('staffStore').value;if(!email||!display||password.length<6)throw Error('Enter email, display name and a password of at least 6 characters.');sm('Creating salesperson...');await ac({action:'create',email,display_name:display,password,store_code});$('staffEmail').value='';$('staffDisplayName').value='';$('staffPassword').value='';sm('Salesperson created.');await loadStaff();}catch(e){sm(e.message,true);}});$('refreshStaffBtn')?.addEventListener('click',loadStaff);setTimeout(()=>{if(sessionStorage.getItem(TK))loadStaff();},1200);});
 window.loadLiveStaffUsers=loadStaff;
