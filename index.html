@@ -2431,19 +2431,34 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!r.ok)throw new Error(data?.message||data?.error||text||('HTTP '+r.status));
     return data;
   }
+  async function adminProduct(action,payload={}){
+    const token=sessionStorage.getItem('feasterville_live_token')||sessionStorage.getItem('ftok')||'';
+    if(!token)throw new Error('Please sign in again.');
+    const r=await fetch(SELLABLE_SUPABASE_URL+'/functions/v1/pos-product-admin',{
+      method:'POST',
+      headers:{'apikey':SELLABLE_ANON_KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({action,...payload})
+    });
+    const text=await r.text(); let data=null; try{data=text?JSON.parse(text):null}catch(_){data={error:text}}
+    if(!r.ok)throw new Error(data?.error||data?.message||text||('HTTP '+r.status));
+    return data;
+  }
   async function seedStore(store){
-    const existing=await req('/rest/v1/pos_store_products?store_code=eq.'+store+'&select=code&limit=1');
-    if(existing?.length)return;
+    const check=await adminProduct('list',{store_code:store});
+    if(check.items?.length)return;
     if(window.currentUser?.role!=='manager')return;
-    const base=baseProductsForStore(store).map(p=>({store_code:store,code:p.code,name:p.name,category:p.category||'OTHER',price:Number(p.price||0),active:true}));
-    if(base.length)await req('/rest/v1/pos_store_products',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(base)});
+    const base=baseProductsForStore(store);
+    for(const p of base){
+      await adminProduct('save',{store_code:store,code:p.code,name:p.name,category:p.category||'OTHER',price:Number(p.price||0)});
+    }
   }
   window.loadSellableItems=async function(){
     if(!window.currentUser)return;
     try{
       for(const store of ['NDAYENI','SIVANA'])await seedStore(store);
       for(const store of ['NDAYENI','SIVANA']){
-        liveStoreProducts[store]=await req('/rest/v1/pos_store_products?store_code=eq.'+store+'&select=code,name,category,price,active&order=category.asc,code.asc');
+        const result=await adminProduct('list',{store_code:store});
+        liveStoreProducts[store]=result.items||[];
       }
       if(typeof cats==='function')cats();
       if(typeof renderProducts==='function')renderProducts();
@@ -2469,7 +2484,7 @@ document.addEventListener('DOMContentLoaded',function(){
   window.ftToggleSellable=async function(code,active){
     try{
       const store=$id('itemStore').value;
-      await req('/rest/v1/pos_store_products?store_code=eq.'+store+'&code=eq.'+encodeURIComponent(code),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({active:!active,updated_at:new Date().toISOString()})});
+      await adminProduct('active',{store_code:store,code:code,active:!active});
       msg(code+(active?' deactivated.':' activated.'));await loadSellableItems();
     }catch(e){msg(e.message,true);}
   };
@@ -2478,7 +2493,7 @@ document.addEventListener('DOMContentLoaded',function(){
       if(window.currentUser?.role!=='manager')throw new Error('Manager access required.');
       const store=$id('itemStore').value,code=$id('itemCode').value.trim().toUpperCase(),name=$id('itemName').value.trim(),category=$id('itemCategory').value.trim(),price=Number($id('itemPrice').value);
       if(!code||!name||!category||!Number.isFinite(price)||price<0)throw new Error('Enter code, description, category and a valid price.');
-      await req('/rest/v1/pos_store_products?on_conflict=store_code,code',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({store_code:store,code,name,category,price,active:true,updated_at:new Date().toISOString()})});
+      await adminProduct('save',{store_code:store,code:code,name:name,category:category,price:price});
       $id('itemCode').readOnly=false;$id('itemCode').value='';$id('itemName').value='';$id('itemCategory').value='';$id('itemPrice').value='';
       msg(code+' saved for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.');await loadSellableItems();
     }catch(e){msg(e.message,true);}
