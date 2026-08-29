@@ -541,14 +541,14 @@ async function addRecipeInput(){
   const existing=recipes[product].find(x=>x.inputCode===inputCode);
   if(existing)existing.qty+=qty; else recipes[product].push({inputCode,qty});
   localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
-  try{if(typeof pushState==='function')await pushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
+  try{if(typeof window.feastervillePushState==='function')await window.feastervillePushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
   loadRecipe();
 }
 async function removeRecipeInput(i){
   const product=document.getElementById('recipeProduct').value;
   recipes[product].splice(i,1);
   localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
-  try{if(typeof pushState==='function')await pushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
+  try{if(typeof window.feastervillePushState==='function')await window.feastervillePushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
   loadRecipe();
 }
 function showRecipePanel(){
@@ -1106,20 +1106,21 @@ function loadPIRecipe(){
  document.getElementById('piRecipeList').innerHTML='<table class="inv-table"><tr><th>Product</th><th>Input</th><th>Qty per Sale</th><th>Unit</th><th>Action</th></tr>'+
  list.map((x,i)=>{const r=(typeof getRecipeMasterInputs==='function'?getRecipeMasterInputs():rawMaterials).find(a=>a.code===x.inputCode);return `<tr><td>${p.value}</td><td>${r?r.name:x.inputCode}</td><td>${x.qty}</td><td>${r?r.unit:''}</td><td><button class="remove" onclick="removePIRecipe(${i})">REMOVE</button></td></tr>`}).join('')+'</table>';
 }
-function addPIRecipe(){
+async function addPIRecipe(){
  const product=document.getElementById('piRecipeProduct').value,inputCode=document.getElementById('piRecipeInput').value,qty=Number(document.getElementById('piRecipeQty').value||0);
  if(!product||!inputCode||qty<=0)return;
  if(!recipes[product])recipes[product]=[];
  const existing=recipes[product].find(x=>x.inputCode===inputCode);
  if(existing)existing.qty=qty;else recipes[product].push({inputCode,qty});
  localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
+ try{if(typeof window.feastervillePushState==='function')await window.feastervillePushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
  loadPIRecipe();refreshProductionInputs();renderUsageDetails();
 }
 async function removePIRecipe(i){
  const product=document.getElementById('piRecipeProduct').value;
  recipes[product].splice(i,1);
  localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
- try{if(typeof pushState==='function')await pushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
+ try{if(typeof window.feastervillePushState==='function')await window.feastervillePushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
  loadPIRecipe();refreshProductionInputs();renderUsageDetails();
 }
 
@@ -1323,31 +1324,51 @@ async function saveOldLayoutRecipe(){
   });
   if(!links.length){alert('Please add at least one production input.');return;}
 
+  if(!window.feastervilleLiveSignedIn){
+    alert('Please sign in to the LIVE POS first, then save the recipe again.');
+    return;
+  }
+
   let savedRecipes={};
   try{savedRecipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(e){savedRecipes={};}
   savedRecipes[product]=links;
 
-  // Keep the in-memory recipe map and browser storage in sync.
-  try{recipes=savedRecipes;}catch(e){}
-  localStorage.setItem('feastervilleRecipes',JSON.stringify(savedRecipes));
-
-  // IMPORTANT: persist recipe changes to the shared Supabase pos_state.
   try{
-    if(typeof pushState==='function'){
-      await pushState('recipes',savedRecipes);
+    if(typeof window.feastervillePushState!=='function'){
+      throw new Error('Live recipe save function is unavailable.');
     }
+
+    await window.feastervillePushState('recipes',savedRecipes);
+
+    // Read it back from the shared database and confirm the exact product recipe.
+    const checkRows = (typeof window.feastervilleApi==='function')
+      ? await window.feastervilleApi('/rest/v1/pos_state?key=eq.recipes&select=value,updated_at')
+      : [];
+    const cloudRecipes = Array.isArray(checkRows) && checkRows[0] && checkRows[0].value &&
+                         typeof checkRows[0].value==='object' ? checkRows[0].value : {};
+    const confirmedLinks = Array.isArray(cloudRecipes[product]) ? cloudRecipes[product] : [];
+
+    const expected = JSON.stringify(links);
+    const confirmed = JSON.stringify(confirmedLinks);
+    if(expected !== confirmed){
+      throw new Error('The live database did not confirm the saved recipe.');
+    }
+
+    try{recipes=cloudRecipes;}catch(e){}
+    localStorage.setItem('feastervilleRecipes',JSON.stringify(cloudRecipes));
+    window.feastervilleRecipeSyncLockUntil = Date.now() + 12000;
+
+    renderSavedRecipeOld();
+    try{if(typeof loadRecipe==='function')loadRecipe();}catch(e){}
+    try{if(typeof loadPIRecipe==='function')loadPIRecipe();}catch(e){}
+    try{if(typeof refreshProductionInputs==='function')refreshProductionInputs();}catch(e){}
+    try{if(typeof renderProductionInputUsageFromSales==='function')renderProductionInputUsageFromSales();}catch(e){}
+
+    alert('Recipe saved to the LIVE POS and confirmed.');
   }catch(e){
     console.error('Recipe cloud save failed',e);
-    alert('Recipe was saved on this device, but the shared database save failed. Please check the internet connection and try again.');
-    return;
+    alert('Recipe was NOT saved to the live database. '+(e&&e.message?e.message:'Please try again.'));
   }
-
-  renderSavedRecipeOld();
-  try{if(typeof loadRecipe==='function')loadRecipe();}catch(e){}
-  try{if(typeof loadPIRecipe==='function')loadPIRecipe();}catch(e){}
-  try{if(typeof refreshProductionInputs==='function')refreshProductionInputs();}catch(e){}
-  try{if(typeof renderProductionInputUsageFromSales==='function')renderProductionInputUsageFromSales();}catch(e){}
-  alert('Recipe saved successfully to the shared POS.');
 }
 
 function renderSavedRecipeOld(){
@@ -1995,8 +2016,16 @@ document.addEventListener('DOMContentLoaded',function(){
       const syncLocked = isMasterInputs && window.feastervilleMasterInputsSyncLockUntil &&
                          Date.now() < window.feastervilleMasterInputsSyncLockUntil;
 
-      if (keyMap[row.key] && !syncLocked) {
+      const recipeSyncLocked = row.key === 'recipes' &&
+                               window.feastervilleRecipeSyncLockUntil &&
+                               Date.now() < window.feastervilleRecipeSyncLockUntil;
+
+      if (keyMap[row.key] && !syncLocked && !recipeSyncLocked) {
         localStorage.setItem(keyMap[row.key], JSON.stringify(row.value));
+      }
+
+      if (row.key==='recipes' && !recipeSyncLocked && row.value && typeof row.value==='object') {
+        try{ recipes = row.value; }catch(_){}
       }
 
       // When master inputs are accepted from cloud, update the in-memory editor array directly
