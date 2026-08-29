@@ -1428,45 +1428,61 @@ async function saveOldMasterInput(){
 
   if(!code||!name){alert('Please enter the input code and name.');return;}
 
-  let p=oldEditableMasterInputs.find(x=>x.code===code);
+  // Shared master-data changes must have a real Supabase session.
+  if(typeof accessToken!=='undefined' && !accessToken){
+    alert('You are signed into the local Manager screen, but not the LIVE POS database. Please use the LIVE POS email/password SIGN IN first, then save the input again.');
+    const livePanel=document.getElementById('livePanel')||document.getElementById('liveAccountPanel');
+    if(livePanel)try{livePanel.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
+    return;
+  }
+
+  // Build a new list first. Do not report success until cloud verification succeeds.
+  const nextInputs=(Array.isArray(oldEditableMasterInputs)?oldEditableMasterInputs:[]).map(x=>({...x}));
+  let p=nextInputs.find(x=>String(x.code||'').toUpperCase()===code);
   if(p){
     p.name=name;p.category=category;p.unit=unit;p.reorder=reorder;
   }else{
-    oldEditableMasterInputs.push({code,name,category,unit,reorder});
+    nextInputs.push({code,name,category,unit,reorder});
   }
 
-  // Save the master list immediately on this device.
-  saveOldMasterList();
-
-  // Create/update its inventory record.
   let inv={};
   try{inv=JSON.parse(localStorage.getItem('feastervilleRawInventory')||'{}')||{};}catch(e){}
   if(!inv[code])inv[code]={opening:0,stockIn:0,used:0,count:0,reorder:reorder};
   inv[code].reorder=reorder;
-  localStorage.setItem('feastervilleRawInventory',JSON.stringify(inv));
 
-  // Save BOTH master inputs and inventory to the shared live POS.
   try{
-    if(typeof pushState==='function'){
-      await pushState('master_inputs',oldEditableMasterInputs);
-      await pushState('raw_inventory',inv);
-    }
-  }catch(e){
-    console.error('Master input cloud save failed',e);
-    alert('Input saved on this device, but the shared POS update failed. Please check your connection and sign-in.');
-    return;
-  }
+    if(typeof pushState!=='function')throw new Error('Live POS cloud save function is unavailable.');
+    await pushState('master_inputs',nextInputs);
+    await pushState('raw_inventory',inv);
 
-  // Refresh every screen/dropdown that depends on Master Production Inputs.
-  renderOldMasterEditor();
-  clearOldMasterEditor();
-  if(typeof refreshOldRecipeInputDropdowns==='function')try{refreshOldRecipeInputDropdowns();}catch(e){}
-  if(typeof populateProductionInputDropdowns==='function')try{populateProductionInputDropdowns();}catch(e){}
-  if(typeof loadRecipe==='function')try{loadRecipe();}catch(e){}
-  if(typeof loadPIRecipe==='function')try{loadPIRecipe();}catch(e){}
-  if(typeof refreshProductionInputs==='function')try{refreshProductionInputs();}catch(e){}
-  if(typeof refreshProductionLedgerAndCount==='function')try{refreshProductionLedgerAndCount();}catch(e){}
-  alert('Production input saved and Master Production Inputs updated.');
+    // Read the shared state back and verify this exact input exists.
+    const checkRows = (typeof api==='function')
+      ? await api('/rest/v1/pos_state?key=eq.master_inputs&select=value,updated_at')
+      : [];
+    const cloudInputs = Array.isArray(checkRows)&&checkRows[0]&&Array.isArray(checkRows[0].value)
+      ? checkRows[0].value : [];
+    const confirmed = cloudInputs.some(x=>String(x.code||'').toUpperCase()===code && String(x.name||'')===name);
+    if(!confirmed)throw new Error('The database did not confirm the new Master Production Input.');
+
+    // Only now commit local copies from the confirmed cloud value.
+    oldEditableMasterInputs = cloudInputs.map(x=>({...x}));
+    localStorage.setItem('feastervilleMasterProductionInputs',JSON.stringify(oldEditableMasterInputs));
+    localStorage.setItem('feastervilleRawInventory',JSON.stringify(inv));
+
+    renderOldMasterEditor();
+    clearOldMasterEditor();
+    if(typeof refreshOldRecipeInputDropdowns==='function')try{refreshOldRecipeInputDropdowns();}catch(e){}
+    if(typeof populateProductionInputDropdowns==='function')try{populateProductionInputDropdowns();}catch(e){}
+    if(typeof loadRecipe==='function')try{loadRecipe();}catch(e){}
+    if(typeof loadPIRecipe==='function')try{loadPIRecipe();}catch(e){}
+    if(typeof refreshProductionInputs==='function')try{refreshProductionInputs();}catch(e){}
+    if(typeof refreshProductionLedgerAndCount==='function')try{refreshProductionLedgerAndCount();}catch(e){}
+
+    alert('Production input saved to the LIVE Master Production Inputs and confirmed.');
+  }catch(e){
+    console.error('Master input live save failed',e);
+    alert('Master Production Input was NOT updated in the live database. '+(e&&e.message?e.message:'Please sign in to the Live POS and try again.'));
+  }
 }
 
 document.addEventListener('DOMContentLoaded',function(){
@@ -2125,7 +2141,9 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   async function pushState(key, value) {
-    if (!accessToken) return;
+    if (!accessToken) {
+      throw new Error('Live POS sign-in is required before shared changes can be saved.');
+    }
     try {
       await api('/rest/v1/pos_state?on_conflict=key', {
         method:'POST',
@@ -2136,8 +2154,10 @@ document.addEventListener('DOMContentLoaded',function(){
           updated_at:new Date().toISOString()
         })
       });
+      return true;
     } catch (err) {
       console.error('Cloud state sync failed', key, err);
+      throw err;
     }
   }
 
