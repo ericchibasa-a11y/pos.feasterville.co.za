@@ -1419,7 +1419,7 @@ function clearOldMasterEditor(){
   document.getElementById('masterEditReorder').value=5;
 }
 
-function saveOldMasterInput(){
+async function saveOldMasterInput(){
   const code=document.getElementById('masterEditCode').value.trim().toUpperCase();
   const name=document.getElementById('masterEditName').value.trim();
   const category=document.getElementById('masterEditCategory').value.trim()||'Ingredient';
@@ -1429,24 +1429,44 @@ function saveOldMasterInput(){
   if(!code||!name){alert('Please enter the input code and name.');return;}
 
   let p=oldEditableMasterInputs.find(x=>x.code===code);
-  if(p){p.name=name;p.category=category;p.unit=unit;}
-  else{oldEditableMasterInputs.push({code,name,category,unit});}
+  if(p){
+    p.name=name;p.category=category;p.unit=unit;p.reorder=reorder;
+  }else{
+    oldEditableMasterInputs.push({code,name,category,unit,reorder});
+  }
 
+  // Save the master list immediately on this device.
   saveOldMasterList();
 
+  // Create/update its inventory record.
   let inv={};
   try{inv=JSON.parse(localStorage.getItem('feastervilleRawInventory')||'{}')||{};}catch(e){}
   if(!inv[code])inv[code]={opening:0,stockIn:0,used:0,count:0,reorder:reorder};
   inv[code].reorder=reorder;
   localStorage.setItem('feastervilleRawInventory',JSON.stringify(inv));
 
+  // Save BOTH master inputs and inventory to the shared live POS.
+  try{
+    if(typeof pushState==='function'){
+      await pushState('master_inputs',oldEditableMasterInputs);
+      await pushState('raw_inventory',inv);
+    }
+  }catch(e){
+    console.error('Master input cloud save failed',e);
+    alert('Input saved on this device, but the shared POS update failed. Please check your connection and sign-in.');
+    return;
+  }
+
+  // Refresh every screen/dropdown that depends on Master Production Inputs.
   renderOldMasterEditor();
   clearOldMasterEditor();
-
+  if(typeof refreshOldRecipeInputDropdowns==='function')try{refreshOldRecipeInputDropdowns();}catch(e){}
   if(typeof populateProductionInputDropdowns==='function')try{populateProductionInputDropdowns();}catch(e){}
+  if(typeof loadRecipe==='function')try{loadRecipe();}catch(e){}
+  if(typeof loadPIRecipe==='function')try{loadPIRecipe();}catch(e){}
   if(typeof refreshProductionInputs==='function')try{refreshProductionInputs();}catch(e){}
   if(typeof refreshProductionLedgerAndCount==='function')try{refreshProductionLedgerAndCount();}catch(e){}
-  alert('Production input saved.');
+  alert('Production input saved and Master Production Inputs updated.');
 }
 
 document.addEventListener('DOMContentLoaded',function(){
