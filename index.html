@@ -1429,10 +1429,8 @@ async function saveOldMasterInput(){
   if(!code||!name){alert('Please enter the input code and name.');return;}
 
   // Shared master-data changes must have a real Supabase session.
-  if(typeof accessToken!=='undefined' && !accessToken){
-    alert('You are signed into the local Manager screen, but not the LIVE POS database. Please use the LIVE POS email/password SIGN IN first, then save the input again.');
-    const livePanel=document.getElementById('livePanel')||document.getElementById('liveAccountPanel');
-    if(livePanel)try{livePanel.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
+  if(!window.feastervilleLiveSignedIn){
+    alert('Please sign in to the LIVE POS email/password section first, then save the input again.');
     return;
   }
 
@@ -1451,13 +1449,13 @@ async function saveOldMasterInput(){
   inv[code].reorder=reorder;
 
   try{
-    if(typeof pushState!=='function')throw new Error('Live POS cloud save function is unavailable.');
-    await pushState('master_inputs',nextInputs);
-    await pushState('raw_inventory',inv);
+    if(typeof window.feastervillePushState!=='function')throw new Error('Live POS cloud save function is unavailable.');
+    await window.feastervillePushState('master_inputs',nextInputs);
+    await window.feastervillePushState('raw_inventory',inv);
 
     // Read the shared state back and verify this exact input exists.
-    const checkRows = (typeof api==='function')
-      ? await api('/rest/v1/pos_state?key=eq.master_inputs&select=value,updated_at')
+    const checkRows = (typeof window.feastervilleApi==='function')
+      ? await window.feastervilleApi('/rest/v1/pos_state?key=eq.master_inputs&select=value,updated_at')
       : [];
     const cloudInputs = Array.isArray(checkRows)&&checkRows[0]&&Array.isArray(checkRows[0].value)
       ? checkRows[0].value : [];
@@ -2050,6 +2048,7 @@ document.addEventListener('DOMContentLoaded',function(){
     }
 
     accessToken = authData.access_token;
+    window.feastervilleLiveSignedIn = true;
     sessionStorage.setItem(TOKEN_KEY, accessToken);
     if (authData.refresh_token) sessionStorage.setItem(REFRESH_KEY, authData.refresh_token);
 
@@ -2161,6 +2160,12 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   }
 
+  // Expose live database helpers to manager/master-data screens outside this IIFE.
+  window.feastervilleApi = api;
+  window.feastervillePushState = pushState;
+  window.feastervilleLiveSignedIn = !!accessToken;
+
+
   window.completeSale = async function() {
     try {
       if (!accessToken) throw new Error('Please sign in to the live POS.');
@@ -2265,6 +2270,7 @@ document.addEventListener('DOMContentLoaded',function(){
   el('liveLogout').addEventListener('click', function() {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_KEY);
+    window.feastervilleLiveSignedIn = false;
     location.reload();
   });
 
