@@ -1466,6 +1466,9 @@ async function saveOldMasterInput(){
     oldEditableMasterInputs = cloudInputs.map(x=>({...x}));
     localStorage.setItem('feastervilleMasterProductionInputs',JSON.stringify(oldEditableMasterInputs));
     localStorage.setItem('feastervilleRawInventory',JSON.stringify(inv));
+    // Prevent the background 5-second sync from immediately repainting this screen
+    // with a stale response that started before the save completed.
+    window.feastervilleMasterInputsSyncLockUntil = Date.now() + 12000;
 
     renderOldMasterEditor();
     clearOldMasterEditor();
@@ -1979,7 +1982,7 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   async function pullState() {
-    const rows = await api('/rest/v1/pos_state?select=key,value');
+    const rows = await api('/rest/v1/pos_state?select=key,value,updated_at');
     const keyMap = {
       products: 'feastervilleProducts',
       recipes: 'feastervilleRecipes',
@@ -1988,17 +1991,36 @@ document.addEventListener('DOMContentLoaded',function(){
     };
 
     (rows || []).forEach(function(row) {
-      if (keyMap[row.key]) {
+      const isMasterInputs = row.key === 'master_inputs';
+      const syncLocked = isMasterInputs && window.feastervilleMasterInputsSyncLockUntil &&
+                         Date.now() < window.feastervilleMasterInputsSyncLockUntil;
+
+      if (keyMap[row.key] && !syncLocked) {
         localStorage.setItem(keyMap[row.key], JSON.stringify(row.value));
       }
+
+      // When master inputs are accepted from cloud, update the in-memory editor array directly
+      // from that exact cloud response so the screen cannot fall back to an older local copy.
+      if (isMasterInputs && !syncLocked && Array.isArray(row.value)) {
+        try {
+          oldEditableMasterInputs = row.value.map(function(x){ return Object.assign({}, x); });
+        } catch (_) {}
+      }
+
       if(row.key==='products' && Array.isArray(row.value)){
         products.splice(0, products.length, ...row.value.map(function(p){return Object.assign({active:true},p);}));
       }
     });
 
     // Rebind every recipe-input dropdown to the LIVE Master Production Inputs list.
+    // Do not reload oldEditableMasterInputs from localStorage while a recent master save is protected.
     try {
-      if (typeof getOldMasterInputs === 'function') oldEditableMasterInputs = getOldMasterInputs();
+      const masterSyncLocked = window.feastervilleMasterInputsSyncLockUntil &&
+                               Date.now() < window.feastervilleMasterInputsSyncLockUntil;
+      if (!masterSyncLocked && typeof getOldMasterInputs === 'function' &&
+          (!Array.isArray(oldEditableMasterInputs) || !oldEditableMasterInputs.length)) {
+        oldEditableMasterInputs = getOldMasterInputs();
+      }
       if (typeof refreshOldRecipeInputDropdowns === 'function') refreshOldRecipeInputDropdowns();
       if (typeof loadRecipe === 'function') loadRecipe();
       if (typeof loadPIRecipe === 'function') loadPIRecipe();
@@ -2007,7 +2029,11 @@ document.addEventListener('DOMContentLoaded',function(){
     try { if (typeof rebuildSalesCatalogueReliable === 'function') rebuildSalesCatalogueReliable(); } catch (_) {}
     try { if (typeof renderProducts === 'function') renderProducts(); } catch (_) {}
     try { if (typeof renderSellableItemsEditor === 'function') renderSellableItemsEditor(); } catch (_) {}
-    try { if (typeof renderOldMasterEditor === 'function') renderOldMasterEditor(); } catch (_) {}
+    try {
+      const masterSyncLocked = window.feastervilleMasterInputsSyncLockUntil &&
+                               Date.now() < window.feastervilleMasterInputsSyncLockUntil;
+      if (!masterSyncLocked && typeof renderOldMasterEditor === 'function') renderOldMasterEditor();
+    } catch (_) {}
     try { if (typeof renderProductionInputUsageFromSales === 'function') renderProductionInputUsageFromSales(); } catch (_) {}
   }
 
