@@ -1348,9 +1348,24 @@ async function saveOldLayoutRecipe(){
                          typeof checkRows[0].value==='object' ? checkRows[0].value : {};
     const confirmedLinks = Array.isArray(cloudRecipes[product]) ? cloudRecipes[product] : [];
 
-    const expected = JSON.stringify(links);
-    const confirmed = JSON.stringify(confirmedLinks);
-    if(expected !== confirmed){
+    // Compare recipe values semantically. PostgreSQL/JSONB may return object
+    // properties in a different order (for example qty before inputCode),
+    // which must not be treated as a failed save.
+    const normalizeRecipeLinks = function(list){
+      return (Array.isArray(list)?list:[]).map(function(x){
+        return {inputCode:String(x.inputCode||''), qty:Number(x.qty||0)};
+      });
+    };
+    const expectedLinks = normalizeRecipeLinks(links);
+    const actualLinks = normalizeRecipeLinks(confirmedLinks);
+    const confirmedOk =
+      expectedLinks.length === actualLinks.length &&
+      expectedLinks.every(function(x,i){
+        return actualLinks[i] &&
+               actualLinks[i].inputCode === x.inputCode &&
+               Number(actualLinks[i].qty) === Number(x.qty);
+      });
+    if(!confirmedOk){
       throw new Error('The live database did not confirm the saved recipe.');
     }
 
