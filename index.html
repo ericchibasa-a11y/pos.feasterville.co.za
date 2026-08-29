@@ -2437,7 +2437,12 @@ async function loadStaff(){
       <td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td>
       <td>
         <button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button>
-        <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button>
+        <button type="button" onclick="ftShowPasswordReset('${x.id}')">RESET PASSWORD</button>
+        <div id="pwreset-${x.id}" style="display:none;margin-top:6px">
+          <input id="newpw-${x.id}" type="password" placeholder="New password (min 6)" style="width:180px">
+          <button type="button" onclick="ftSavePassword('${x.id}')">SAVE NEW PASSWORD</button>
+          <button type="button" onclick="ftCancelPassword('${x.id}')">CANCEL</button>
+        </div>
       </td>
     </tr>`).join(''):'<tr><td colspan="7">No users found.</td></tr>';
     sm(u.length+' live user(s) loaded.');
@@ -2457,12 +2462,32 @@ window.ftStaffActive=async(id,a)=>{
   try{await ac({action:'active',user_id:id,active:a});sm(a?'User activated.':'User deactivated.');await loadStaff();}
   catch(e){sm(e.message,true);}
 };
-window.ftStaffPassword=async(id,email)=>{
-  const p=prompt('New temporary password for '+email+' (minimum 6 characters):');
-  if(p===null)return;
-  if(p.length<6)return alert('Password must be at least 6 characters.');
-  try{await ac({action:'password',user_id:id,password:p});alert('Password reset successfully.');}
-  catch(e){alert(e.message);}
+window.ftShowPasswordReset=(id)=>{
+  const box=$('pwreset-'+id);
+  const input=$('newpw-'+id);
+  if(box)box.style.display='block';
+  if(input){input.value='';input.focus();}
+};
+window.ftCancelPassword=(id)=>{
+  const box=$('pwreset-'+id);
+  const input=$('newpw-'+id);
+  if(input)input.value='';
+  if(box)box.style.display='none';
+};
+window.ftSavePassword=async(id)=>{
+  const input=$('newpw-'+id);
+  const p=input?input.value:'';
+  if(p.length<6){sm('Password must be at least 6 characters.',true);return;}
+  try{
+    sm('Resetting password...');
+    await ac({action:'password',user_id:id,password:p});
+    sm('Password reset successfully.');
+    if(input)input.value='';
+    const box=$('pwreset-'+id);
+    if(box)box.style.display='none';
+  }catch(e){
+    sm(e.message,true);
+  }
 };
 document.addEventListener('DOMContentLoaded',()=>{
   $('createStaffBtn')?.addEventListener('click',async()=>{
