@@ -78,8 +78,13 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
   body.print-report #reportContent, body.print-report #reportContent * { visibility:visible !important; }
   body.print-report #reportContent { position:absolute; left:0; top:0; width:100%; }
 }
+@media print {
+ body.print-production *{visibility:hidden!important}
+ body.print-production #productionInputsPanel, body.print-production #productionInputsPanel *{visibility:visible!important}
+ body.print-production #productionInputsPanel{display:block!important;position:absolute!important;left:0!important;top:0!important;width:100%!important;background:#fff!important}
+ body.print-production #receiptPrint{display:none!important}
+}
 </style>
-
 
 <style>
 #loginScreen{display:none!important}
@@ -92,15 +97,6 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 </style>
 </head>
 <body>
-<div id="storeLocationBar" style="background:#fff;border-bottom:1px solid #ddd;padding:8px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-  <b>STORE:</b>
-  <select id="storeLocationSelect" style="font-weight:700">
-    <option value="NDAYENI">Ndayeni</option>
-    <option value="SIVANA">Sivana</option>
-      </select>
-  <span id="storeLocationBadge" style="font-weight:700">Ndayeni POS</span>
-</div>
-
 
 <div id="liveTopBar">
   <b>FEASTERVILLE LIVE POS</b>
@@ -239,26 +235,6 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 
 
 
-
-<section class="panel manager-only" id="sellableItemsPanel" style="grid-column:1/-1;display:none">
-  <h2>Sellable Items Management</h2>
-  <p class="small">Manager only. Edit the sellable menu for the selected store. Changes are saved live and do not affect the other store.</p>
-  <div class="order-head">
-    <label><b>Store</b><br><select id="itemStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label>
-    <label><b>Code</b><br><input id="itemCode" placeholder="e.g. K1"></label>
-    <label><b>Description</b><br><input id="itemName" placeholder="Item description" style="min-width:280px"></label>
-    <label><b>Category</b><br><input id="itemCategory" placeholder="Category"></label>
-    <label><b>Price</b><br><input id="itemPrice" type="number" min="0" step="0.01" placeholder="0.00"></label>
-    <button type="button" class="primary" id="saveSellableItem">ADD / SAVE ITEM</button>
-    <button type="button" id="refreshSellableItems">REFRESH</button>
-  </div>
-  <p id="sellableMessage" class="small"></p>
-  <div style="overflow:auto"><table class="inv-table">
-    <thead><tr><th>Code</th><th>Description</th><th>Category</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
-    <tbody id="sellableRows"></tbody>
-  </table></div>
-</section>
-
 <section class="panel" id="userPanel" style="grid-column:1/-1;display:none">
 <h2>Salesperson &amp; User Management</h2>
 <p class="small">Manager only. Create individual salesperson accounts, activate/deactivate users and reset passwords.</p>
@@ -266,14 +242,13 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 <input id="staffEmail" type="email" placeholder="Salesperson email">
 <input id="staffDisplayName" placeholder="Display name">
 <input id="staffPassword" type="password" placeholder="Temporary password (min 6)">
-<label><b>Assigned Store</b><br><select id="staffStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label>
 <button class="primary" type="button" id="createStaffBtn">CREATE SALESPERSON</button>
 <button type="button" id="refreshStaffBtn">REFRESH USERS</button>
 </div>
 <p id="staffMessage" class="small"></p>
 <div style="overflow:auto"><table class="inv-table">
-<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Store</th><th>Status</th><th>Last Sign In</th><th>Actions</th></tr></thead>
-<tbody id="staffRows"><tr><td colspan="7">Open this section to load live users.</td></tr></tbody>
+<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Sign In</th><th>Actions</th></tr></thead>
+<tbody id="staffRows"><tr><td colspan="6">Open this section to load live users.</td></tr></tbody>
 </table></div>
 </section>
 
@@ -412,6 +387,23 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 </div>
 </section>
 
+<section class="panel" id="sellableItemsEditorPanel" style="grid-column:1/-1;display:none">
+<h2>Sellable Items — Manager Edit</h2>
+<p class="small">Edit the sellable product name, category, selling price and active status. Existing product codes are locked to protect recipes and sales history.</p>
+<div class="order-head">
+<label><b>Existing Sellable Item</b><br><select id="sellableEditSelect" style="min-width:320px" onchange="loadSellableForEdit()"><option value="">-- Select Sellable Item --</option></select></label>
+<label><b>Code</b><br><input id="sellableEditCode" style="width:120px" placeholder="e.g. K12"></label>
+<label><b>Item Name</b><br><input id="sellableEditName" style="width:280px" placeholder="Sellable item name"></label>
+<label><b>Category</b><br><input id="sellableEditCategory" style="width:180px" placeholder="Category"></label>
+<label><b>Selling Price (R)</b><br><input id="sellableEditPrice" type="number" min="0" step="0.01" style="width:130px" value="0"></label>
+<label><b>Active on Sales Screen</b><br><select id="sellableEditActive" style="width:150px"><option value="true">YES</option><option value="false">NO</option></select></label>
+<button type="button" class="primary" onclick="saveSellableItemEdit()">SAVE ITEM</button>
+<button type="button" onclick="clearSellableItemEditor()">NEW ITEM</button>
+</div>
+<p id="sellableEditStatus" class="small"></p>
+<div style="overflow:auto;margin-top:12px"><table class="inv-table"><thead><tr><th>Code</th><th>Sellable Item</th><th>Category</th><th>Price</th><th>Active</th><th>Action</th></tr></thead><tbody id="sellableItemsEditorBody"></tbody></table></div>
+</section>
+
 <section class="panel" id="stockMovementPanel" style="grid-column:1/-1;display:none">
 <h2>Production Input Stock Movements</h2>
 <p class="small">Use this screen only for purchases/receipts. Stock Used is calculated automatically from POS sales and recipes.</p>
@@ -530,16 +522,17 @@ function initRecipes(){
 function loadRecipe(){
   const code=document.getElementById('recipeProduct').value;
   const input=document.getElementById('recipeInput');
-  input.innerHTML=rawMaterials.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit})</option>`).join('');
+  const masterInputs=(typeof getRecipeMasterInputs==='function'?getRecipeMasterInputs():rawMaterials);
+  input.innerHTML=masterInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit||''})</option>`).join('');
   const list=recipes[code]||[];
   document.getElementById('recipeList').innerHTML=`
     <table class="inv-table"><thead><tr><th>Input Code</th><th>Raw Material</th><th>Qty per 1 Sold</th><th>Unit</th><th>Action</th></tr></thead>
     <tbody>${list.length?list.map((x,i)=>{
-      const p=rawMaterials.find(r=>r.code===x.inputCode);
+      const p=(typeof getRecipeMasterInputs==='function'?getRecipeMasterInputs():rawMaterials).find(r=>r.code===x.inputCode);
       return `<tr><td>${x.inputCode}</td><td>${p?p.name:'Unknown'}</td><td>${x.qty}</td><td>${p?p.unit:''}</td><td><button class="remove" onclick="removeRecipeInput(${i})">REMOVE</button></td></tr>`;
     }).join(''):'<tr><td colspan="5">No production inputs linked yet.</td></tr>'}</tbody></table>`;
 }
-function addRecipeInput(){
+async function addRecipeInput(){
   const product=document.getElementById('recipeProduct').value;
   const inputCode=document.getElementById('recipeInput').value;
   const qty=Number(document.getElementById('recipeQty').value||0);
@@ -548,12 +541,14 @@ function addRecipeInput(){
   const existing=recipes[product].find(x=>x.inputCode===inputCode);
   if(existing)existing.qty+=qty; else recipes[product].push({inputCode,qty});
   localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
+  try{if(typeof pushState==='function')await pushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
   loadRecipe();
 }
-function removeRecipeInput(i){
+async function removeRecipeInput(i){
   const product=document.getElementById('recipeProduct').value;
   recipes[product].splice(i,1);
   localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
+  try{if(typeof pushState==='function')await pushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
   loadRecipe();
 }
 function showRecipePanel(){
@@ -688,16 +683,6 @@ function applyRights(){
 }
 
 const products=[{"category": "REGULAR KOTA", "code": "K1", "name": "Atchar/Lettuce + Chips + Polony + Special", "price": 20.0}, {"category": "REGULAR KOTA", "code": "K2", "name": "Atchar/Lettuce + Chips + Polony + Special + Cheese", "price": 25.0}, {"category": "REGULAR KOTA", "code": "K3", "name": "Atchar/Lettuce + Chips + Polony + Special + Vienna", "price": 28.0}, {"category": "REGULAR KOTA", "code": "K4", "name": "Atchar/Lettuce + Chips + Vienna + Egg + Cheese", "price": 30.0}, {"category": "REGULAR KOTA", "code": "K5", "name": "Atchar/Lettuce + Chips + Chicken Burger + Cheese", "price": 33.0}, {"category": "REGULAR KOTA", "code": "K6", "name": "Atchar/Lettuce + Chips + Russian + Egg + Cheese", "price": 36.0}, {"category": "REGULAR KOTA", "code": "K7", "name": "Atchar/Lettuce + Chips + Beef Burger + Cheese + Egg", "price": 40.0}, {"category": "REGULAR KOTA", "code": "K8", "name": "Atchar/Lettuce + Chips + Polony + Russian + Vienna + Egg", "price": 45.0}, {"category": "REGULAR KOTA", "code": "K9", "name": "Atchar/Lettuce + Chips + Beef Burger + Ham + Vienna + Egg + Cheese", "price": 49.0}, {"category": "REGULAR KOTA", "code": "K10", "name": "Atchar/Lettuce + Chips + Polony + Beef Burger + Russian + Egg + Cheese", "price": 55.0}, {"category": "REGULAR KOTA", "code": "K11", "name": "Atchar/Lettuce + Chips + Special + Polony + Russian + Vienna + Ham + Egg + Cheese", "price": 60.0}, {"category": "RIB PATTY KOTA", "code": "RK1", "name": "Rib Patty + Chips + Egg + Cheese", "price": 40.0}, {"category": "RIB PATTY KOTA", "code": "RK2", "name": "Rib Patty + Chips + Vienna + Cheese", "price": 45.0}, {"category": "RIB PATTY KOTA", "code": "RK3", "name": "Rib Patty + Chips + Ham + Cheese + Egg", "price": 53.0}, {"category": "RIB PATTY KOTA", "code": "RK4", "name": "Rib Patty + Chips + Egg + Russian + Bacon + Cheese", "price": 62.0}, {"category": "RIB PATTY KOTA", "code": "RK5", "name": "Rib Patty + Chips + Ham + Russian + Vienna + Cheese", "price": 68.0}, {"category": "RIB PATTY KOTA", "code": "RK6", "name": "Rib Patty + Chips + Beef Burger + Egg + Vienna + Russian + Cheese", "price": 75.0}, {"category": "CHIPS", "code": "C01", "name": "Regular Chips", "price": 20.0}, {"category": "CHIPS", "code": "C02", "name": "Medium Chips", "price": 30.0}, {"category": "CHIPS", "code": "C03", "name": "Large Chips", "price": 40.0}, {"category": "CHIPS", "code": "C04", "name": "Xtra-Large Chips", "price": 50.0}, {"category": "CHIPS", "code": "C05", "name": "Jumbo Chips", "price": 60.0}, {"category": "RUSSIAN & CHIPS", "code": "RC1", "name": "Russian and Regular Chips", "price": 30.0}, {"category": "RUSSIAN & CHIPS", "code": "RC2", "name": "2 x Russian and Regular Chips", "price": 40.0}, {"category": "RUSSIAN & CHIPS", "code": "RC4", "name": "4 x Russian and Regular Chips", "price": 50.0}, {"category": "RUSSIAN & CHIPS", "code": "RC5", "name": "5 x Russian and Regular Chips", "price": 60.0}, {"category": "VIENNA & CHIPS", "code": "VC1", "name": "1 x Vienna and Regular Chips", "price": 29.0}, {"category": "VIENNA & CHIPS", "code": "VC2", "name": "2 x Vienna and Regular Chips", "price": 38.0}, {"category": "ADD-ONS", "code": "A01", "name": "Pork Rib Patty", "price": 20.0}, {"category": "ADD-ONS", "code": "A02", "name": "Chicken Rib Patty", "price": 20.0}, {"category": "ADD-ONS", "code": "A03", "name": "Egg", "price": 5.0}, {"category": "ADD-ONS", "code": "A04", "name": "Russian", "price": 13.0}, {"category": "ADD-ONS", "code": "A05", "name": "Vienna", "price": 10.0}, {"category": "ADD-ONS", "code": "A06", "name": "Cheese", "price": 5.0}, {"category": "ADD-ONS", "code": "A07", "name": "Beef Burger Patty", "price": 18.0}, {"category": "ADD-ONS", "code": "A08", "name": "Chicken Burger Patty", "price": 12.0}, {"category": "ADD-ONS", "code": "A09", "name": "Large Pop Corn", "price": 8.0}, {"category": "ADD-ONS", "code": "A10", "name": "Medium Pop Corn", "price": 6.0}, {"category": "RIB BURGER", "code": "RB1", "name": "Rib Burger", "price": 35.0}, {"category": "RIB BURGER", "code": "RB2", "name": "Rib Burger Chips", "price": 42.0}, {"category": "RIB BURGER", "code": "RB3", "name": "Rib Burger Cheese Chips", "price": 48.0}, {"category": "RIB BURGER", "code": "RB4", "name": "Rib Burger Cheese Egg Chips", "price": 55.0}, {"category": "RIB BURGER", "code": "RB5", "name": "Rib Burger Bacon Egg Cheese Chips", "price": 60.0}, {"category": "BEEF BURGER", "code": "BB1", "name": "Beef Burger Plain", "price": 28.0}, {"category": "BEEF BURGER", "code": "BB2", "name": "Beef Burger with Chips", "price": 36.0}, {"category": "BEEF BURGER", "code": "BB3", "name": "Beef Burger Cheese Chips", "price": 42.0}, {"category": "BEEF BURGER", "code": "BB4", "name": "Beef Burger Egg Cheese Chips", "price": 49.0}, {"category": "BEEF BURGER", "code": "BB5", "name": "Beef Burger Bacon Egg Cheese Chips", "price": 58.0}, {"category": "CHICKEN BURGER", "code": "CB1", "name": "Chicken Burger Plain", "price": 25.0}, {"category": "CHICKEN BURGER", "code": "CB2", "name": "Chicken Burger with Chips", "price": 35.0}, {"category": "CHICKEN BURGER", "code": "CB3", "name": "Chicken Burger Cheese Chips", "price": 40.0}, {"category": "CHICKEN BURGER", "code": "CB4", "name": "Chicken Burger Egg Cheese Chips", "price": 44.0}, {"category": "CHICKEN BURGER", "code": "CB5", "name": "Chicken Burger x2 Egg Cheese Chips", "price": 55.0}, {"category": "CHICKEN KOTA", "code": "CK2", "name": "Chips + Chicken Polony + Chicken Vienna + Cheese", "price": 32.0}, {"category": "CHICKEN KOTA", "code": "CK3", "name": "Chips + Chicken Polony + Chicken Burger + Cheese + Egg", "price": 35.0}, {"category": "CHICKEN KOTA", "code": "CK4", "name": "Chips + Chicken Polony + Chicken Vienna + Cheese + Egg", "price": 40.0}, {"category": "CHICKEN KOTA", "code": "CK5", "name": "Chips + Chicken Polony + Chicken Vienna + Chicken Burger + Cheese", "price": 47.0}, {"category": "CHICKEN KOTA", "code": "CK6", "name": "Chips + Chicken Polony + Chicken Burger + Chicken Vienna + Cheese + Egg", "price": 55.0}, {"category": "CHICKEN KOTA", "code": "CK7", "name": "Chips + Chicken Polony + Chicken Rib Patty + Chicken Vienna + Cheese + Egg", "price": 65.0}, {"category": "RIB WRAP KOTA", "code": "RW1", "name": "Chips + Polony + Rib Patty + Special + Cheese", "price": 42.0}, {"category": "RIB WRAP KOTA", "code": "RW2", "name": "Chips + Polony + Rib Patty + Special + Egg + Cheese", "price": 47.0}, {"category": "RIB WRAP KOTA", "code": "RW3", "name": "Chips + Polony + Rib Patty + Russian + Cheese + Egg", "price": 55.0}, {"category": "RIB WRAP KOTA", "code": "RW4", "name": "Chips + Polony + Rib Patty + Ham + Vienna + Egg + Cheese", "price": 60.0}, {"category": "CHICKEN WRAP", "code": "CW1", "name": "Lettuce + Tomato + Chicken Breast + Cheese", "price": 35.0}, {"category": "CHICKEN WRAP", "code": "CW2", "name": "Lettuce + Tomato + Chicken Breast + Chicken Patty + Cheese", "price": 40.0}, {"category": "CHICKEN WRAP", "code": "CW3", "name": "Lettuce + Tomato + Chicken Breast + Chicken Rib Patty + Cheese", "price": 55.0}, {"category": "WINGS & RIBS COMBO", "code": "WR1", "name": "4 Chicken Wings + 2 Piece Rib with Value Chips", "price": 65.0}, {"category": "WINGS & RIBS COMBO", "code": "WR2", "name": "8 Chicken Wings + 4 PCS Ribs with Value Chips", "price": 96.0}, {"category": "WINGS & RIBS COMBO", "code": "WR3", "name": "10 Chicken Wings + 5 PCS Ribs with Value Chips", "price": 130.0}, {"category": "CHICKEN WINGS", "code": "W01", "name": "4 Chicken Wings with Value Chips", "price": 40.0}, {"category": "CHICKEN WINGS", "code": "W02", "name": "6 Chicken Wings with Value Chips", "price": 52.0}, {"category": "CHICKEN WINGS", "code": "W03", "name": "12 Chicken Wings with Value Chips", "price": 85.0}, {"category": "BBQ PORK RIBS", "code": "PR1", "name": "2 PCS BBQ Cocktail Rib with Value Chips", "price": 50.0}, {"category": "BBQ PORK RIBS", "code": "PR2", "name": "3 PCS BBQ Cocktail Ribs with Value Chips", "price": 60.0}, {"category": "BBQ PORK RIBS", "code": "PR3", "name": "5 PCS BBQ Cocktail Ribs with Value Chips", "price": 90.0}, {"category": "BBQ PORK RIBS", "code": "PR4", "name": "Full Rack Pork Rib with Regular Chips", "price": 210.0}, {"category": "ICE CREAM", "code": "ICE-001", "name": "ICup Tin Roof", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-002", "name": "ICup Mango", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-003", "name": "ICup Almond", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-004", "name": "ICup Pistachio Nuts", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-005", "name": "ICup Bufree", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-006", "name": "Polar Sundae", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-007", "name": "Polar I Cone", "price": 20.0}, {"category": "ICE CREAM", "code": "ICE-008", "name": "Milky Pie Almond", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-009", "name": "Maxi Choc Almond", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-010", "name": "Maxi White Almond", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-011", "name": "Maxi Classic", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-012", "name": "Cone Ice Cream", "price": 7.0}, {"category": "ICE CREAM", "code": "ICE-013", "name": "Cup Ice Cream", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-014", "name": "Bubblegum", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-015", "name": "Flavour Mania Cups", "price": 12.0}, {"category": "ICE CREAM", "code": "ICE-016", "name": "Jolly Jelly Ice Cream", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-017", "name": "Split Mix", "price": 8.0}, {"category": "ICE CREAM", "code": "ICE-018", "name": "Snow Pie", "price": 12.0}, {"category": "ICE CREAM", "code": "ICE-019", "name": "Rave Strawberry", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-020", "name": "Choc Overload", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-021", "name": "Banana Berry", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-022", "name": "Banana Split", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-023", "name": "Ice Cream Panda Pops", "price": 7.0}, {"category": "ICE CREAM", "code": "ICE-024", "name": "Polar Eish", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-025", "name": "Three in One", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-026", "name": "Polar Split", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-027", "name": "Litchilik", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-028", "name": "Custard & Jelly", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-029", "name": "Milky Mix", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-030", "name": "Rave Blackcurrant", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-031", "name": "Caramello", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-032", "name": "Choc 99", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-033", "name": "Fruity Licks Mix", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-034", "name": "Polar Raspberry", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-035", "name": "Polar Pop Orange", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-036", "name": "Polar Tropaz", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-037", "name": "Polar Apple", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-038", "name": "Polar Pineapple", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-039", "name": "Grandelch", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-040", "name": "Top Hat", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-041", "name": "Polar Pop", "price": 10.0}, {"category": "ICE CREAM", "code": "ICE-042", "name": "Banana and Strawberry 500ml", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-043", "name": "Vanilla and Strawberry 500ml", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-044", "name": "Vanilla Flavoured 500ml", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-045", "name": "Chocolate, Vanilla and Strawberry 500ml", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-046", "name": "Chocolate and Vanilla 500ml", "price": 25.0}, {"category": "ICE CREAM", "code": "ICE-047", "name": "Caramel Dip", "price": 12.0}, {"category": "ICE CREAM", "code": "ICE-048", "name": "Nice Cream 500ml Banana Split", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-049", "name": "Nice Cream 500ml Vanilla", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-050", "name": "Nice Cream 500ml Vanilla/Strawberry", "price": 15.0}, {"category": "ICE CREAM", "code": "ICE-051", "name": "Milky Pie", "price": 12.0}];
-const ndayeniProducts=[{"category":"REGULAR KOTA","code":"K1","name":"Atchar/Lettuce + Chips + Polony + Special","price":20},{"category":"REGULAR KOTA","code":"K2","name":"Atchar/Lettuce + Chips + Polony + Special + Cheese","price":25},{"category":"REGULAR KOTA","code":"K3","name":"Atchar/Lettuce + Chips + Polony + Special + Vienna","price":28},{"category":"REGULAR KOTA","code":"K4","name":"Atchar/Lettuce + Chips + Vienna + Egg + Cheese","price":33},{"category":"REGULAR KOTA","code":"K5","name":"Atchar/Lettuce + Chips + Chicken Burger + Cheese","price":34},{"category":"REGULAR KOTA","code":"K6","name":"Atchar/Lettuce + Chips + Beef Burger + Cheese","price":36},{"category":"REGULAR KOTA","code":"K7","name":"Atchar/Lettuce + Chips + Russian + Egg + Cheese","price":40},{"category":"REGULAR KOTA","code":"K8","name":"Atchar/Lettuce + Chips + Cheese + Russian + Vienna + Egg","price":47},{"category":"REGULAR KOTA","code":"K9","name":"Atchar/Lettuce + Chips + Beef Burger + Ham + Vienna + Egg + Cheese","price":50},{"category":"REGULAR KOTA","code":"K10","name":"Atchar/Lettuce + Chips + Polony + Beef Burger + Russian + Egg + Cheese","price":55},{"category":"REGULAR KOTA","code":"K11","name":"Atchar/Lettuce + Chips + Special + Polony + Russian + Vienna + Ham + Egg + Cheese","price":60},{"category":"RIB PATTY KOTA","code":"RK1","name":"Rib Patty + Chips + Egg + Cheese","price":40},{"category":"RIB PATTY KOTA","code":"RK2","name":"Rib Patty + Chips + Vienna + Cheese","price":45},{"category":"RIB PATTY KOTA","code":"RK3","name":"Rib Patty + Chips + Ham + Cheese + Egg","price":55},{"category":"RIB PATTY KOTA","code":"RK4","name":"Rib Patty + Chips + Egg + Russian + Bacon + Cheese","price":60},{"category":"RIB PATTY KOTA","code":"RK5","name":"Rib Patty + Chips + Ham + Russian + Vienna + Cheese","price":65},{"category":"CHIPS","code":"C01","name":"Regular Chips","price":20.0},{"category":"CHIPS","code":"C02","name":"Medium Chips","price":30.0},{"category":"CHIPS","code":"C03","name":"Large Chips","price":40.0},{"category":"CHIPS","code":"C04","name":"Xtra-Large Chips","price":50.0},{"category":"CHIPS","code":"C05","name":"Jumbo Chips","price":60.0},{"category":"RUSSIAN & CHIPS","code":"RC1","name":"Russian and Regular Chips","price":30.0},{"category":"RUSSIAN & CHIPS","code":"RC2","name":"2 x Russian and Regular Chips","price":40.0},{"category":"RUSSIAN & CHIPS","code":"RC4","name":"4 x Russian and Regular Chips","price":50.0},{"category":"RUSSIAN & CHIPS","code":"RC5","name":"5 x Russian and Regular Chips","price":60.0},{"category":"VIENNA & CHIPS","code":"VC1","name":"1 x Vienna and Regular Chips","price":29.0},{"category":"VIENNA & CHIPS","code":"VC2","name":"2 x Vienna and Regular Chips","price":38.0},{"category":"ADD-ONS","code":"A01","name":"Pork Rib Patty","price":20.0},{"category":"ADD-ONS","code":"A02","name":"Chicken Rib Patty","price":20.0},{"category":"ADD-ONS","code":"A03","name":"Egg","price":5.0},{"category":"ADD-ONS","code":"A04","name":"Russian","price":13.0},{"category":"ADD-ONS","code":"A05","name":"Vienna","price":10.0},{"category":"ADD-ONS","code":"A06","name":"Cheese","price":5.0},{"category":"ADD-ONS","code":"A07","name":"Beef Burger Patty","price":18.0},{"category":"ADD-ONS","code":"A08","name":"Chicken Burger Patty","price":12.0},{"category":"ADD-ONS","code":"A09","name":"Large Pop Corn","price":8.0},{"category":"ADD-ONS","code":"A10","name":"Medium Pop Corn","price":6.0},{"category":"RIB BURGER","code":"RB1","name":"Rib Burger","price":35.0},{"category":"RIB BURGER","code":"RB2","name":"Rib Burger Chips","price":42.0},{"category":"RIB BURGER","code":"RB3","name":"Rib Burger Cheese Chips","price":48.0},{"category":"RIB BURGER","code":"RB4","name":"Rib Burger Cheese Egg Chips","price":55.0},{"category":"RIB BURGER","code":"RB5","name":"Rib Burger Bacon Egg Cheese Chips","price":60.0},{"category":"BEEF BURGER","code":"BB1","name":"Beef Burger Plain","price":28.0},{"category":"BEEF BURGER","code":"BB2","name":"Beef Burger with Chips","price":36.0},{"category":"BEEF BURGER","code":"BB3","name":"Beef Burger Cheese Chips","price":42.0},{"category":"BEEF BURGER","code":"BB4","name":"Beef Burger Egg Cheese Chips","price":49.0},{"category":"BEEF BURGER","code":"BB5","name":"Beef Burger Bacon Egg Cheese Chips","price":58.0},{"category":"CHICKEN BURGER","code":"CB1","name":"Chicken Burger Plain","price":25.0},{"category":"CHICKEN BURGER","code":"CB2","name":"Chicken Burger with Chips","price":35.0},{"category":"CHICKEN BURGER","code":"CB3","name":"Chicken Burger Cheese Chips","price":40.0},{"category":"CHICKEN BURGER","code":"CB4","name":"Chicken Burger Egg Cheese Chips","price":44.0},{"category":"CHICKEN BURGER","code":"CB5","name":"Chicken Burger x2 Egg Cheese Chips","price":55.0},{"category":"CHICKEN KOTA","code":"CK2","name":"Chips + Chicken Polony + Chicken Vienna + Cheese","price":32.0},{"category":"CHICKEN KOTA","code":"CK3","name":"Chips + Chicken Polony + Chicken Burger + Cheese + Egg","price":35.0},{"category":"CHICKEN KOTA","code":"CK4","name":"Chips + Chicken Polony + Chicken Vienna + Cheese + Egg","price":40.0},{"category":"CHICKEN KOTA","code":"CK5","name":"Chips + Chicken Polony + Chicken Vienna + Chicken Burger + Cheese","price":47.0},{"category":"CHICKEN KOTA","code":"CK6","name":"Chips + Chicken Polony + Chicken Burger + Chicken Vienna + Cheese + Egg","price":55.0},{"category":"CHICKEN KOTA","code":"CK7","name":"Chips + Chicken Polony + Chicken Rib Patty + Chicken Vienna + Cheese + Egg","price":65.0},{"category":"RIB WRAP KOTA","code":"RW1","name":"Chips + Polony + Rib Patty + Special + Cheese","price":42.0},{"category":"RIB WRAP KOTA","code":"RW2","name":"Chips + Polony + Rib Patty + Special + Egg + Cheese","price":47.0},{"category":"RIB WRAP KOTA","code":"RW3","name":"Chips + Polony + Rib Patty + Russian + Cheese + Egg","price":55.0},{"category":"RIB WRAP KOTA","code":"RW4","name":"Chips + Polony + Rib Patty + Ham + Vienna + Egg + Cheese","price":60.0},{"category":"CHICKEN WRAP","code":"CW1","name":"Lettuce + Tomato + Chicken Breast + Cheese","price":35.0},{"category":"CHICKEN WRAP","code":"CW2","name":"Lettuce + Tomato + Chicken Breast + Chicken Patty + Cheese","price":40.0},{"category":"CHICKEN WRAP","code":"CW3","name":"Lettuce + Tomato + Chicken Breast + Chicken Rib Patty + Cheese","price":55.0},{"category":"WINGS & RIBS COMBO","code":"WR1","name":"4 Chicken Wings + 2 Piece Rib with Value Chips","price":65.0},{"category":"WINGS & RIBS COMBO","code":"WR2","name":"8 Chicken Wings + 4 PCS Ribs with Value Chips","price":96.0},{"category":"WINGS & RIBS COMBO","code":"WR3","name":"10 Chicken Wings + 5 PCS Ribs with Value Chips","price":130.0},{"category":"CHICKEN WINGS","code":"W01","name":"4 Chicken Wings with Value Chips","price":40.0},{"category":"CHICKEN WINGS","code":"W02","name":"6 Chicken Wings with Value Chips","price":52.0},{"category":"CHICKEN WINGS","code":"W03","name":"12 Chicken Wings with Value Chips","price":85.0},{"category":"BBQ PORK RIBS","code":"PR1","name":"2 PCS BBQ Cocktail Rib with Value Chips","price":50.0},{"category":"BBQ PORK RIBS","code":"PR2","name":"3 PCS BBQ Cocktail Ribs with Value Chips","price":60.0},{"category":"BBQ PORK RIBS","code":"PR3","name":"5 PCS BBQ Cocktail Ribs with Value Chips","price":90.0},{"category":"BBQ PORK RIBS","code":"PR4","name":"Full Rack Pork Rib with Regular Chips","price":210.0},{"category":"ICE CREAM","code":"ICE-001","name":"ICup Tin Roof","price":25.0},{"category":"ICE CREAM","code":"ICE-002","name":"ICup Mango","price":25.0},{"category":"ICE CREAM","code":"ICE-003","name":"ICup Almond","price":25.0},{"category":"ICE CREAM","code":"ICE-004","name":"ICup Pistachio Nuts","price":25.0},{"category":"ICE CREAM","code":"ICE-005","name":"ICup Bufree","price":25.0},{"category":"ICE CREAM","code":"ICE-006","name":"Polar Sundae","price":15.0},{"category":"ICE CREAM","code":"ICE-007","name":"Polar I Cone","price":20.0},{"category":"ICE CREAM","code":"ICE-008","name":"Milky Pie Almond","price":15.0},{"category":"ICE CREAM","code":"ICE-009","name":"Maxi Choc Almond","price":25.0},{"category":"ICE CREAM","code":"ICE-010","name":"Maxi White Almond","price":25.0},{"category":"ICE CREAM","code":"ICE-011","name":"Maxi Classic","price":25.0},{"category":"ICE CREAM","code":"ICE-012","name":"Cone Ice Cream","price":7.0},{"category":"ICE CREAM","code":"ICE-013","name":"Cup Ice Cream","price":10.0},{"category":"ICE CREAM","code":"ICE-014","name":"Bubblegum","price":10.0},{"category":"ICE CREAM","code":"ICE-015","name":"Flavour Mania Cups","price":12.0},{"category":"ICE CREAM","code":"ICE-016","name":"Jolly Jelly Ice Cream","price":10.0},{"category":"ICE CREAM","code":"ICE-017","name":"Split Mix","price":8.0},{"category":"ICE CREAM","code":"ICE-018","name":"Snow Pie","price":12.0},{"category":"ICE CREAM","code":"ICE-019","name":"Rave Strawberry","price":10.0},{"category":"ICE CREAM","code":"ICE-020","name":"Choc Overload","price":10.0},{"category":"ICE CREAM","code":"ICE-021","name":"Banana Berry","price":10.0},{"category":"ICE CREAM","code":"ICE-022","name":"Banana Split","price":10.0},{"category":"ICE CREAM","code":"ICE-023","name":"Ice Cream Panda Pops","price":7.0},{"category":"ICE CREAM","code":"ICE-024","name":"Polar Eish","price":10.0},{"category":"ICE CREAM","code":"ICE-025","name":"Three in One","price":10.0},{"category":"ICE CREAM","code":"ICE-026","name":"Polar Split","price":10.0},{"category":"ICE CREAM","code":"ICE-027","name":"Litchilik","price":10.0},{"category":"ICE CREAM","code":"ICE-028","name":"Custard & Jelly","price":10.0},{"category":"ICE CREAM","code":"ICE-029","name":"Milky Mix","price":10.0},{"category":"ICE CREAM","code":"ICE-030","name":"Rave Blackcurrant","price":10.0},{"category":"ICE CREAM","code":"ICE-031","name":"Caramello","price":15.0},{"category":"ICE CREAM","code":"ICE-032","name":"Choc 99","price":15.0},{"category":"ICE CREAM","code":"ICE-033","name":"Fruity Licks Mix","price":10.0},{"category":"ICE CREAM","code":"ICE-034","name":"Polar Raspberry","price":10.0},{"category":"ICE CREAM","code":"ICE-035","name":"Polar Pop Orange","price":10.0},{"category":"ICE CREAM","code":"ICE-036","name":"Polar Tropaz","price":10.0},{"category":"ICE CREAM","code":"ICE-037","name":"Polar Apple","price":10.0},{"category":"ICE CREAM","code":"ICE-038","name":"Polar Pineapple","price":10.0},{"category":"ICE CREAM","code":"ICE-039","name":"Grandelch","price":10.0},{"category":"ICE CREAM","code":"ICE-040","name":"Top Hat","price":10.0},{"category":"ICE CREAM","code":"ICE-041","name":"Polar Pop","price":10.0},{"category":"ICE CREAM","code":"ICE-042","name":"Banana and Strawberry 500ml","price":25.0},{"category":"ICE CREAM","code":"ICE-043","name":"Vanilla and Strawberry 500ml","price":25.0},{"category":"ICE CREAM","code":"ICE-044","name":"Vanilla Flavoured 500ml","price":25.0},{"category":"ICE CREAM","code":"ICE-045","name":"Chocolate, Vanilla and Strawberry 500ml","price":25.0},{"category":"ICE CREAM","code":"ICE-046","name":"Chocolate and Vanilla 500ml","price":25.0},{"category":"ICE CREAM","code":"ICE-047","name":"Caramel Dip","price":12.0},{"category":"ICE CREAM","code":"ICE-048","name":"Nice Cream 500ml Banana Split","price":15.0},{"category":"ICE CREAM","code":"ICE-049","name":"Nice Cream 500ml Vanilla","price":15.0},{"category":"ICE CREAM","code":"ICE-050","name":"Nice Cream 500ml Vanilla/Strawberry","price":15.0},{"category":"ICE CREAM","code":"ICE-051","name":"Milky Pie","price":12.0},{"category":"ADD ON ITEMS","code":"A01","name":"Extra Pork Rib Patty","price":20.0},{"category":"ADD ON ITEMS","code":"A02","name":"Extra Chicken Rib Patty","price":20.0},{"category":"ADD ON ITEMS","code":"A03","name":"Extra Egg","price":5.0},{"category":"ADD ON ITEMS","code":"A04","name":"Extra Russian","price":13.0},{"category":"ADD ON ITEMS","code":"A05","name":"Extra Vienna","price":10.0},{"category":"ADD ON ITEMS","code":"A06","name":"Extra Cheese","price":5.0},{"category":"ADD ON ITEMS","code":"A07","name":"Extra Beef Burger","price":12.0},{"category":"ADD ON ITEMS","code":"A08","name":"Extra Chicken Burger","price":10.0},{"category":"ADD ON ITEMS","code":"A09","name":"Large Pop Corn","price":12.0},{"category":"ADD ON ITEMS","code":"A10","name":"Medium Pop Corn","price":8.0},{"category":"ADD ON ITEMS","code":"A11","name":"Extra Chips","price":15.0},{"category":"ADD ON ITEMS","code":"A12","name":"Extra Ham","price":10.0},{"category":"ADD ON ITEMS","code":"A13","name":"Extra Bacon","price":10.0}];
-let liveStoreProducts={};
-const selectedStoreCode=()=>window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI');
-const baseProductsForStore=(store)=>store==='NDAYENI'?ndayeniProducts:products;
-const activeProducts=()=>{
-  const store=selectedStoreCode();
-  const live=(typeof liveStoreProducts!=='undefined'&&liveStoreProducts[store])||(window.liveStoreProducts&&window.liveStoreProducts[store]);
-  return Array.isArray(live)&&live.length?live.filter(p=>p.active!==false):baseProductsForStore(store);
-};
-
 let cart=[];
 let sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]');
 let orderCounter=Number(localStorage.getItem('feastervilleOrderNo')||0)+1;
@@ -706,16 +691,16 @@ document.getElementById('orderNo').textContent='Order #'+String(orderCounter).pa
 
 const money=n=>'R'+Number(n||0).toFixed(2);
 function cats(){
- const c=['ALL',...new Set(activeProducts().map(p=>p.category))];
+ const c=['ALL',...new Set(products.filter(p=>p.active!==false).map(p=>p.category))];
  document.getElementById('categories').innerHTML=c.map(x=>`<button class="cat ${x==='ALL'?'active':''}" onclick="filterCat('${x.replaceAll("'","\\'")}',this)">${x}</button>`).join('');
 }
 function filterCat(cat,btn){
  document.querySelectorAll('.cat').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
- document.getElementById('products').innerHTML=activeProducts().filter(p=>cat==='ALL'||p.category===cat).map(p=>`
+ document.getElementById('products').innerHTML=products.filter(p=>p.active!==false && (cat==='ALL'||p.category===cat)).map(p=>`
  <button class="product" onclick="add('${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
 }
 function add(code){
- const p=activeProducts().find(x=>x.code===code); if(!p)return;
+ const p=products.find(x=>x.code===code); if(!p)return;
  const x=cart.find(i=>i.code===code); if(x)x.qty++; else cart.push({...p,qty:1});
  render();
 }
@@ -731,6 +716,65 @@ function render(){
  const sub=cart.reduce((s,i)=>s+i.qty*i.price,0), disc=Number(document.getElementById('discount').value||0), total=Math.max(sub-disc,0), rec=Number(document.getElementById('received').value||0);
  document.getElementById('subtotal').textContent=money(sub); document.getElementById('total').textContent=money(total); document.getElementById('change').textContent=money(Math.max(rec-total,0));
 }
+function renderSellableItemsEditor(){
+ const sel=document.getElementById('sellableEditSelect'), body=document.getElementById('sellableItemsEditorBody');
+ if(!sel||!body)return;
+ const current=sel.value;
+ sel.innerHTML='<option value="">-- Select Sellable Item --</option>'+products.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+ if(products.some(p=>p.code===current))sel.value=current;
+ body.innerHTML=products.map(p=>`<tr><td>${p.code}</td><td>${p.name}</td><td>${p.category||''}</td><td>${money(p.price)}</td><td>${p.active===false?'NO':'YES'}</td><td><button type="button" onclick="editSellableItem('${p.code.replaceAll("'","\\'")}')">EDIT</button></td></tr>`).join('');
+}
+function clearSellableItemEditor(){
+ const sel=document.getElementById('sellableEditSelect'); if(sel)sel.value='';
+ const code=document.getElementById('sellableEditCode'); if(code){code.value='';code.disabled=false;}
+ document.getElementById('sellableEditName').value='';
+ document.getElementById('sellableEditCategory').value='';
+ document.getElementById('sellableEditPrice').value='0';
+ document.getElementById('sellableEditActive').value='true';
+ document.getElementById('sellableEditStatus').textContent='';
+}
+function editSellableItem(code){
+ const p=products.find(x=>x.code===code); if(!p)return;
+ document.getElementById('sellableEditSelect').value=code;
+ const codeEl=document.getElementById('sellableEditCode'); codeEl.value=p.code; codeEl.disabled=true;
+ document.getElementById('sellableEditName').value=p.name||'';
+ document.getElementById('sellableEditCategory').value=p.category||'';
+ document.getElementById('sellableEditPrice').value=Number(p.price||0);
+ document.getElementById('sellableEditActive').value=p.active===false?'false':'true';
+}
+function loadSellableForEdit(){
+ const code=document.getElementById('sellableEditSelect').value;
+ if(code) editSellableItem(code); else clearSellableItemEditor();
+}
+async function saveSellableItemEdit(){
+ if(!currentUser || currentUser.role!=='manager'){alert('Manager access required.');return;}
+ const selectCode=document.getElementById('sellableEditSelect').value;
+ const code=(document.getElementById('sellableEditCode').value||'').trim().toUpperCase();
+ const name=(document.getElementById('sellableEditName').value||'').trim();
+ const category=(document.getElementById('sellableEditCategory').value||'').trim();
+ const price=Number(document.getElementById('sellableEditPrice').value||0);
+ const active=document.getElementById('sellableEditActive').value!=='false';
+ const status=document.getElementById('sellableEditStatus');
+ if(!code||!name||!category||price<0){status.textContent='Enter code, item name, category and a valid price.';return;}
+ let p=selectCode?products.find(x=>x.code===selectCode):products.find(x=>x.code===code);
+ if(!selectCode && p){status.textContent='That product code already exists. Select it from Existing Sellable Item to edit it.';return;}
+ if(p){p.name=name;p.category=category;p.price=price;p.active=active;}
+ else{p={code,name,category,price,active};products.push(p);if(typeof inventory!=='undefined'&&!inventory[code])inventory[code]={opening:0,stockIn:0,count:0,reorder:5};}
+ localStorage.setItem('feastervilleProducts',JSON.stringify(products));
+ try{if(typeof pushState==='function')await pushState('products',products);}catch(e){console.warn(e);}
+ cats(); const first=document.querySelector('#categories .cat'); if(first)filterCat('ALL',first);
+ try{initRecipes();}catch(e){}
+ try{if(typeof initSeparatedInventory==='function')initSeparatedInventory();}catch(e){}
+ renderSellableItemsEditor();
+ document.getElementById('sellableEditSelect').value=code; editSellableItem(code);
+ status.textContent='Sellable item saved to the live product list.';
+}
+window.renderSellableItemsEditor=renderSellableItemsEditor;
+window.editSellableItem=editSellableItem;
+window.loadSellableForEdit=loadSellableForEdit;
+window.clearSellableItemEditor=clearSellableItemEditor;
+window.saveSellableItemEdit=saveSellableItemEdit;
+
 function completeSale(){
  if(!cart.length){alert('Please add items to the order.');return}
  const sub=cart.reduce((s,i)=>s+i.qty*i.price,0), disc=Number(document.getElementById('discount').value||0), total=Math.max(sub-disc,0);
@@ -757,7 +801,7 @@ function completeSale(){
 }
 function showReceipt(s){
  const r=document.getElementById('receiptPrint'); r.style.display='block'; r.scrollIntoView({behavior:'smooth',block:'center'});
- r.innerHTML='<h2>FEASTERVILLE FOOD — POS</h2><div>'+(((window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI'))==='NDAYENI')?'1st Street, Ndayini Section, Tembisa':'51 Senagal Street, Isivana Section, Tembisa')+'</div><div>Order #'+String(s.orderNo).padStart(4,'0')+'</div><div>Date: '+s.date+' | Time: '+(s.time||'')+'</div><div>'+s.orderType+'</div><hr>'+
+ r.innerHTML='<h2>FEASTERVILLE FOOD</h2><div>51 Senagal Street, Isivana Section, Tembisa</div><div>Order #'+String(s.orderNo).padStart(4,'0')+'</div><div>Date: '+s.date+' | Time: '+(s.time||'')+'</div><div>'+s.orderType+'</div><hr>'+
  s.items.map(i=>`${i.code}  x${i.qty}  ${money(i.qty*i.price)}`).join('<br>')+
  '<hr><b>TOTAL: '+money(s.total)+'</b><br>Payment: '+s.payment+'<br>Received: '+money(s.received)+'<br>Change: '+money(Math.max(s.received-s.total,0));
 }
@@ -823,7 +867,7 @@ function soldQty(code){
   return sales.reduce((n,s)=>n+s.items.reduce((a,i)=>a+(i.code===code?Number(i.qty):0),0),0);
 }
 function invRows(){
-  return activeProducts().map(p=>{
+  return products.map(p=>{
     const x=inventory[p.code]||{opening:0,stockIn:0,count:0,reorder:5};
     const sold=soldQty(p.code), expected=Number(x.opening)+Number(x.stockIn)-sold, variance=Number(x.count)-expected;
     return {...p,...x,sold,expected,variance};
@@ -848,13 +892,13 @@ function showInventory(){
 function showStockIn(){
  document.getElementById('inventoryContent').innerHTML=`
  <h3>Receive Stock</h3><p class="small">Enter stock received. This is added to the selected product's inventory.</p>
- <div class="order-head"><select id="stockProduct">${activeProducts().map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('')}</select>
+ <div class="order-head"><select id="stockProduct">${products.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('')}</select>
  <input id="stockQty" type="number" min="1" value="1" class="stock-input"><button class="primary" onclick="addStock()">ADD STOCK</button></div>
  <h3>Recent Stock-In</h3><table class="inv-table"><thead><tr><th>Date</th><th>Code</th><th>Product</th><th>Qty</th></tr></thead><tbody>
  ${stockMovements.slice(-20).reverse().map(m=>`<tr><td>${m.date}</td><td>${m.code}</td><td>${m.name}</td><td>${m.qty}</td></tr>`).join('')}</tbody></table>`;
 }
 function addStock(){
- const code=document.getElementById('stockProduct').value, qty=Number(document.getElementById('stockQty').value||0), p=activeProducts().find(x=>x.code===code);
+ const code=document.getElementById('stockProduct').value, qty=Number(document.getElementById('stockQty').value||0), p=products.find(x=>x.code===code);
  if(!p||qty<=0)return;
  inventory[code].stockIn+=qty;
  stockMovements.push({date:new Date().toISOString().slice(0,10),code,name:p.name,qty});
@@ -1032,9 +1076,10 @@ function refreshProductionInputs(){
 function showProductionInputs(){
  if(!currentUser || currentUser.role!=='manager')return;
  const input=document.getElementById('piStockInput');
- if(input)input.innerHTML=rawMaterials.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit})</option>`).join('');
+ const masterInputs=(typeof getRecipeMasterInputs==='function'?getRecipeMasterInputs():rawMaterials);
+ if(input)input.innerHTML=masterInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit||''})</option>`).join('');
  const product=document.getElementById('piRecipeProduct');
- if(product)product.innerHTML=activeProducts().map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+ if(product)product.innerHTML=products.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
  loadPIRecipe();
  refreshProductionInputs();
 }
@@ -1055,10 +1100,11 @@ function setProductionCount(code,value){
 function loadPIRecipe(){
  const p=document.getElementById('piRecipeProduct'), input=document.getElementById('piRecipeInput');
  if(!p||!input)return;
- input.innerHTML=rawMaterials.map(x=>`<option value="${x.code}">${x.code} — ${x.name} (${x.unit})</option>`).join('');
+ const masterInputs=(typeof getRecipeMasterInputs==='function'?getRecipeMasterInputs():rawMaterials);
+ input.innerHTML=masterInputs.map(x=>`<option value="${x.code}">${x.code} — ${x.name} (${x.unit||''})</option>`).join('');
  const list=recipes[p.value]||[];
  document.getElementById('piRecipeList').innerHTML='<table class="inv-table"><tr><th>Product</th><th>Input</th><th>Qty per Sale</th><th>Unit</th><th>Action</th></tr>'+
- list.map((x,i)=>{const r=rawMaterials.find(a=>a.code===x.inputCode);return `<tr><td>${p.value}</td><td>${r?r.name:x.inputCode}</td><td>${x.qty}</td><td>${r?r.unit:''}</td><td><button class="remove" onclick="removePIRecipe(${i})">REMOVE</button></td></tr>`}).join('')+'</table>';
+ list.map((x,i)=>{const r=(typeof getRecipeMasterInputs==='function'?getRecipeMasterInputs():rawMaterials).find(a=>a.code===x.inputCode);return `<tr><td>${p.value}</td><td>${r?r.name:x.inputCode}</td><td>${x.qty}</td><td>${r?r.unit:''}</td><td><button class="remove" onclick="removePIRecipe(${i})">REMOVE</button></td></tr>`}).join('')+'</table>';
 }
 function addPIRecipe(){
  const product=document.getElementById('piRecipeProduct').value,inputCode=document.getElementById('piRecipeInput').value,qty=Number(document.getElementById('piRecipeQty').value||0);
@@ -1069,10 +1115,11 @@ function addPIRecipe(){
  localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
  loadPIRecipe();refreshProductionInputs();renderUsageDetails();
 }
-function removePIRecipe(i){
+async function removePIRecipe(i){
  const product=document.getElementById('piRecipeProduct').value;
  recipes[product].splice(i,1);
  localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
+ try{if(typeof pushState==='function')await pushState('recipes',recipes);}catch(e){console.error('Recipe cloud save failed',e);}
  loadPIRecipe();refreshProductionInputs();renderUsageDetails();
 }
 
@@ -1156,7 +1203,7 @@ function initSeparatedInventory(){
  showInvMaster('all',document.querySelector('.inventory-actions .cat'));
 }
 function finishedRows(){
- return activeProducts().map(p=>{let x=inventory[p.code]||{opening:0,stockIn:0,count:0,reorder:5};let sold=soldQty(p.code);let expected=Number(x.opening)+Number(x.stockIn)-sold;return Object.assign({},p,x,{sold,expected,variance:Number(x.count)-expected,unit:'EA'});});
+ return products.map(p=>{let x=inventory[p.code]||{opening:0,stockIn:0,count:0,reorder:5};let sold=soldQty(p.code);let expected=Number(x.opening)+Number(x.stockIn)-sold;return Object.assign({},p,x,{sold,expected,variance:Number(x.count)-expected,unit:'EA'});});
 }
 function rawRows(){
  return rawMaterials.map(p=>{let x=rawInventory[p.code];let expected=Number(x.opening)+Number(x.stockIn);return Object.assign({},p,x,{expected,variance:Number(x.count)-expected});});
@@ -1202,10 +1249,37 @@ function addSeparatedStock(){
 }
 
 document.getElementById('discount').addEventListener('input',render);
-cats(); filterCat('ALL',document.querySelector('.cat')); render(); summary(); initInventory();initSeparatedInventory();initRecipes();applyRights();showReport('sales',document.querySelector('#reportsPanel .cat'));showRecon('finished',document.querySelector('#reconPanel .cat'));showProductionInputs();
+cats(); filterCat('ALL',document.querySelector('.cat')); render(); summary(); initInventory();initSeparatedInventory();initRecipes();applyRights();showReport('sales',document.querySelector('#reportsPanel .cat'));showRecon('finished',document.querySelector('#reconPanel .cat'));showProductionInputs();renderSellableItemsEditor();
 </script>
 <script>
-const OLD_LAYOUT_RECIPE_INPUT_OPTIONS=`<option value="">-- Select Production Input --</option><option value="RAW-001">Potatoes / Chips (KG)</option><option value="RAW-002">Polony (KG)</option><option value="RAW-003">Special (KG)</option><option value="RAW-004">Cheese (KG)</option><option value="RAW-005">Vienna (EA)</option><option value="RAW-006">Egg (EA)</option><option value="RAW-007">Russian (EA)</option><option value="RAW-008">Beef Burger Patty (EA)</option><option value="RAW-009">Chicken Burger Patty (EA)</option><option value="RAW-010">Pork Rib Patty (EA)</option><option value="RAW-011">Chicken Rib Patty (EA)</option><option value="RAW-012">Ham (KG)</option><option value="RAW-013">Bacon (KG)</option><option value="RAW-014">Chicken Breast (KG)</option><option value="RAW-015">Chicken Polony (KG)</option><option value="RAW-016">Chicken Vienna (EA)</option><option value="RAW-017">Lettuce (EA)</option><option value="RAW-018">Tomato (KG)</option><option value="RAW-019">Atchar (KG)</option><option value="RAW-020">Chicken Wings (KG)</option><option value="RAW-021">Pork Ribs (KG)</option><option value="RAW-022">Popcorn (KG)</option>`;
+function getRecipeMasterInputs(){
+  // Always use the same Master Production Inputs list that is synced from Supabase.
+  try{
+    const live=JSON.parse(localStorage.getItem('feastervilleMasterProductionInputs')||'[]');
+    if(Array.isArray(live) && live.length) return live;
+  }catch(e){}
+  if(typeof oldEditableMasterInputs!=='undefined' && Array.isArray(oldEditableMasterInputs) && oldEditableMasterInputs.length){
+    return oldEditableMasterInputs;
+  }
+  if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)) return rawMaterials;
+  return [];
+}
+
+function oldLayoutRecipeInputOptions(selectedCode=''){
+  const inputs=getRecipeMasterInputs();
+  return '<option value="">-- Select Production Input --</option>' +
+    inputs.map(p=>`<option value="${p.code}" ${p.code===selectedCode?'selected':''}>${p.code} — ${p.name} (${p.unit||''})</option>`).join('');
+}
+
+function refreshOldRecipeInputDropdowns(){
+  document.querySelectorAll('.oldRecipeInput').forEach(sel=>{
+    const selected=sel.value;
+    sel.innerHTML=oldLayoutRecipeInputOptions(selected);
+  });
+  if(document.getElementById('savedRecipeOld')){
+    try{ renderSavedRecipeOld(); }catch(e){ console.warn('Recipe display refresh:',e); }
+  }
+}
 
 function initOldLayoutRecipeBuilder(){
   const product=document.getElementById('recipeFinalProduct');
@@ -1231,13 +1305,13 @@ function addRecipeInputRowOld(){
   const row=document.createElement('div');
   row.className='order-head old-recipe-row';
   row.style.margin='8px 0';
-  row.innerHTML=`<select class="oldRecipeInput" style="min-width:280px">${OLD_LAYOUT_RECIPE_INPUT_OPTIONS}</select>
+  row.innerHTML=`<select class="oldRecipeInput" style="min-width:280px">${oldLayoutRecipeInputOptions()}</select>
   <input class="oldRecipeQty" type="number" min="0.001" step="0.001" value="1" style="width:120px">
   <button type="button" onclick="this.parentElement.remove()">REMOVE</button>`;
   rows.appendChild(row);
 }
 
-function saveOldLayoutRecipe(){
+async function saveOldLayoutRecipe(){
   const product=document.getElementById('recipeFinalProduct').value;
   if(!product){alert('Please select a final product first.');return;}
   const rows=[...document.querySelectorAll('.old-recipe-row')];
@@ -1248,12 +1322,32 @@ function saveOldLayoutRecipe(){
     if(input && qty>0)links.push({inputCode:input,qty:qty});
   });
   if(!links.length){alert('Please add at least one production input.');return;}
-  let recipes={};
-  try{recipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(e){recipes={};}
-  recipes[product]=links;
-  localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes));
+
+  let savedRecipes={};
+  try{savedRecipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(e){savedRecipes={};}
+  savedRecipes[product]=links;
+
+  // Keep the in-memory recipe map and browser storage in sync.
+  try{recipes=savedRecipes;}catch(e){}
+  localStorage.setItem('feastervilleRecipes',JSON.stringify(savedRecipes));
+
+  // IMPORTANT: persist recipe changes to the shared Supabase pos_state.
+  try{
+    if(typeof pushState==='function'){
+      await pushState('recipes',savedRecipes);
+    }
+  }catch(e){
+    console.error('Recipe cloud save failed',e);
+    alert('Recipe was saved on this device, but the shared database save failed. Please check the internet connection and try again.');
+    return;
+  }
+
   renderSavedRecipeOld();
-  alert('Recipe saved successfully.');
+  try{if(typeof loadRecipe==='function')loadRecipe();}catch(e){}
+  try{if(typeof loadPIRecipe==='function')loadPIRecipe();}catch(e){}
+  try{if(typeof refreshProductionInputs==='function')refreshProductionInputs();}catch(e){}
+  try{if(typeof renderProductionInputUsageFromSales==='function')renderProductionInputUsageFromSales();}catch(e){}
+  alert('Recipe saved successfully to the shared POS.');
 }
 
 function renderSavedRecipeOld(){
@@ -1264,7 +1358,7 @@ function renderSavedRecipeOld(){
   try{recipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(e){recipes={};}
   const list=recipes[product]||[];
   const inputMap={};
-  [{"code": "RAW-001", "name": "Potatoes / Chips", "category": "Produce / Ingredient", "unit": "KG"},{"code": "RAW-002", "name": "Polony", "category": "Processed Meat", "unit": "KG"},{"code": "RAW-003", "name": "Special", "category": "Processed Meat", "unit": "KG"},{"code": "RAW-004", "name": "Cheese", "category": "Dairy", "unit": "KG"},{"code": "RAW-005", "name": "Vienna", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-006", "name": "Egg", "category": "Egg", "unit": "EA"},{"code": "RAW-007", "name": "Russian", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-008", "name": "Beef Burger Patty", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-009", "name": "Chicken Burger Patty", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-010", "name": "Pork Rib Patty", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-011", "name": "Chicken Rib Patty", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-012", "name": "Ham", "category": "Processed Meat", "unit": "KG"},{"code": "RAW-013", "name": "Bacon", "category": "Processed Meat", "unit": "KG"},{"code": "RAW-014", "name": "Chicken Breast", "category": "Poultry", "unit": "KG"},{"code": "RAW-015", "name": "Chicken Polony", "category": "Processed Meat", "unit": "KG"},{"code": "RAW-016", "name": "Chicken Vienna", "category": "Processed Meat", "unit": "EA"},{"code": "RAW-017", "name": "Lettuce", "category": "Fresh Produce", "unit": "EA"},{"code": "RAW-018", "name": "Tomato", "category": "Fresh Produce", "unit": "KG"},{"code": "RAW-019", "name": "Atchar", "category": "Condiment", "unit": "KG"},{"code": "RAW-020", "name": "Chicken Wings", "category": "Poultry", "unit": "KG"},{"code": "RAW-021", "name": "Pork Ribs", "category": "Meat", "unit": "KG"},{"code": "RAW-022", "name": "Popcorn", "category": "Snack Ingredient", "unit": "KG"}].forEach(x=>inputMap[x.code]=x);
+  getRecipeMasterInputs().forEach(x=>inputMap[x.code]=x);
   box.innerHTML='<h3>Saved Recipe</h3><table class="inv-table"><thead><tr><th>Production Input</th><th>Qty</th><th>Unit</th></tr></thead><tbody>'+
     (list.length?list.map(x=>`<tr><td>${inputMap[x.inputCode]?.name||x.inputCode}</td><td>${x.qty}</td><td>${inputMap[x.inputCode]?.unit||''}</td></tr>`).join(''):'<tr><td colspan="3">No inputs linked yet.</td></tr>')+
     '</tbody></table>';
@@ -1444,7 +1538,7 @@ async function renderProductionInputUsageFromSales(){
       const [salesRes,stateRes]=await Promise.all([
         fetch(
           SUPABASE_URL+
-          '/rest/v1/pos_sales?store_code=eq.'+encodeURIComponent((window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI')))+'&select=id,order_no,sale_date,sale_time,cashier,total,store_code,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=2000',
+          '/rest/v1/pos_sales?select=id,order_no,sale_date,sale_time,cashier,total,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=2000',
           {headers}
         ),
         fetch(
@@ -1630,7 +1724,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
     box.innerHTML=
       '<div style="font-family:monospace;max-width:80mm;margin:auto">'+
-      '<div style="text-align:center"><b>FEASTERVILLE FOOD — POS</b><br>'+(((window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI'))==='NDAYENI')?'1st Street, Ndayini Section, Tembisa':'51 Senagal Street, Isivana Section, Tembisa')+'</div>'+
+      '<div style="text-align:center"><b>FEASTERVILLE FOOD</b><br>51 Senagal Street, Isivana Section, Tembisa</div>'+
       '<hr>'+
       '<div>Order #'+String(sale.orderNo||'').padStart(4,'0')+'</div>'+
       '<div>Date: '+(sale.date||'')+'</div>'+
@@ -1666,15 +1760,11 @@ document.addEventListener('DOMContentLoaded',function(){
       const discount=Number(document.getElementById('discount')?.value||0);
       const total=Math.max(subtotal-discount,0);
       const payment=document.getElementById('payment')?.value||'Cash';
-      let received=Number(document.getElementById('received')?.value||0);
-      const isCash=String(payment).trim().toLowerCase()==='cash';
-      if(isCash){
-        if(received<total){
-          alert('Amount received is less than the total.');
-          return;
-        }
-      }else{
-        received=total;
+      const received=Number(document.getElementById('received')?.value||0);
+
+      if(payment==='Cash'&&received<total){
+        alert('Amount received is less than the total.');
+        return;
       }
 
       let ss=[];
@@ -1816,11 +1906,11 @@ document.addEventListener('DOMContentLoaded',function(){
     const rows = await api(
       '/rest/v1/pos_profiles?user_id=eq.' +
       encodeURIComponent(user.id) +
-      '&select=user_id,display_name,role,store_code'
+      '&select=user_id,display_name,role'
     );
     return Array.isArray(rows) && rows.length
       ? rows[0]
-      : {user_id:user.id, display_name:user.email, role:'salesperson', store_code:'NDAYENI'};
+      : {user_id:user.id, display_name:user.email, role:'salesperson'};
   }
 
   function applyProfile(user, profile) {
@@ -1832,19 +1922,12 @@ document.addEventListener('DOMContentLoaded',function(){
       username: user.email,
       name: profile.display_name || user.email,
       role: profile.role || 'salesperson',
-      store_code: profile.store_code || null,
       label: (profile.role === 'manager' ? 'Manager: ' : 'Salesperson: ') +
              (profile.display_name || user.email)
     };
 
     const badge = document.getElementById('userBadge');
     if (badge) badge.textContent = window.currentUser.label;
-
-    try {
-      if (typeof window.enforceStoreAccess === 'function') window.enforceStoreAccess();
-      const sip=document.getElementById('sellableItemsPanel'); if(sip) sip.style.display=window.currentUser.role==='manager'?'block':'none';
-      if(window.currentUser.role==='manager' && typeof window.loadSellableItems==='function') window.loadSellableItems();
-    } catch (_) {}
 
     const cloudUser = el('liveUser');
     if (cloudUser) cloudUser.textContent = window.currentUser.label;
@@ -1874,17 +1957,29 @@ document.addEventListener('DOMContentLoaded',function(){
       if (keyMap[row.key]) {
         localStorage.setItem(keyMap[row.key], JSON.stringify(row.value));
       }
+      if(row.key==='products' && Array.isArray(row.value)){
+        products.splice(0, products.length, ...row.value.map(function(p){return Object.assign({active:true},p);}));
+      }
     });
+
+    // Rebind every recipe-input dropdown to the LIVE Master Production Inputs list.
+    try {
+      if (typeof getOldMasterInputs === 'function') oldEditableMasterInputs = getOldMasterInputs();
+      if (typeof refreshOldRecipeInputDropdowns === 'function') refreshOldRecipeInputDropdowns();
+      if (typeof loadRecipe === 'function') loadRecipe();
+      if (typeof loadPIRecipe === 'function') loadPIRecipe();
+    } catch (e) { console.warn('Master input dropdown refresh:', e); }
 
     try { if (typeof rebuildSalesCatalogueReliable === 'function') rebuildSalesCatalogueReliable(); } catch (_) {}
     try { if (typeof renderProducts === 'function') renderProducts(); } catch (_) {}
+    try { if (typeof renderSellableItemsEditor === 'function') renderSellableItemsEditor(); } catch (_) {}
     try { if (typeof renderOldMasterEditor === 'function') renderOldMasterEditor(); } catch (_) {}
     try { if (typeof renderProductionInputUsageFromSales === 'function') renderProductionInputUsageFromSales(); } catch (_) {}
   }
 
   async function pullSales() {
     const rows = await api(
-      '/rest/v1/pos_sales?store_code=eq.'+encodeURIComponent(localStorage.getItem('feastervilleStoreCode')||'NDAYENI')+'&select=id,order_no,sale_date,sale_time,cashier,order_type,payment,received,total,store_code,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=1000'
+      '/rest/v1/pos_sales?select=id,order_no,sale_date,sale_time,cashier,order_type,payment,received,total,pos_sale_items(code,name,category,qty,price)&order=order_no.desc&limit=1000'
     );
 
     const sales = (rows || []).map(function(s) {
@@ -2040,15 +2135,10 @@ document.addEventListener('DOMContentLoaded',function(){
       const discount = Math.max(Number(document.getElementById('discount')?.value || 0), 0);
       const total = Math.max(subtotal - discount, 0);
       const payment = document.getElementById('payment')?.value || 'Cash';
-      let received = Number(document.getElementById('received')?.value || 0);
-      const isCash = String(payment).trim().toLowerCase() === 'cash';
+      const received = Number(document.getElementById('received')?.value || 0);
 
-      if (isCash) {
-        if (received < total) {
-          throw new Error('Amount received is less than the total.');
-        }
-      } else {
-        received = total;
+      if (payment === 'Cash' && received < total) {
+        throw new Error('Amount received is less than the total.');
       }
 
       const items = cart.map(function(item) {
@@ -2069,8 +2159,7 @@ document.addEventListener('DOMContentLoaded',function(){
           p_received:received,
           p_total:total,
           p_cashier:window.currentUser?.name || 'POS User',
-          p_items:items,
-          p_store_code:(window.currentUser?.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(window.currentUser?.store_code||'NDAYENI'))
+          p_items:items
         })
       });
 
@@ -2190,24 +2279,10 @@ const U='https://sflyjcgbxbcwspfuzone.supabase.co',K='sb_publishable_iASq-tni6KY
 const $=id=>document.getElementById(id);
 function sm(t,b){if($('staffMessage')){$('staffMessage').textContent=t||'';$('staffMessage').style.color=b?'#a00':'#155b00';}}
 async function ac(p){const t=sessionStorage.getItem(TK)||'';if(!t)throw Error('Sign in as Manager first.');const r=await fetch(U+'/functions/v1/pos-user-admin',{method:'POST',headers:{apikey:K,Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(p)});const x=await r.text();let d={};try{d=x?JSON.parse(x):{};}catch(_){d={error:x};}if(!r.ok)throw Error(d.error||x||('HTTP '+r.status));return d;}
-async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="7">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td>${x.role==='manager'?'ALL STORES':`<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><select id="staffStore_${x.id}"><option value="NDAYENI" ${x.store_code==='NDAYENI'?'selected':''}>Ndayeni</option><option value="SIVANA" ${x.store_code==='SIVANA'?'selected':''}>Sivana</option></select><button type="button" onclick="ftSaveStaffStore('${x.id}')">SAVE STORE</button></div>`}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="7">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
+async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="6">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="6">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
 window.ftStaffActive=async(id,a)=>{try{await ac({action:'active',user_id:id,active:a});sm(a?'User activated.':'User deactivated.');await loadStaff();}catch(e){sm(e.message,true);}};
-window.ftSaveStaffStore=async function(id){
-  const sel=document.getElementById('staffStore_'+id);
-  if(!sel){sm('Store selector not found.',true);return;}
-  const store_code=sel.value;
-  try{
-    sm('Saving store assignment...');
-    await ac({action:'store',user_id:id,store_code:store_code});
-    sm('Store assignment saved: '+(store_code==='SIVANA'?'Sivana':'Ndayeni')+'.');
-    await loadStaff();
-  }catch(e){
-    sm(e.message,true);
-    await loadStaff();
-  }
-};
 window.ftStaffPassword=async(id,email)=>{const p=prompt('New temporary password for '+email+' (minimum 6 characters):');if(p===null)return;if(p.length<6)return alert('Password must be at least 6 characters.');try{await ac({action:'password',user_id:id,password:p});alert('Password reset successfully.');}catch(e){alert(e.message);}};
-document.addEventListener('DOMContentLoaded',()=>{$('createStaffBtn')?.addEventListener('click',async()=>{try{const email=$('staffEmail').value.trim(),display=$('staffDisplayName').value.trim(),password=$('staffPassword').value,store_code=$('staffStore').value;if(!email||!display||password.length<6)throw Error('Enter email, display name and a password of at least 6 characters.');sm('Creating salesperson...');await ac({action:'create',email,display_name:display,password,store_code});$('staffEmail').value='';$('staffDisplayName').value='';$('staffPassword').value='';sm('Salesperson created.');await loadStaff();}catch(e){sm(e.message,true);}});$('refreshStaffBtn')?.addEventListener('click',loadStaff);setTimeout(()=>{if(sessionStorage.getItem(TK))loadStaff();},1200);});
+document.addEventListener('DOMContentLoaded',()=>{$('createStaffBtn')?.addEventListener('click',async()=>{try{const email=$('staffEmail').value.trim(),display=$('staffDisplayName').value.trim(),password=$('staffPassword').value;if(!email||!display||password.length<6)throw Error('Enter email, display name and a password of at least 6 characters.');sm('Creating salesperson...');await ac({action:'create',email,display_name:display,password});$('staffEmail').value='';$('staffDisplayName').value='';$('staffPassword').value='';sm('Salesperson created.');await loadStaff();}catch(e){sm(e.message,true);}});$('refreshStaffBtn')?.addEventListener('click',loadStaff);setTimeout(()=>{if(sessionStorage.getItem(TK))loadStaff();},1200);});
 window.loadLiveStaffUsers=loadStaff;
 })();
 </script>
@@ -2224,7 +2299,8 @@ window.loadLiveStaffUsers=loadStaff;
     'userPanel',
     'recipePanel',
     'easyLinkPanel',
-    'masterProductionEditorPanel'
+    'masterProductionEditorPanel',
+    'sellableItemsEditorPanel'
   ];
 
   function restoreLiveManagerPanels(){
@@ -2245,6 +2321,7 @@ window.loadLiveStaffUsers=loadStaff;
       'refreshProductionInputs',
       'renderProductionInputUsageFromSales',
       'renderOldMasterEditor',
+      'renderSellableItemsEditor',
       'showRecon',
       'showReport',
       'summary'
@@ -2292,301 +2369,6 @@ window.loadLiveStaffUsers=loadStaff;
 
   // Expose it so the Supabase auth layer can explicitly refresh Manager visibility.
   window.restoreLiveManagerPanels=restoreLiveManagerPanels;
-})();
-</script>
-
-
-<script>
-(function(){
-  const select=document.getElementById('storeLocationSelect');
-  const badge=document.getElementById('storeLocationBadge');
-  const names={NDAYENI:'Ndayeni',SIVANA:'Sivana'};
-  const saved=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-  if(select)select.value=names[saved]?saved:'NDAYENI';
-  function applyStore(){
-    const code=select?.value||'NDAYENI';
-    localStorage.setItem('feastervilleStoreCode',code);
-    if(badge)badge.textContent=(names[code]||code)+' POS';
-    document.title='Feasterville '+(names[code]||code)+' POS';
-  }
-  applyStore();
-  select?.addEventListener('change',function(){
-    applyStore();
-    // Clear locally cached sales so another store never displays the previous store's sales.
-    localStorage.setItem('feastervilleSales','[]');
-    location.reload();
-  });
-})();
-</script>
-
-
-<script>
-document.addEventListener('DOMContentLoaded', function(){
-  const payment = document.getElementById('payment');
-  const received = document.getElementById('received');
-  if(!payment || !received) return;
-
-  function syncReceivedField(){
-    const nonCash = payment.value !== 'Cash';
-    received.disabled = nonCash;
-    received.title = nonCash ? 'Not required for electronic payments' : 'Enter cash received';
-    if(nonCash) received.value = '0';
-  }
-
-  payment.addEventListener('change', syncReceivedField);
-  syncReceivedField();
-});
-</script>
-
-
-<script>
-(function(){
-  const STORE_NAMES={NDAYENI:'Ndayeni',SIVANA:'Sivana'};
-
-  function enforceStoreAccess(){
-    const u=window.currentUser;
-    const select=document.getElementById('storeLocationSelect');
-    const badge=document.getElementById('storeLocationBadge');
-    if(!u || !select) return;
-
-    if(u.role==='manager'){
-      select.disabled=false;
-      select.style.pointerEvents='';
-      select.title='Manager can switch between stores';
-      if(badge){
-        const code=select.value||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-        badge.textContent=(STORE_NAMES[code]||code)+' POS — MANAGER';
-      }
-      return;
-    }
-
-    const assigned=u.store_code||'NDAYENI';
-    localStorage.setItem('feastervilleStoreCode',assigned);
-    select.value=assigned;
-    select.disabled=true;
-    select.style.pointerEvents='none';
-    select.title='Locked to your assigned store';
-
-    if(badge){
-      badge.textContent=(STORE_NAMES[assigned]||assigned)+' POS — LOCKED TO YOUR ACCOUNT';
-    }
-
-    // Prevent any old change handler or browser restore from changing the store.
-    select.addEventListener('change',function(){
-      select.value=assigned;
-      localStorage.setItem('feastervilleStoreCode',assigned);
-    });
-  }
-
-  window.enforceStoreAccess=enforceStoreAccess;
-
-  document.addEventListener('DOMContentLoaded',function(){
-    let tries=0;
-    const timer=setInterval(function(){
-      tries++;
-      if(window.currentUser){
-        enforceStoreAccess();
-        clearInterval(timer);
-      }else if(tries>80){
-        clearInterval(timer);
-      }
-    },250);
-  });
-})();
-</script>
-
-
-<script>
-document.addEventListener('DOMContentLoaded',function(){
-  const payment=document.getElementById('payment');
-  const received=document.getElementById('received');
-  if(!payment||!received)return;
-
-  function syncPayment(){
-    const isCash=String(payment.value||'').trim().toLowerCase()==='cash';
-    received.disabled=!isCash;
-    if(!isCash){
-      const totalText=(document.getElementById('total')?.textContent||'0').replace(/[^0-9.]/g,'');
-      const total=Number(totalText||0);
-      received.value=String(total||0);
-    }
-  }
-  payment.addEventListener('change',syncPayment);
-  syncPayment();
-});
-</script>
-
-
-<script>
-(function(){
-  const SELLABLE_SUPABASE_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
-  const SELLABLE_ANON_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-  const $id=id=>document.getElementById(id);
-  const msg=(t,bad=false)=>{const e=$id('sellableMessage');if(e){e.textContent=t;e.style.color=bad?'#a00':'#185b00';}};
-  async function req(path,opt={}){
-    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||'';
-    const headers={'apikey':SELLABLE_ANON_KEY,'Content-Type':'application/json',...(opt.headers||{})};
-    if(token)headers.Authorization='Bearer '+token;
-    const r=await fetch(SELLABLE_SUPABASE_URL+path,{...opt,headers});
-    const text=await r.text(); let data=null; try{data=text?JSON.parse(text):null}catch(_){data=text}
-    if(!r.ok)throw new Error(data?.message||data?.error||text||('HTTP '+r.status));
-    return data;
-  }
-  async function adminProduct(action,payload={}){
-    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||'';
-    if(!token)throw new Error('Your POS cloud session is missing. Sign out, then sign in again once.');
-    const r=await fetch(SELLABLE_SUPABASE_URL+'/functions/v1/pos-product-admin',{
-      method:'POST',
-      headers:{'apikey':SELLABLE_ANON_KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify({action,...payload})
-    });
-    const text=await r.text(); let data=null; try{data=text?JSON.parse(text):null}catch(_){data={error:text}}
-    if(!r.ok)throw new Error(data?.error||data?.message||text||('HTTP '+r.status));
-    return data;
-  }
-  async function seedStore(store){
-    const check=await adminProduct('list',{store_code:store});
-    if(check.items?.length)return;
-    if(window.currentUser?.role!=='manager')return;
-    const base=baseProductsForStore(store);
-    for(const p of base){
-      await adminProduct('save',{store_code:store,code:p.code,name:p.name,category:p.category||'OTHER',price:Number(p.price||0)});
-    }
-  }
-  window.loadSellableItems=async function(){
-    if(!window.currentUser)return;
-    try{
-      for(const store of ['NDAYENI','SIVANA'])await seedStore(store);
-      for(const store of ['NDAYENI','SIVANA']){
-        const result=await adminProduct('list',{store_code:store});
-        liveStoreProducts[store]=result.items||[];
-      }
-      if(typeof cats==='function')cats();
-      if(typeof renderProducts==='function')renderProducts();
-      renderManagerItems();
-    }catch(e){msg(e.message,true);}
-  };
-  function renderManagerItems(){
-    const body=$id('sellableRows'); if(!body)return;
-    const store=$id('itemStore')?.value||'NDAYENI';
-    const rows=liveStoreProducts[store]||[];
-    body.innerHTML=rows.map(p=>`<tr>
-      <td><b>${p.code}</b></td><td>${p.name}</td><td>${p.category}</td><td>R${Number(p.price||0).toFixed(2)}</td>
-      <td>${p.active===false?'INACTIVE':'ACTIVE'}</td>
-      <td><button type="button" onclick="ftEditSellable('${String(p.code).replaceAll("'","\\'")}')">EDIT</button>
-      <button type="button" onclick="ftToggleSellable('${String(p.code).replaceAll("'","\\'")}',${p.active!==false})">${p.active===false?'ACTIVATE':'DEACTIVATE'}</button></td>
-    </tr>`).join('')||'<tr><td colspan="6">No sellable items.</td></tr>';
-  }
-  window.ftEditSellable=function(code){
-    const store=$id('itemStore').value,p=(liveStoreProducts[store]||[]).find(x=>x.code===code);if(!p)return;
-    $id('itemCode').value=p.code;$id('itemCode').readOnly=true;$id('itemName').value=p.name;$id('itemCategory').value=p.category;$id('itemPrice').value=p.price;
-    msg('Editing '+p.code+'. Change the details and click ADD / SAVE ITEM.');
-  };
-  window.ftToggleSellable=async function(code,active){
-    try{
-      const store=$id('itemStore').value;
-      await adminProduct('active',{store_code:store,code:code,active:!active});
-      msg(code+(active?' deactivated.':' activated.'));await loadSellableItems();
-    }catch(e){msg(e.message,true);}
-  };
-  async function save(){
-    try{
-      if(window.currentUser?.role!=='manager')throw new Error('Manager access required.');
-      const store=$id('itemStore').value,code=$id('itemCode').value.trim().toUpperCase(),name=$id('itemName').value.trim(),category=$id('itemCategory').value.trim(),price=Number($id('itemPrice').value);
-      if(!code||!name||!category||!Number.isFinite(price)||price<0)throw new Error('Enter code, description, category and a valid price.');
-      await adminProduct('save',{store_code:store,code:code,name:name,category:category,price:price});
-      $id('itemCode').readOnly=false;$id('itemCode').value='';$id('itemName').value='';$id('itemCategory').value='';$id('itemPrice').value='';
-      msg(code+' saved for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.');await loadSellableItems();
-    }catch(e){msg(e.message,true);}
-  }
-  document.addEventListener('DOMContentLoaded',()=>{
-    $id('saveSellableItem')?.addEventListener('click',save);
-    $id('refreshSellableItems')?.addEventListener('click',loadSellableItems);
-    $id('itemStore')?.addEventListener('change',()=>{ $id('itemCode').readOnly=false; renderManagerItems();});
-    let n=0,t=setInterval(()=>{n++;if(window.currentUser){const p=$id('sellableItemsPanel');if(p)p.style.display=window.currentUser.role==='manager'?'block':'none';loadSellableItems();clearInterval(t);}else if(n>80)clearInterval(t);},250);
-  });
-})();
-</script>
-
-
-<script>
-(function(){
-  const POS_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
-  const POS_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-  const TOKEN_KEY='feastervilleCloudAccessToken';
-
-  function currentStore(){
-    const u=window.currentUser;
-    return u?.role==='manager'
-      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
-      : (u?.store_code||'NDAYENI');
-  }
-
-  async function loadLiveMenuForStore(){
-    const token=sessionStorage.getItem(TOKEN_KEY)||'';
-    if(!token || !window.currentUser) return;
-
-    const store=currentStore();
-    const r=await fetch(
-      POS_URL+'/rest/v1/pos_store_products?store_code=eq.'+encodeURIComponent(store)+
-      '&select=code,name,category,price,active&order=category.asc,code.asc',
-      {
-        headers:{
-          'apikey':POS_KEY,
-          'Authorization':'Bearer '+token,
-          'Content-Type':'application/json'
-        }
-      }
-    );
-
-    const text=await r.text();
-    if(!r.ok) throw new Error(text||('HTTP '+r.status));
-
-    const items=text?JSON.parse(text):[];
-    if(!window.liveStoreProducts) window.liveStoreProducts={};
-    window.liveStoreProducts[store]=items;
-
-    // Keep the lexical object used by the existing POS in sync if present.
-    try{
-      if(typeof liveStoreProducts!=='undefined'){
-        liveStoreProducts[store]=items;
-      }
-    }catch(_){}
-
-    try{ if(typeof cats==='function') cats(); }catch(_){}
-    try{ if(typeof renderProducts==='function') renderProducts(); }catch(_){}
-    try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(_){}
-
-    const badge=document.getElementById('storeLocationBadge');
-    if(badge){
-      const name=store==='SIVANA'?'Sivana':'Ndayeni';
-      badge.textContent=name+' POS'+(window.currentUser.role==='manager'?' — MANAGER':' — LOCKED TO YOUR ACCOUNT');
-    }
-  }
-
-  window.loadLiveMenuForStore=loadLiveMenuForStore;
-
-  document.addEventListener('DOMContentLoaded',function(){
-    let tries=0;
-    const timer=setInterval(function(){
-      tries++;
-      if(window.currentUser && sessionStorage.getItem(TOKEN_KEY)){
-        loadLiveMenuForStore().catch(console.error);
-        clearInterval(timer);
-      }else if(tries>80){
-        clearInterval(timer);
-      }
-    },250);
-
-    const sel=document.getElementById('storeLocationSelect');
-    if(sel){
-      sel.addEventListener('change',function(){
-        setTimeout(function(){
-          loadLiveMenuForStore().catch(console.error);
-        },150);
-      });
-    }
-  });
 })();
 </script>
 
