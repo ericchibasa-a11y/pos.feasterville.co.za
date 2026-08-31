@@ -4141,5 +4141,70 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
 </script>
 <!-- BUILD: SALESPERSON_SALES_RESPONSE_FIX_20260831 -->
 
+
+<script>
+/* FEASTERVILLE PRODUCT CLICK HARD FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvProductClickHardFix) return;
+  window.__fvProductClickHardFix=true;
+
+  function addItem(code){
+    try{
+      if(!code) return;
+      // Call the original POS add() function directly. It owns the cart state.
+      if(typeof add==='function'){
+        add(code);
+        return;
+      }
+      alert('The sales cart is not ready. Please refresh the page and sign in again.');
+    }catch(err){
+      console.error('Add item failed',err);
+      alert('Could not add item to cart: '+(err && err.message ? err.message : err));
+    }
+  }
+
+  // Capture-phase handler bypasses unreliable inline onclick handlers and any
+  // bubbling handlers added by older POS builds.
+  document.addEventListener('click',function(e){
+    const btn=e.target && e.target.closest ? e.target.closest('#products .product') : null;
+    if(!btn) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    let code=btn.getAttribute('data-product-code')||'';
+    if(!code){
+      const m=(btn.textContent||'').trim().match(/^([^\s—]+)/);
+      code=m?m[1]:'';
+    }
+    addItem(code);
+  },true);
+
+  // Ensure every rendered product button has an explicit code attribute.
+  function tagButtons(){
+    document.querySelectorAll('#products .product').forEach(function(btn){
+      if(btn.dataset.productCode) return;
+      const m=(btn.textContent||'').trim().match(/^([^\s—]+)/);
+      if(m) btn.dataset.productCode=m[1];
+      btn.type='button';
+      btn.style.pointerEvents='auto';
+      btn.disabled=false;
+    });
+  }
+
+  const observer=new MutationObserver(tagButtons);
+  const start=function(){
+    const box=document.getElementById('products');
+    if(box){ observer.observe(box,{childList:true,subtree:true}); tagButtons(); }
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+  else start();
+
+  setInterval(tagButtons,1000);
+  window.feastervilleAddSaleItem=addItem;
+})();
+</script>
+<!-- BUILD: PRODUCT_CLICK_HARD_FIX_20260831 -->
+
 </body>
 </html>
