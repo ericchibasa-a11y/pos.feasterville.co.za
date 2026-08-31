@@ -2722,5 +2722,104 @@ document.addEventListener('DOMContentLoaded',function(){
  });
 })();
 </script>
+
+<script>
+/* COUNT SHEET STORE SELECTOR FIX */
+(function(){
+  function currentStore(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+
+  function selectorHtml(){
+    if(!window.currentUser || window.currentUser.role!=='manager') {
+      return `<div style="margin:10px 0;padding:10px;background:#f2f2f2;border-radius:8px">
+        <b>Store:</b> ${currentStore()==='SIVANA'?'Sivana':'Ndayini'}
+      </div>`;
+    }
+    const s=currentStore();
+    return `<div style="margin:12px 0;padding:12px;background:#f2f2f2;border:1px solid #ddd;border-radius:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label for="countSheetStoreSelect"><b>Select Store:</b></label>
+      <select id="countSheetStoreSelect" style="padding:8px 12px;min-width:180px">
+        <option value="NDAYENI" ${s==='NDAYENI'?'selected':''}>Ndayini</option>
+        <option value="SIVANA" ${s==='SIVANA'?'selected':''}>Sivana</option>
+      </select>
+      <span style="font-size:13px">This Count Sheet will show only the selected store.</span>
+    </div>`;
+  }
+
+  const oldShowInvCount = window.showInvCount;
+  window.showInvCount = function(type,btn){
+    if(typeof oldShowInvCount==='function') oldShowInvCount(type,btn);
+    if(type!=='raw') return;
+
+    const box=document.getElementById('inventoryMasterContent');
+    if(!box) return;
+
+    // Put store selector directly inside the Production Input Count Sheet.
+    const heading = box.querySelector('h3');
+    if(heading){
+      heading.insertAdjacentHTML('afterend', selectorHtml());
+    }else{
+      box.insertAdjacentHTML('afterbegin', selectorHtml());
+    }
+
+    const sel=document.getElementById('countSheetStoreSelect');
+    if(sel){
+      sel.addEventListener('change', async function(){
+        localStorage.setItem('feastervilleStoreCode', this.value);
+
+        // Keep global store selector in sync when it exists.
+        const globalSel=document.getElementById('storeLocationSelect');
+        if(globalSel) globalSel.value=this.value;
+
+        if(typeof window.refreshStoreProductionData==='function'){
+          await window.refreshStoreProductionData();
+        }
+
+        // Re-render this count sheet for selected store.
+        window.showInvCount('raw',null);
+      });
+    }
+  };
+
+  // Also add selector to the dedicated Production Input Count Sheet panel.
+  const oldRefresh = window.refreshProductionInputs;
+  window.refreshProductionInputs = function(){
+    if(typeof oldRefresh==='function') oldRefresh();
+
+    const panel=document.getElementById('productionInputsPanel');
+    const body=document.getElementById('productionCountBody');
+    if(!panel || !body) return;
+
+    let holder=document.getElementById('productionCountStoreHolder');
+    if(!holder){
+      const table=body.closest('table');
+      if(table){
+        holder=document.createElement('div');
+        holder.id='productionCountStoreHolder';
+        table.parentNode.insertBefore(holder,table);
+      }
+    }
+    if(holder){
+      holder.innerHTML=selectorHtml();
+      const sel=holder.querySelector('#countSheetStoreSelect');
+      if(sel){
+        sel.addEventListener('change', async function(){
+          localStorage.setItem('feastervilleStoreCode',this.value);
+          const globalSel=document.getElementById('storeLocationSelect');
+          if(globalSel) globalSel.value=this.value;
+          if(typeof window.refreshStoreProductionData==='function'){
+            await window.refreshStoreProductionData();
+          }
+          if(typeof oldRefresh==='function') oldRefresh();
+        });
+      }
+    }
+  };
+})();
+</script>
 </body>
 </html>
