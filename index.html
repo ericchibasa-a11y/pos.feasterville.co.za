@@ -710,16 +710,9 @@ function cats(){
  document.getElementById('categories').innerHTML=c.map(x=>`<button class="cat ${x==='ALL'?'active':''}" onclick="filterCat('${x.replaceAll("'","\\'")}',this)">${x}</button>`).join('');
 }
 function filterCat(cat,btn){
- document.querySelectorAll('.cat').forEach(b=>b.classList.remove('active'));
- if(btn && btn.classList) btn.classList.add('active');
- else {
-   const allBtn=[...document.querySelectorAll('.cat')].find(b=>(b.textContent||'').trim()===(cat||'ALL'));
-   if(allBtn) allBtn.classList.add('active');
- }
- const box=document.getElementById('products');
- if(!box)return;
- box.innerHTML=activeProducts().filter(p=>cat==='ALL'||p.category===cat).map(p=>`
- <button type="button" class="product" data-product-code="${p.code}" onclick="return feastervilleDirectAdd(event,'${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
+ document.querySelectorAll('.cat').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+ document.getElementById('products').innerHTML=activeProducts().filter(p=>cat==='ALL'||p.category===cat).map(p=>`
+ <button type="button" class="product" data-code="${p.code}" data-name="${String(p.name||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" data-price="${Number(p.price||0)}" onclick="return fvAddProductDirect(this,event)"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
 }
 function add(code){
  const p=activeProducts().find(x=>x.code===code); if(!p)return;
@@ -4067,272 +4060,76 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
 
 
 <script>
-/* FEASTERVILLE SALESPERSON SALES RESPONSE FIX — 2026-08-31 */
+/* FEASTERVILLE SIMPLE DIRECT SALES CLICK FIX — 2026-08-31
+   Intentionally contains NO polling, MutationObserver, or capture handler. */
 (function(){
   'use strict';
-  if(window.__fvSalespersonSalesResponseFix) return;
-  window.__fvSalespersonSalesResponseFix=true;
+  if(window.__fvSimpleDirectSalesFix) return;
+  window.__fvSimpleDirectSalesFix=true;
 
-  function makeSellingScreenReady(){
-    const u=window.currentUser;
-    if(!u) return;
-
-    // Selling controls are available to both manager and salesperson.
-    ['categories','products','cart'].forEach(function(id){
-      const n=document.getElementById(id);
-      if(n){ n.style.pointerEvents='auto'; n.style.opacity='1'; }
-    });
-
-    const complete=[...document.querySelectorAll('button')].find(function(b){
-      return /COMPLETE SALE/i.test(b.textContent||'');
-    });
-    if(complete){
-      complete.disabled=false;
-      complete.style.pointerEvents='auto';
-      complete.style.opacity='1';
-    }
-
-    try{ if(typeof cats==='function') cats(); }catch(e){console.error(e);}
-    try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(e){console.error(e);}
-    try{ if(typeof render==='function') render(); }catch(e){console.error(e);}
-
-    // Load the live menu for the salesperson's assigned store after profile
-    // and token are both available.
-    try{
-      if(typeof window.loadLiveMenuForStore==='function'){
-        Promise.resolve(window.loadLiveMenuForStore()).then(function(){
-          try{ if(typeof cats==='function') cats(); }catch(_){}
-          try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(_){}
-        }).catch(console.error);
-      }
-    }catch(e){console.error(e);}
-  }
-
-  // Delegated fallback for product buttons. This remains active even when the
-  // live menu rebuilds the product grid.
-  document.addEventListener('click',function(e){
-    const b=e.target.closest && e.target.closest('.product[data-product-code]');
-    if(!b) return;
-    const code=b.getAttribute('data-product-code');
-    if(!code) return;
-    // If the inline onclick already changed the cart, do not double-add.
-    // We only intervene when onclick is absent.
-    if(!b.getAttribute('onclick') && typeof window.add==='function'){
-      e.preventDefault();
-      window.add(code);
-    }
-  },false);
-
-  let tries=0;
-  const timer=setInterval(function(){
-    tries++;
-    if(window.currentUser){
-      makeSellingScreenReady();
-      if(tries>20) clearInterval(timer);
-    }
-    if(tries>80) clearInterval(timer);
-  },250);
-
-  document.addEventListener('visibilitychange',function(){
-    if(!document.hidden) makeSellingScreenReady();
-  });
-  window.refreshSalespersonSellingScreen=makeSellingScreenReady;
-})();
-</script>
-<!-- BUILD: SALESPERSON_SALES_RESPONSE_FIX_20260831 -->
-
-
-<script>
-/* FEASTERVILLE PRODUCT CLICK HARD FIX — 2026-08-31 */
-(function(){
-  'use strict';
-  if(window.__fvProductClickHardFix) return;
-  window.__fvProductClickHardFix=true;
-
-  function addItem(code){
-    try{
-      if(!code) return;
-      // Call the original POS add() function directly. It owns the cart state.
-      if(typeof window.feastervilleDirectAdd==='function'){
-        window.feastervilleDirectAdd(null,code);
-        return;
-      }
-      if(typeof add==='function'){
-        add(code);
-        return;
-      }
-      alert('The sales cart is not ready. Please refresh the page and sign in again.');
-    }catch(err){
-      console.error('Add item failed',err);
-      alert('Could not add item to cart: '+(err && err.message ? err.message : err));
-    }
-  }
-
-  // Capture-phase handler bypasses unreliable inline onclick handlers and any
-  // bubbling handlers added by older POS builds.
-  document.addEventListener('click',function(e){
-    const btn=e.target && e.target.closest ? e.target.closest('#products .product') : null;
-    if(!btn) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-
-    let code=btn.getAttribute('data-product-code')||'';
-    if(!code){
-      const m=(btn.textContent||'').trim().match(/^([^\s—]+)/);
-      code=m?m[1]:'';
-    }
-    // IMPORTANT: this older capture handler runs before later product handlers.
-    // Route the click into the newest direct-cart function when available.
-    if(typeof window.feastervilleDirectAdd==='function'){
-      window.feastervilleDirectAdd(e,code);
-    }else{
-      addItem(code);
-    }
-  },true);
-
-  // Ensure every rendered product button has an explicit code attribute.
-  function tagButtons(){
-    document.querySelectorAll('#products .product').forEach(function(btn){
-      if(btn.dataset.productCode) return;
-      const m=(btn.textContent||'').trim().match(/^([^\s—]+)/);
-      if(m) btn.dataset.productCode=m[1];
-      btn.type='button';
-      btn.style.pointerEvents='auto';
-      btn.disabled=false;
-    });
-  }
-
-  const observer=new MutationObserver(tagButtons);
-  const start=function(){
-    const box=document.getElementById('products');
-    if(box){ observer.observe(box,{childList:true,subtree:true}); tagButtons(); }
-  };
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
-  else start();
-
-  setInterval(tagButtons,1000);
-  window.feastervilleAddSaleItem=addItem;
-})();
-</script>
-<!-- BUILD: PRODUCT_CLICK_HARD_FIX_20260831 -->
-
-
-<script>
-/* FEASTERVILLE DIRECT CART FIX — 2026-08-31 */
-(function(){
-  'use strict';
-  if(window.__fvDirectCartFix) return;
-  window.__fvDirectCartFix=true;
-
-  function toast(msg, bad){
-    let n=document.getElementById('fvSalesToast');
-    if(!n){
-      n=document.createElement('div');
-      n.id='fvSalesToast';
-      n.style.cssText='position:fixed;right:14px;bottom:14px;z-index:200000;padding:12px 16px;border-radius:8px;background:#222;color:#fff;font-weight:bold;box-shadow:0 2px 12px #0005';
-      document.body.appendChild(n);
-    }
-    n.style.background=bad?'#a40000':'#315d00';
-    n.textContent=msg;
-    n.style.display='block';
-    clearTimeout(n._t);
-    n._t=setTimeout(()=>n.style.display='none',1800);
-  }
-
-  function manualRender(){
+  function redrawCartSimple(){
     const body=document.getElementById('cart');
-    if(!body) throw new Error('Cart area is missing.');
-    body.innerHTML=cart.map(i=>`<tr><td><b>${i.code}</b><br><span class="small">${i.name}</span></td>
-      <td class="qty"><button type="button" onclick="changeQty('${i.code}',-1)">−</button> ${i.qty}
-      <button type="button" onclick="changeQty('${i.code}',1)">+</button></td>
-      <td>${money(i.qty*i.price)}</td>
-      <td><button type="button" class="remove" onclick="changeQty('${i.code}',-999)">×</button></td></tr>`).join('');
-    const sub=cart.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0);
-    const d=document.getElementById('discount');
-    const disc=Number(d?.value||0);
+    if(!body) return;
+    body.innerHTML=cart.map(function(i){
+      return '<tr><td><b>'+i.code+'</b><br><span class="small">'+i.name+'</span></td>'+ 
+        '<td class="qty"><button type="button" onclick="changeQty(\''+i.code+'\',-1)">−</button> '+i.qty+' '+
+        '<button type="button" onclick="changeQty(\''+i.code+'\',1)">+</button></td>'+ 
+        '<td>'+money(Number(i.qty||0)*Number(i.price||0))+'</td>'+ 
+        '<td><button type="button" class="remove" onclick="changeQty(\''+i.code+'\',-999)">×</button></td></tr>';
+    }).join('');
+
+    const sub=cart.reduce(function(s,i){return s+Number(i.qty||0)*Number(i.price||0);},0);
+    const disc=Number(document.getElementById('discount')?.value||0);
     const total=Math.max(sub-disc,0);
     const rec=Number(document.getElementById('received')?.value||0);
-    if(document.getElementById('subtotal')) document.getElementById('subtotal').textContent=money(sub);
-    if(document.getElementById('total')) document.getElementById('total').textContent=money(total);
-    if(document.getElementById('change')) document.getElementById('change').textContent=money(Math.max(rec-total,0));
+    const subtotal=document.getElementById('subtotal'); if(subtotal) subtotal.textContent=money(sub);
+    const totalEl=document.getElementById('total'); if(totalEl) totalEl.textContent=money(total);
+    const change=document.getElementById('change'); if(change) change.textContent=money(Math.max(rec-total,0));
   }
 
-  window.feastervilleDirectAdd=function(ev,code){
+  window.fvAddProductDirect=function(btn,ev){
+    if(ev){ev.preventDefault();ev.stopPropagation();}
     try{
-      if(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-      const list=typeof activeProducts==='function' ? activeProducts() : [];
-      const p=list.find(x=>String(x.code)===String(code));
-      if(!p){
-        toast('Item '+code+' is not available for this store.',true);
-        return false;
-      }
+      const code=String(btn?.dataset?.code||'').trim();
+      const name=String(btn?.dataset?.name||'').trim();
+      const price=Number(btn?.dataset?.price||0);
+      if(!code) throw new Error('Product code is missing.');
 
-      const existing=cart.find(i=>String(i.code)===String(code));
-      if(existing) existing.qty=Number(existing.qty||0)+1;
-      else cart.push({
-        code:p.code,
-        name:p.name,
-        category:p.category||'',
-        price:Number(p.price||0),
-        qty:1
-      });
+      const found=cart.find(function(x){return String(x.code)===code;});
+      if(found) found.qty=Number(found.qty||0)+1;
+      else cart.push({code:code,name:name,category:'',price:price,qty:1});
 
-      try{ render(); }
-      catch(err){
-        console.error('Normal cart render failed; using fallback.',err);
-        manualRender();
-      }
+      redrawCartSimple();
 
-      toast('Added '+p.code+' to order');
+      // Small visual confirmation without any background process.
+      const old=btn.style.outline;
+      btn.style.outline='3px solid #8cc63f';
+      setTimeout(function(){btn.style.outline=old;},250);
       return false;
     }catch(err){
-      console.error('Direct add failed',err);
-      toast('Add failed: '+(err?.message||err),true);
+      alert('Could not add item: '+(err?.message||err));
       return false;
     }
   };
 
-  function wire(){
-    document.querySelectorAll('#products .product').forEach(function(btn){
-      btn.type='button';
-      btn.disabled=false;
-      btn.style.setProperty('pointer-events','auto','important');
-      btn.style.setProperty('touch-action','manipulation','important');
-      const code=btn.dataset.productCode || ((btn.textContent||'').trim().match(/^([^\s—]+)/)||[])[1] || '';
-      if(code){
-        btn.dataset.productCode=code;
-        btn.onclick=function(ev){ return window.feastervilleDirectAdd(ev,code); };
-      }
-    });
-  }
-
-  const start=function(){
-    const box=document.getElementById('products');
-    if(!box) return;
-    new MutationObserver(wire).observe(box,{childList:true,subtree:true});
-    wire();
+  // Keep quantity/discount/received totals using the simple renderer too.
+  const oldChangeQty=window.changeQty;
+  window.changeQty=function(code,d){
+    const x=cart.find(function(i){return String(i.code)===String(code);});
+    if(!x)return;
+    x.qty=Number(x.qty||0)+Number(d||0);
+    if(x.qty<=0) cart=cart.filter(function(i){return String(i.code)!==String(code);});
+    redrawCartSimple();
   };
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
-  else start();
+  window.clearCart=function(){cart=[];redrawCartSimple();};
 
-  // Re-wire after live store menu/profile refreshes.
-  setInterval(wire,750);
+  const discount=document.getElementById('discount'); if(discount) discount.addEventListener('input',redrawCartSimple);
+  const received=document.getElementById('received'); if(received) received.addEventListener('input',redrawCartSimple);
+
+  window.redrawFeastervilleCart=redrawCartSimple;
 })();
 </script>
-<!-- BUILD: DIRECT_CART_FIX_20260831 -->
-
-
-<script>
-/* FEASTERVILLE PRODUCT EVENT CONFLICT FIX — 2026-08-31 */
-(function(){
-  'use strict';
-  window.feastervilleProductClickVersion='V20_EVENT_CONFLICT_FIXED';
-})();
-</script>
-<!-- BUILD: PRODUCT_EVENT_CONFLICT_FIX_20260831 -->
+<!-- BUILD: SIMPLE_DIRECT_SALES_CLICK_FIX_20260831 -->
 
 </body>
 </html>
