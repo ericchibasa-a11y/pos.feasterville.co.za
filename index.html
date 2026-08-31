@@ -3565,5 +3565,219 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: STORE_SWITCH_LIVE_REFRESH_FIX_20260831 -->
 
+
+<script>
+/* FEASTERVILLE FINAL PRODUCT -> PRODUCTION INPUTS LIVE REPAIR — 2026-08-31 */
+(function(){
+  'use strict';
+  if (window.__feastervilleLiveRecipeRepair) return;
+  window.__feastervilleLiveRecipeRepair = true;
+
+  const URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  let liveProducts=[];
+  let liveRecipes={};
+  let liveInputs=[];
+  let bound=false;
+  let loading=null;
+
+  function token(){
+    return sessionStorage.getItem('feastervilleCloudAccessToken') ||
+           localStorage.getItem('feastervilleCloudAccessToken') || '';
+  }
+
+  function storeCode(){
+    const u=window.currentUser||{};
+    if(u.role!=='manager') return u.store_code||'NDAYENI';
+    return document.getElementById('recipeProductionStoreSelect')?.value ||
+           document.getElementById('storeLocationSelect')?.value ||
+           localStorage.getItem('feastervilleStoreCode') ||
+           'NDAYENI';
+  }
+
+  async function api(path,opt={}){
+    const headers=new Headers(opt.headers||{});
+    headers.set('apikey',KEY);
+    headers.set('Authorization','Bearer '+token());
+    if(!headers.has('Content-Type')) headers.set('Content-Type','application/json');
+    const r=await fetch(URL+'/rest/v1/'+path,{...opt,headers});
+    const text=await r.text();
+    if(!r.ok) throw new Error(text||('HTTP '+r.status));
+    return text ? JSON.parse(text) : null;
+  }
+
+  function syncLegacyRecipes(){
+    try{
+      localStorage.setItem('feastervilleRecipes',JSON.stringify(liveRecipes||{}));
+      if(typeof recipes!=='undefined') recipes=liveRecipes||{};
+    }catch(_){}
+  }
+
+  function inputOptions(selected){
+    const rows=[...liveInputs];
+    if(selected && !rows.some(x=>x.code===selected)){
+      rows.push({code:selected,name:selected+' (not active in this store)',unit:''});
+    }
+    return '<option value="">-- Select Production Input --</option>'+
+      rows.map(p=>`<option value="${p.code}" ${p.code===selected?'selected':''}>${p.code} — ${p.name}${p.unit?' ('+p.unit+')':''}</option>`).join('');
+  }
+
+  function populateFinalProducts(){
+    const sel=document.getElementById('recipeFinalProduct');
+    if(!sel)return;
+    const keep=sel.value;
+    sel.innerHTML='<option value="">-- Select Final Product --</option>'+
+      liveProducts.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    if(keep && liveProducts.some(p=>p.code===keep)) sel.value=keep;
+  }
+
+  function addRow(inputCode='',qty=1){
+    if(!window.currentUser || window.currentUser.role!=='manager'){
+      alert('Manager access required.'); return;
+    }
+    const rows=document.getElementById('recipeInputRows');
+    if(!rows)return;
+    const row=document.createElement('div');
+    row.className='order-head old-recipe-row';
+    row.style.margin='8px 0';
+    row.innerHTML=`<select class="oldRecipeInput" style="min-width:300px">${inputOptions(inputCode)}</select>
+      <input class="oldRecipeQty" type="number" min="0.001" step="0.001" value="${Number(qty||1)}" style="width:120px">
+      <button type="button" onclick="this.parentElement.remove()">REMOVE</button>`;
+    rows.appendChild(row);
+  }
+
+  function renderSaved(){
+    const product=document.getElementById('recipeFinalProduct')?.value||'';
+    const box=document.getElementById('savedRecipeOld');
+    if(!box)return;
+    if(!product){box.innerHTML='';return;}
+    const list=liveRecipes[product]||[];
+    const map={};
+    liveInputs.forEach(x=>map[x.code]=x);
+    box.innerHTML='<h3>Saved Recipe</h3><table class="inv-table"><thead><tr><th>Production Input</th><th>Qty</th><th>Unit</th></tr></thead><tbody>'+
+      (list.length
+        ? list.map(x=>`<tr><td>${map[x.inputCode]?.name||x.inputCode}</td><td>${Number(x.qty||0)}</td><td>${map[x.inputCode]?.unit||''}</td></tr>`).join('')
+        : '<tr><td colspan="3">No inputs linked yet.</td></tr>')+
+      '</tbody></table>';
+  }
+
+  function showSelectedProduct(){
+    const sel=document.getElementById('recipeFinalProduct');
+    const area=document.getElementById('recipeBuilderArea');
+    const rows=document.getElementById('recipeInputRows');
+    if(!sel||!area||!rows)return;
+
+    if(!sel.value){
+      area.style.display='none';
+      rows.innerHTML='';
+      renderSaved();
+      return;
+    }
+
+    area.style.display='block';
+    rows.innerHTML='';
+    const list=liveRecipes[sel.value]||[];
+    if(list.length) list.forEach(x=>addRow(x.inputCode,x.qty));
+    else addRow('',1);
+    renderSaved();
+  }
+
+  async function load(force=false){
+    if(loading && !force) return loading;
+    loading=(async()=>{
+      if(!token() || !window.currentUser || window.currentUser.role!=='manager') return;
+      const store=storeCode();
+      const [state,inputs]=await Promise.all([
+        api('pos_state?key=in.(products,recipes)&select=key,value'),
+        api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&select=code,name,unit&order=code.asc')
+      ]);
+      const m={};
+      (state||[]).forEach(x=>m[x.key]=x.value);
+      liveProducts=Array.isArray(m.products)?m.products:[];
+      liveRecipes=(m.recipes && typeof m.recipes==='object')?m.recipes:{};
+      liveInputs=Array.isArray(inputs)?inputs:[];
+      syncLegacyRecipes();
+      populateFinalProducts();
+      showSelectedProduct();
+    })();
+    try{return await loading;}finally{loading=null;}
+  }
+
+  async function save(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){
+      alert('Manager access required.'); return;
+    }
+    const product=document.getElementById('recipeFinalProduct')?.value||'';
+    if(!product){alert('Please select a final product first.');return;}
+
+    const links=[];
+    document.querySelectorAll('#recipeInputRows .old-recipe-row').forEach(row=>{
+      const code=row.querySelector('.oldRecipeInput')?.value||'';
+      const qty=Number(row.querySelector('.oldRecipeQty')?.value||0);
+      if(code && qty>0) links.push({inputCode:code,qty});
+    });
+    if(!links.length){alert('Please add at least one production input.');return;}
+
+    // Read latest server copy first so this save does not erase other products.
+    const current=await api('pos_state?key=eq.recipes&select=value');
+    const serverRecipes=current?.[0]?.value && typeof current[0].value==='object'
+      ? current[0].value : {};
+    serverRecipes[product]=links;
+
+    await api('pos_state?key=eq.recipes',{
+      method:'PATCH',
+      headers:{'Prefer':'return=minimal'},
+      body:JSON.stringify({value:serverRecipes})
+    });
+
+    liveRecipes=serverRecipes;
+    syncLegacyRecipes();
+    showSelectedProduct();
+
+    try{
+      if(typeof window.refreshStoreProductionData==='function')
+        await window.refreshStoreProductionData();
+    }catch(_){}
+
+    alert('Recipe saved successfully to the live database.');
+  }
+
+  function bind(){
+    const sel=document.getElementById('recipeFinalProduct');
+    if(!sel || sel.dataset.liveRecipeBound==='1') return;
+    sel.dataset.liveRecipeBound='1';
+    sel.addEventListener('change',showSelectedProduct);
+    bound=true;
+  }
+
+  // Override the old local-only functions.
+  window.addRecipeInputRowOld=function(){ addRow('',1); };
+  window.saveOldLayoutRecipe=function(){ save().catch(e=>alert('Recipe save failed: '+e.message)); };
+  window.renderSavedRecipeOld=renderSaved;
+  window.refreshFinalProductRecipeBuilder=function(){
+    bind();
+    return load(true);
+  };
+
+  document.addEventListener('change',function(e){
+    if(e.target && (e.target.id==='recipeProductionStoreSelect' || e.target.id==='storeLocationSelect')){
+      setTimeout(()=>load(true).catch(e=>alert('Recipe refresh failed: '+e.message)),220);
+    }
+  },true);
+
+  // Initialize after authentication, not only at DOMContentLoaded.
+  let tries=0;
+  const t=setInterval(function(){
+    tries++;
+    bind();
+    if(window.currentUser && window.currentUser.role==='manager' && token()){
+      clearInterval(t);
+      load(true).catch(console.error);
+    } else if(tries>120) clearInterval(t);
+  },250);
+})();
+</script>
+<!-- BUILD: LIVE_RECIPE_REPAIR_20260831 -->
+
 </body>
 </html>
