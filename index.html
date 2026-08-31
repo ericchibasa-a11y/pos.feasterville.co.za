@@ -789,7 +789,278 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div></body></html>';
+    '</div>
+<script>
+/* ===== Store-specific Production Inputs / Count Sheet ===== */
+(function(){
+  const SB_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const SB_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function token(){ return sessionStorage.getItem('feastervilleCloudAccessToken')||''; }
+  function storeCode(){
+    const u=window.currentUser;
+    return (u && u.role==='manager')
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : ((u && u.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI');
+  }
+  function headers(extra){
+    return Object.assign({
+      apikey:SB_KEY,
+      Authorization:'Bearer '+token(),
+      'Content-Type':'application/json'
+    }, extra||{});
+  }
+  async function rest(path, options){
+    const r=await fetch(SB_URL+'/rest/v1/'+path,Object.assign({headers:headers()},options||{}));
+    if(!r.ok) throw new Error(await r.text());
+    if(r.status===204) return null;
+    const t=await r.text();
+    return t?JSON.parse(t):null;
+  }
+  function today(){ return new Date().toISOString().slice(0,10); }
+
+  window.storeProductionInputs=[];
+  window.storeInputCounts={};
+  window.storeReceiptTotals={};
+
+  async function loadStoreInputData(){
+    if(!token()) return;
+    const sc=storeCode();
+
+    const [inputs,counts,receipts]=await Promise.all([
+      rest('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&select=store_code,code,name,unit,category,reorder_level,active&order=code.asc'),
+      rest('pos_store_input_counts?store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+today()+'&select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty,notes'),
+      rest('pos_stock_receipts?store_code=eq.'+encodeURIComponent(sc)+'&select=input_code,qty,receipt_date,supplier,reference,input_name,unit,unit_cost,received_by&order=created_at.desc&limit=2000')
+    ]);
+
+    window.storeProductionInputs=Array.isArray(inputs)?inputs:[];
+    window.storeInputCounts={};
+    (counts||[]).forEach(x=>window.storeInputCounts[x.input_code]=x);
+
+    window.storeReceiptTotals={};
+    (receipts||[]).forEach(x=>{
+      window.storeReceiptTotals[x.input_code]=(window.storeReceiptTotals[x.input_code]||0)+Number(x.qty||0);
+    });
+
+    // Feed all old POS components from the active store master only.
+    try{
+      if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)){
+        rawMaterials.splice(0,rawMaterials.length,...window.storeProductionInputs.map(x=>({
+          code:x.code,name:x.name,unit:x.unit,category:x.category,reorder:Number(x.reorder_level||0)
+        })));
+      }
+    }catch(e){ console.error(e); }
+
+    try{
+      if(typeof oldEditableMasterInputs!=='undefined'){
+        oldEditableMasterInputs=window.storeProductionInputs.map(x=>({
+          code:x.code,name:x.name,unit:x.unit,category:x.category,reorder:Number(x.reorder_level||0)
+        }));
+      }
+    }catch(e){ console.error(e); }
+
+    localStorage.setItem('feastervilleMasterProductionInputs_'+sc,JSON.stringify(window.storeProductionInputs));
+    populateStoreInputDropdowns();
+    renderStoreMasterEditor();
+    await renderStoreLedgerAndCount();
+    renderStoreReceiptHistory(receipts||[]);
+  }
+
+  function populateStoreInputDropdowns(){
+    const opts=window.storeProductionInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit})</option>`).join('');
+    ['movementInput','piStockInput','piRecipeInput','recipeInput','easyInput'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.innerHTML=opts;
+    });
+
+    // Row-based recipe builder: refresh currently blank/new rows through existing initializer if available.
+    try{ if(typeof populateProductionInputDropdowns==='function') populateProductionInputDropdowns(); }catch(_){}
+  }
+
+  function renderStoreMasterEditor(){
+    const sel=document.getElementById('masterEditSelect');
+    const body=document.getElementById('oldMasterEditorBody');
+    if(sel){
+      sel.innerHTML='<option value="">-- Add New / Select Existing --</option>'+
+        window.storeProductionInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    }
+    if(body){
+      body.innerHTML=window.storeProductionInputs.map(p=>`<tr>
+        <td>${p.code}</td><td>${p.name}</td><td>${p.category||''}</td><td>${p.unit||'EA'}</td>
+        <td>${Number(p.reorder_level||0)}</td>
+        <td><button type="button" onclick="editOldMasterInput('${p.code}')">EDIT</button></td>
+      </tr>`).join('');
+    }
+  }
+
+  window.editOldMasterInput=function(code){
+    const p=window.storeProductionInputs.find(x=>x.code===code); if(!p)return;
+    const sel=document.getElementById('masterEditSelect'); if(sel)sel.value=code;
+    const c=document.getElementById('masterEditCode'); if(c){c.value=p.code;c.disabled=true;}
+    document.getElementById('masterEditName').value=p.name||'';
+    document.getElementById('masterEditCategory').value=p.category||'Ingredient';
+    document.getElementById('masterEditUnit').value=p.unit||'EA';
+    document.getElementById('masterEditReorder').value=Number(p.reorder_level||0);
+  };
+
+  window.saveOldMasterInput=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode();
+      const code=document.getElementById('masterEditCode').value.trim().toUpperCase();
+      const name=document.getElementById('masterEditName').value.trim();
+      const category=document.getElementById('masterEditCategory').value.trim()||'Ingredient';
+      const unit=document.getElementById('masterEditUnit').value||'EA';
+      const reorder=Number(document.getElementById('masterEditReorder').value||0);
+      if(!code||!name){alert('Please enter the input code and name.');return;}
+
+      await rest('pos_store_production_inputs?on_conflict=store_code,code',{
+        method:'POST',
+        headers:headers({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({
+          store_code:sc,code,name,category,unit,reorder_level:reorder,active:true,updated_at:new Date().toISOString()
+        })
+      });
+      if(typeof clearOldMasterEditor==='function') clearOldMasterEditor();
+      await loadStoreInputData();
+      alert('Production input saved for '+sc+'.');
+    }catch(e){ console.error(e); alert('Could not save production input: '+e.message); }
+  };
+
+  function usageFor(code){
+    let total=0;
+    let recipes={}; let sales=[];
+    try{recipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(_){}
+    try{sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]')||[];}catch(_){}
+    sales.forEach(s=>(s.items||[]).forEach(item=>{
+      (recipes[item.code]||[]).forEach(link=>{
+        if(link.inputCode===code) total+=Number(link.qty||0)*Number(item.qty||0);
+      });
+    }));
+    return total;
+  }
+
+  async function renderStoreLedgerAndCount(){
+    const rows=window.storeProductionInputs.map(p=>{
+      const c=window.storeInputCounts[p.code]||{};
+      const opening=Number(c.opening_qty||0);
+      const received=Number(window.storeReceiptTotals[p.code]||c.received_qty||0);
+      const used=usageFor(p.code);
+      const expected=opening+received-used;
+      const physical=Number(c.physical_count||0);
+      const variance=physical-expected;
+      return {...p,opening,received,used,expected,physical,variance,reorder:Number(p.reorder_level||0)};
+    });
+
+    const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    set('piCount',rows.length);
+    set('piReceived',rows.reduce((a,r)=>a+r.received,0).toFixed(2));
+    set('piUsed',rows.reduce((a,r)=>a+r.used,0).toFixed(2));
+    set('piReorder',rows.filter(r=>r.expected<=r.reorder).length);
+
+    const ledger=document.getElementById('productionLedgerBody');
+    if(ledger) ledger.innerHTML=rows.map(r=>`<tr>
+      <td>${r.code}</td><td>${r.name}</td><td>${r.unit}</td>
+      <td>${r.opening.toFixed(3)}</td><td>${r.received.toFixed(3)}</td><td>${r.used.toFixed(3)}</td>
+      <td>${r.expected.toFixed(3)}</td><td>${r.physical.toFixed(3)}</td><td>${r.variance.toFixed(3)}</td>
+      <td>${r.reorder}</td><td>${r.expected<=r.reorder?'REORDER':'OK'}</td></tr>`).join('');
+
+    const body=document.getElementById('productionCountBody');
+    if(body) body.innerHTML=rows.map(r=>`<tr>
+      <td>${r.code}</td><td>${r.name}</td><td>${r.unit}</td><td>${r.expected.toFixed(3)}</td>
+      <td><input class="stock-input" type="number" min="0" step="0.001" value="${r.physical}" onchange="setProductionCount('${r.code}',this.value)"></td>
+      <td>${r.variance.toFixed(3)}</td>
+      <td>${r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK'}</td></tr>`).join('');
+  }
+
+  window.setProductionCount=async function(code,val){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode(), physical=Number(val||0);
+      const p=window.storeProductionInputs.find(x=>x.code===code);
+      if(!p)return;
+      const existing=window.storeInputCounts[code]||{};
+      const received=Number(window.storeReceiptTotals[code]||0);
+      const used=usageFor(code);
+
+      await rest('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{
+        method:'POST',
+        headers:headers({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({
+          store_code:sc,input_code:code,count_date:today(),
+          opening_qty:Number(existing.opening_qty||0),
+          received_qty:received,used_qty:used,physical_count:physical,
+          counted_by:window.currentUser?.id||null,updated_at:new Date().toISOString()
+        })
+      });
+      await loadStoreInputData();
+    }catch(e){ console.error(e); alert('Could not save count: '+e.message); }
+  };
+
+  window.recordProductionReceipt=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode();
+      const date=document.getElementById('movementDate').value||today();
+      const supplier=document.getElementById('movementSupplier').value.trim();
+      const reference=document.getElementById('movementRef').value.trim();
+      const code=document.getElementById('movementInput').value;
+      const qty=Number(document.getElementById('movementQty').value||0);
+      const cost=Number(document.getElementById('movementCost').value||0);
+      const p=window.storeProductionInputs.find(x=>x.code===code);
+      if(!p||qty<=0){alert('Please select an input and enter a valid quantity.');return;}
+
+      await rest('pos_stock_receipts',{
+        method:'POST',
+        headers:headers({'Prefer':'return=minimal'}),
+        body:JSON.stringify({
+          receipt_date:date,supplier,reference,input_code:code,input_name:p.name,unit:p.unit,
+          qty,unit_cost:cost,received_by:window.currentUser?.name||'',created_by:window.currentUser?.id||null,
+          store_code:sc
+        })
+      });
+      document.getElementById('movementSupplier').value='';
+      document.getElementById('movementRef').value='';
+      document.getElementById('movementQty').value=1;
+      document.getElementById('movementCost').value=0;
+      await loadStoreInputData();
+      alert('Stock receipt recorded for '+sc+'.');
+    }catch(e){ console.error(e); alert('Could not record stock receipt: '+e.message); }
+  };
+
+  function renderStoreReceiptHistory(receipts){
+    const body=document.getElementById('movementHistory'); if(!body)return;
+    body.innerHTML=(receipts||[]).map(r=>`<tr>
+      <td>${r.receipt_date||''}</td><td>${r.supplier||'-'}</td><td>${r.reference||'-'}</td>
+      <td>${r.input_name||r.input_code}</td><td>${Number(r.qty||0)}</td><td>${r.unit||''}</td>
+      <td>${typeof money==='function'?money(Number(r.unit_cost||0)):'R'+Number(r.unit_cost||0).toFixed(2)}</td>
+      <td>${typeof money==='function'?money(Number(r.qty||0)*Number(r.unit_cost||0)):'R'+(Number(r.qty||0)*Number(r.unit_cost||0)).toFixed(2)}</td>
+      <td>${r.received_by||'-'}</td></tr>`).join('');
+  }
+
+  window.refreshStoreProductionData=loadStoreInputData;
+
+  // Hook into login completion without disrupting existing auth logic.
+  document.addEventListener('DOMContentLoaded',function(){
+    let tries=0;
+    const timer=setInterval(async function(){
+      tries++;
+      if(window.currentUser && token()){
+        clearInterval(timer);
+        try{await loadStoreInputData();}catch(e){console.error('Store input load failed',e);}
+      }else if(tries>80){clearInterval(timer);}
+    },250);
+
+    const store=document.getElementById('storeLocationSelect');
+    if(store) store.addEventListener('change',function(){
+      // Existing handler reloads; this is a safety refresh for browsers that suppress reload.
+      setTimeout(()=>loadStoreInputData().catch(console.error),100);
+    });
+  });
+})();
+</script>
+
+</body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -1751,7 +2022,278 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!w){alert('Please allow pop-ups to print the receipt.');return;}
     const html='<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title>'+
       '<style>@page{size:80mm auto;margin:0}body{width:80mm;margin:0;padding:4mm;box-sizing:border-box;font:11px monospace}hr{border:0;border-top:1px dashed #000}</style>'+
-      '</head><body>'+receipt.innerHTML+'</body></html>';
+      '</head><body>'+receipt.innerHTML+'
+<script>
+/* ===== Store-specific Production Inputs / Count Sheet ===== */
+(function(){
+  const SB_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const SB_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function token(){ return sessionStorage.getItem('feastervilleCloudAccessToken')||''; }
+  function storeCode(){
+    const u=window.currentUser;
+    return (u && u.role==='manager')
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : ((u && u.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI');
+  }
+  function headers(extra){
+    return Object.assign({
+      apikey:SB_KEY,
+      Authorization:'Bearer '+token(),
+      'Content-Type':'application/json'
+    }, extra||{});
+  }
+  async function rest(path, options){
+    const r=await fetch(SB_URL+'/rest/v1/'+path,Object.assign({headers:headers()},options||{}));
+    if(!r.ok) throw new Error(await r.text());
+    if(r.status===204) return null;
+    const t=await r.text();
+    return t?JSON.parse(t):null;
+  }
+  function today(){ return new Date().toISOString().slice(0,10); }
+
+  window.storeProductionInputs=[];
+  window.storeInputCounts={};
+  window.storeReceiptTotals={};
+
+  async function loadStoreInputData(){
+    if(!token()) return;
+    const sc=storeCode();
+
+    const [inputs,counts,receipts]=await Promise.all([
+      rest('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&select=store_code,code,name,unit,category,reorder_level,active&order=code.asc'),
+      rest('pos_store_input_counts?store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+today()+'&select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty,notes'),
+      rest('pos_stock_receipts?store_code=eq.'+encodeURIComponent(sc)+'&select=input_code,qty,receipt_date,supplier,reference,input_name,unit,unit_cost,received_by&order=created_at.desc&limit=2000')
+    ]);
+
+    window.storeProductionInputs=Array.isArray(inputs)?inputs:[];
+    window.storeInputCounts={};
+    (counts||[]).forEach(x=>window.storeInputCounts[x.input_code]=x);
+
+    window.storeReceiptTotals={};
+    (receipts||[]).forEach(x=>{
+      window.storeReceiptTotals[x.input_code]=(window.storeReceiptTotals[x.input_code]||0)+Number(x.qty||0);
+    });
+
+    // Feed all old POS components from the active store master only.
+    try{
+      if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)){
+        rawMaterials.splice(0,rawMaterials.length,...window.storeProductionInputs.map(x=>({
+          code:x.code,name:x.name,unit:x.unit,category:x.category,reorder:Number(x.reorder_level||0)
+        })));
+      }
+    }catch(e){ console.error(e); }
+
+    try{
+      if(typeof oldEditableMasterInputs!=='undefined'){
+        oldEditableMasterInputs=window.storeProductionInputs.map(x=>({
+          code:x.code,name:x.name,unit:x.unit,category:x.category,reorder:Number(x.reorder_level||0)
+        }));
+      }
+    }catch(e){ console.error(e); }
+
+    localStorage.setItem('feastervilleMasterProductionInputs_'+sc,JSON.stringify(window.storeProductionInputs));
+    populateStoreInputDropdowns();
+    renderStoreMasterEditor();
+    await renderStoreLedgerAndCount();
+    renderStoreReceiptHistory(receipts||[]);
+  }
+
+  function populateStoreInputDropdowns(){
+    const opts=window.storeProductionInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit})</option>`).join('');
+    ['movementInput','piStockInput','piRecipeInput','recipeInput','easyInput'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.innerHTML=opts;
+    });
+
+    // Row-based recipe builder: refresh currently blank/new rows through existing initializer if available.
+    try{ if(typeof populateProductionInputDropdowns==='function') populateProductionInputDropdowns(); }catch(_){}
+  }
+
+  function renderStoreMasterEditor(){
+    const sel=document.getElementById('masterEditSelect');
+    const body=document.getElementById('oldMasterEditorBody');
+    if(sel){
+      sel.innerHTML='<option value="">-- Add New / Select Existing --</option>'+
+        window.storeProductionInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    }
+    if(body){
+      body.innerHTML=window.storeProductionInputs.map(p=>`<tr>
+        <td>${p.code}</td><td>${p.name}</td><td>${p.category||''}</td><td>${p.unit||'EA'}</td>
+        <td>${Number(p.reorder_level||0)}</td>
+        <td><button type="button" onclick="editOldMasterInput('${p.code}')">EDIT</button></td>
+      </tr>`).join('');
+    }
+  }
+
+  window.editOldMasterInput=function(code){
+    const p=window.storeProductionInputs.find(x=>x.code===code); if(!p)return;
+    const sel=document.getElementById('masterEditSelect'); if(sel)sel.value=code;
+    const c=document.getElementById('masterEditCode'); if(c){c.value=p.code;c.disabled=true;}
+    document.getElementById('masterEditName').value=p.name||'';
+    document.getElementById('masterEditCategory').value=p.category||'Ingredient';
+    document.getElementById('masterEditUnit').value=p.unit||'EA';
+    document.getElementById('masterEditReorder').value=Number(p.reorder_level||0);
+  };
+
+  window.saveOldMasterInput=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode();
+      const code=document.getElementById('masterEditCode').value.trim().toUpperCase();
+      const name=document.getElementById('masterEditName').value.trim();
+      const category=document.getElementById('masterEditCategory').value.trim()||'Ingredient';
+      const unit=document.getElementById('masterEditUnit').value||'EA';
+      const reorder=Number(document.getElementById('masterEditReorder').value||0);
+      if(!code||!name){alert('Please enter the input code and name.');return;}
+
+      await rest('pos_store_production_inputs?on_conflict=store_code,code',{
+        method:'POST',
+        headers:headers({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({
+          store_code:sc,code,name,category,unit,reorder_level:reorder,active:true,updated_at:new Date().toISOString()
+        })
+      });
+      if(typeof clearOldMasterEditor==='function') clearOldMasterEditor();
+      await loadStoreInputData();
+      alert('Production input saved for '+sc+'.');
+    }catch(e){ console.error(e); alert('Could not save production input: '+e.message); }
+  };
+
+  function usageFor(code){
+    let total=0;
+    let recipes={}; let sales=[];
+    try{recipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(_){}
+    try{sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]')||[];}catch(_){}
+    sales.forEach(s=>(s.items||[]).forEach(item=>{
+      (recipes[item.code]||[]).forEach(link=>{
+        if(link.inputCode===code) total+=Number(link.qty||0)*Number(item.qty||0);
+      });
+    }));
+    return total;
+  }
+
+  async function renderStoreLedgerAndCount(){
+    const rows=window.storeProductionInputs.map(p=>{
+      const c=window.storeInputCounts[p.code]||{};
+      const opening=Number(c.opening_qty||0);
+      const received=Number(window.storeReceiptTotals[p.code]||c.received_qty||0);
+      const used=usageFor(p.code);
+      const expected=opening+received-used;
+      const physical=Number(c.physical_count||0);
+      const variance=physical-expected;
+      return {...p,opening,received,used,expected,physical,variance,reorder:Number(p.reorder_level||0)};
+    });
+
+    const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    set('piCount',rows.length);
+    set('piReceived',rows.reduce((a,r)=>a+r.received,0).toFixed(2));
+    set('piUsed',rows.reduce((a,r)=>a+r.used,0).toFixed(2));
+    set('piReorder',rows.filter(r=>r.expected<=r.reorder).length);
+
+    const ledger=document.getElementById('productionLedgerBody');
+    if(ledger) ledger.innerHTML=rows.map(r=>`<tr>
+      <td>${r.code}</td><td>${r.name}</td><td>${r.unit}</td>
+      <td>${r.opening.toFixed(3)}</td><td>${r.received.toFixed(3)}</td><td>${r.used.toFixed(3)}</td>
+      <td>${r.expected.toFixed(3)}</td><td>${r.physical.toFixed(3)}</td><td>${r.variance.toFixed(3)}</td>
+      <td>${r.reorder}</td><td>${r.expected<=r.reorder?'REORDER':'OK'}</td></tr>`).join('');
+
+    const body=document.getElementById('productionCountBody');
+    if(body) body.innerHTML=rows.map(r=>`<tr>
+      <td>${r.code}</td><td>${r.name}</td><td>${r.unit}</td><td>${r.expected.toFixed(3)}</td>
+      <td><input class="stock-input" type="number" min="0" step="0.001" value="${r.physical}" onchange="setProductionCount('${r.code}',this.value)"></td>
+      <td>${r.variance.toFixed(3)}</td>
+      <td>${r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK'}</td></tr>`).join('');
+  }
+
+  window.setProductionCount=async function(code,val){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode(), physical=Number(val||0);
+      const p=window.storeProductionInputs.find(x=>x.code===code);
+      if(!p)return;
+      const existing=window.storeInputCounts[code]||{};
+      const received=Number(window.storeReceiptTotals[code]||0);
+      const used=usageFor(code);
+
+      await rest('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{
+        method:'POST',
+        headers:headers({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({
+          store_code:sc,input_code:code,count_date:today(),
+          opening_qty:Number(existing.opening_qty||0),
+          received_qty:received,used_qty:used,physical_count:physical,
+          counted_by:window.currentUser?.id||null,updated_at:new Date().toISOString()
+        })
+      });
+      await loadStoreInputData();
+    }catch(e){ console.error(e); alert('Could not save count: '+e.message); }
+  };
+
+  window.recordProductionReceipt=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode();
+      const date=document.getElementById('movementDate').value||today();
+      const supplier=document.getElementById('movementSupplier').value.trim();
+      const reference=document.getElementById('movementRef').value.trim();
+      const code=document.getElementById('movementInput').value;
+      const qty=Number(document.getElementById('movementQty').value||0);
+      const cost=Number(document.getElementById('movementCost').value||0);
+      const p=window.storeProductionInputs.find(x=>x.code===code);
+      if(!p||qty<=0){alert('Please select an input and enter a valid quantity.');return;}
+
+      await rest('pos_stock_receipts',{
+        method:'POST',
+        headers:headers({'Prefer':'return=minimal'}),
+        body:JSON.stringify({
+          receipt_date:date,supplier,reference,input_code:code,input_name:p.name,unit:p.unit,
+          qty,unit_cost:cost,received_by:window.currentUser?.name||'',created_by:window.currentUser?.id||null,
+          store_code:sc
+        })
+      });
+      document.getElementById('movementSupplier').value='';
+      document.getElementById('movementRef').value='';
+      document.getElementById('movementQty').value=1;
+      document.getElementById('movementCost').value=0;
+      await loadStoreInputData();
+      alert('Stock receipt recorded for '+sc+'.');
+    }catch(e){ console.error(e); alert('Could not record stock receipt: '+e.message); }
+  };
+
+  function renderStoreReceiptHistory(receipts){
+    const body=document.getElementById('movementHistory'); if(!body)return;
+    body.innerHTML=(receipts||[]).map(r=>`<tr>
+      <td>${r.receipt_date||''}</td><td>${r.supplier||'-'}</td><td>${r.reference||'-'}</td>
+      <td>${r.input_name||r.input_code}</td><td>${Number(r.qty||0)}</td><td>${r.unit||''}</td>
+      <td>${typeof money==='function'?money(Number(r.unit_cost||0)):'R'+Number(r.unit_cost||0).toFixed(2)}</td>
+      <td>${typeof money==='function'?money(Number(r.qty||0)*Number(r.unit_cost||0)):'R'+(Number(r.qty||0)*Number(r.unit_cost||0)).toFixed(2)}</td>
+      <td>${r.received_by||'-'}</td></tr>`).join('');
+  }
+
+  window.refreshStoreProductionData=loadStoreInputData;
+
+  // Hook into login completion without disrupting existing auth logic.
+  document.addEventListener('DOMContentLoaded',function(){
+    let tries=0;
+    const timer=setInterval(async function(){
+      tries++;
+      if(window.currentUser && token()){
+        clearInterval(timer);
+        try{await loadStoreInputData();}catch(e){console.error('Store input load failed',e);}
+      }else if(tries>80){clearInterval(timer);}
+    },250);
+
+    const store=document.getElementById('storeLocationSelect');
+    if(store) store.addEventListener('change',function(){
+      // Existing handler reloads; this is a safety refresh for browsers that suppress reload.
+      setTimeout(()=>loadStoreInputData().catch(console.error),100);
+    });
+  });
+})();
+</script>
+
+</body></html>';
     w.document.open();w.document.write(html);w.document.close();w.focus();
     setTimeout(function(){w.print();},200);
   };
@@ -2599,6 +3141,277 @@ document.addEventListener('DOMContentLoaded',function(){
         },150);
       });
     }
+  });
+})();
+</script>
+
+
+<script>
+/* ===== Store-specific Production Inputs / Count Sheet ===== */
+(function(){
+  const SB_URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const SB_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function token(){ return sessionStorage.getItem('feastervilleCloudAccessToken')||''; }
+  function storeCode(){
+    const u=window.currentUser;
+    return (u && u.role==='manager')
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : ((u && u.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI');
+  }
+  function headers(extra){
+    return Object.assign({
+      apikey:SB_KEY,
+      Authorization:'Bearer '+token(),
+      'Content-Type':'application/json'
+    }, extra||{});
+  }
+  async function rest(path, options){
+    const r=await fetch(SB_URL+'/rest/v1/'+path,Object.assign({headers:headers()},options||{}));
+    if(!r.ok) throw new Error(await r.text());
+    if(r.status===204) return null;
+    const t=await r.text();
+    return t?JSON.parse(t):null;
+  }
+  function today(){ return new Date().toISOString().slice(0,10); }
+
+  window.storeProductionInputs=[];
+  window.storeInputCounts={};
+  window.storeReceiptTotals={};
+
+  async function loadStoreInputData(){
+    if(!token()) return;
+    const sc=storeCode();
+
+    const [inputs,counts,receipts]=await Promise.all([
+      rest('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&select=store_code,code,name,unit,category,reorder_level,active&order=code.asc'),
+      rest('pos_store_input_counts?store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+today()+'&select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty,notes'),
+      rest('pos_stock_receipts?store_code=eq.'+encodeURIComponent(sc)+'&select=input_code,qty,receipt_date,supplier,reference,input_name,unit,unit_cost,received_by&order=created_at.desc&limit=2000')
+    ]);
+
+    window.storeProductionInputs=Array.isArray(inputs)?inputs:[];
+    window.storeInputCounts={};
+    (counts||[]).forEach(x=>window.storeInputCounts[x.input_code]=x);
+
+    window.storeReceiptTotals={};
+    (receipts||[]).forEach(x=>{
+      window.storeReceiptTotals[x.input_code]=(window.storeReceiptTotals[x.input_code]||0)+Number(x.qty||0);
+    });
+
+    // Feed all old POS components from the active store master only.
+    try{
+      if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)){
+        rawMaterials.splice(0,rawMaterials.length,...window.storeProductionInputs.map(x=>({
+          code:x.code,name:x.name,unit:x.unit,category:x.category,reorder:Number(x.reorder_level||0)
+        })));
+      }
+    }catch(e){ console.error(e); }
+
+    try{
+      if(typeof oldEditableMasterInputs!=='undefined'){
+        oldEditableMasterInputs=window.storeProductionInputs.map(x=>({
+          code:x.code,name:x.name,unit:x.unit,category:x.category,reorder:Number(x.reorder_level||0)
+        }));
+      }
+    }catch(e){ console.error(e); }
+
+    localStorage.setItem('feastervilleMasterProductionInputs_'+sc,JSON.stringify(window.storeProductionInputs));
+    populateStoreInputDropdowns();
+    renderStoreMasterEditor();
+    await renderStoreLedgerAndCount();
+    renderStoreReceiptHistory(receipts||[]);
+  }
+
+  function populateStoreInputDropdowns(){
+    const opts=window.storeProductionInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name} (${p.unit})</option>`).join('');
+    ['movementInput','piStockInput','piRecipeInput','recipeInput','easyInput'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.innerHTML=opts;
+    });
+
+    // Row-based recipe builder: refresh currently blank/new rows through existing initializer if available.
+    try{ if(typeof populateProductionInputDropdowns==='function') populateProductionInputDropdowns(); }catch(_){}
+  }
+
+  function renderStoreMasterEditor(){
+    const sel=document.getElementById('masterEditSelect');
+    const body=document.getElementById('oldMasterEditorBody');
+    if(sel){
+      sel.innerHTML='<option value="">-- Add New / Select Existing --</option>'+
+        window.storeProductionInputs.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    }
+    if(body){
+      body.innerHTML=window.storeProductionInputs.map(p=>`<tr>
+        <td>${p.code}</td><td>${p.name}</td><td>${p.category||''}</td><td>${p.unit||'EA'}</td>
+        <td>${Number(p.reorder_level||0)}</td>
+        <td><button type="button" onclick="editOldMasterInput('${p.code}')">EDIT</button></td>
+      </tr>`).join('');
+    }
+  }
+
+  window.editOldMasterInput=function(code){
+    const p=window.storeProductionInputs.find(x=>x.code===code); if(!p)return;
+    const sel=document.getElementById('masterEditSelect'); if(sel)sel.value=code;
+    const c=document.getElementById('masterEditCode'); if(c){c.value=p.code;c.disabled=true;}
+    document.getElementById('masterEditName').value=p.name||'';
+    document.getElementById('masterEditCategory').value=p.category||'Ingredient';
+    document.getElementById('masterEditUnit').value=p.unit||'EA';
+    document.getElementById('masterEditReorder').value=Number(p.reorder_level||0);
+  };
+
+  window.saveOldMasterInput=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode();
+      const code=document.getElementById('masterEditCode').value.trim().toUpperCase();
+      const name=document.getElementById('masterEditName').value.trim();
+      const category=document.getElementById('masterEditCategory').value.trim()||'Ingredient';
+      const unit=document.getElementById('masterEditUnit').value||'EA';
+      const reorder=Number(document.getElementById('masterEditReorder').value||0);
+      if(!code||!name){alert('Please enter the input code and name.');return;}
+
+      await rest('pos_store_production_inputs?on_conflict=store_code,code',{
+        method:'POST',
+        headers:headers({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({
+          store_code:sc,code,name,category,unit,reorder_level:reorder,active:true,updated_at:new Date().toISOString()
+        })
+      });
+      if(typeof clearOldMasterEditor==='function') clearOldMasterEditor();
+      await loadStoreInputData();
+      alert('Production input saved for '+sc+'.');
+    }catch(e){ console.error(e); alert('Could not save production input: '+e.message); }
+  };
+
+  function usageFor(code){
+    let total=0;
+    let recipes={}; let sales=[];
+    try{recipes=JSON.parse(localStorage.getItem('feastervilleRecipes')||'{}')||{};}catch(_){}
+    try{sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]')||[];}catch(_){}
+    sales.forEach(s=>(s.items||[]).forEach(item=>{
+      (recipes[item.code]||[]).forEach(link=>{
+        if(link.inputCode===code) total+=Number(link.qty||0)*Number(item.qty||0);
+      });
+    }));
+    return total;
+  }
+
+  async function renderStoreLedgerAndCount(){
+    const rows=window.storeProductionInputs.map(p=>{
+      const c=window.storeInputCounts[p.code]||{};
+      const opening=Number(c.opening_qty||0);
+      const received=Number(window.storeReceiptTotals[p.code]||c.received_qty||0);
+      const used=usageFor(p.code);
+      const expected=opening+received-used;
+      const physical=Number(c.physical_count||0);
+      const variance=physical-expected;
+      return {...p,opening,received,used,expected,physical,variance,reorder:Number(p.reorder_level||0)};
+    });
+
+    const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    set('piCount',rows.length);
+    set('piReceived',rows.reduce((a,r)=>a+r.received,0).toFixed(2));
+    set('piUsed',rows.reduce((a,r)=>a+r.used,0).toFixed(2));
+    set('piReorder',rows.filter(r=>r.expected<=r.reorder).length);
+
+    const ledger=document.getElementById('productionLedgerBody');
+    if(ledger) ledger.innerHTML=rows.map(r=>`<tr>
+      <td>${r.code}</td><td>${r.name}</td><td>${r.unit}</td>
+      <td>${r.opening.toFixed(3)}</td><td>${r.received.toFixed(3)}</td><td>${r.used.toFixed(3)}</td>
+      <td>${r.expected.toFixed(3)}</td><td>${r.physical.toFixed(3)}</td><td>${r.variance.toFixed(3)}</td>
+      <td>${r.reorder}</td><td>${r.expected<=r.reorder?'REORDER':'OK'}</td></tr>`).join('');
+
+    const body=document.getElementById('productionCountBody');
+    if(body) body.innerHTML=rows.map(r=>`<tr>
+      <td>${r.code}</td><td>${r.name}</td><td>${r.unit}</td><td>${r.expected.toFixed(3)}</td>
+      <td><input class="stock-input" type="number" min="0" step="0.001" value="${r.physical}" onchange="setProductionCount('${r.code}',this.value)"></td>
+      <td>${r.variance.toFixed(3)}</td>
+      <td>${r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK'}</td></tr>`).join('');
+  }
+
+  window.setProductionCount=async function(code,val){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode(), physical=Number(val||0);
+      const p=window.storeProductionInputs.find(x=>x.code===code);
+      if(!p)return;
+      const existing=window.storeInputCounts[code]||{};
+      const received=Number(window.storeReceiptTotals[code]||0);
+      const used=usageFor(code);
+
+      await rest('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{
+        method:'POST',
+        headers:headers({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({
+          store_code:sc,input_code:code,count_date:today(),
+          opening_qty:Number(existing.opening_qty||0),
+          received_qty:received,used_qty:used,physical_count:physical,
+          counted_by:window.currentUser?.id||null,updated_at:new Date().toISOString()
+        })
+      });
+      await loadStoreInputData();
+    }catch(e){ console.error(e); alert('Could not save count: '+e.message); }
+  };
+
+  window.recordProductionReceipt=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    try{
+      const sc=storeCode();
+      const date=document.getElementById('movementDate').value||today();
+      const supplier=document.getElementById('movementSupplier').value.trim();
+      const reference=document.getElementById('movementRef').value.trim();
+      const code=document.getElementById('movementInput').value;
+      const qty=Number(document.getElementById('movementQty').value||0);
+      const cost=Number(document.getElementById('movementCost').value||0);
+      const p=window.storeProductionInputs.find(x=>x.code===code);
+      if(!p||qty<=0){alert('Please select an input and enter a valid quantity.');return;}
+
+      await rest('pos_stock_receipts',{
+        method:'POST',
+        headers:headers({'Prefer':'return=minimal'}),
+        body:JSON.stringify({
+          receipt_date:date,supplier,reference,input_code:code,input_name:p.name,unit:p.unit,
+          qty,unit_cost:cost,received_by:window.currentUser?.name||'',created_by:window.currentUser?.id||null,
+          store_code:sc
+        })
+      });
+      document.getElementById('movementSupplier').value='';
+      document.getElementById('movementRef').value='';
+      document.getElementById('movementQty').value=1;
+      document.getElementById('movementCost').value=0;
+      await loadStoreInputData();
+      alert('Stock receipt recorded for '+sc+'.');
+    }catch(e){ console.error(e); alert('Could not record stock receipt: '+e.message); }
+  };
+
+  function renderStoreReceiptHistory(receipts){
+    const body=document.getElementById('movementHistory'); if(!body)return;
+    body.innerHTML=(receipts||[]).map(r=>`<tr>
+      <td>${r.receipt_date||''}</td><td>${r.supplier||'-'}</td><td>${r.reference||'-'}</td>
+      <td>${r.input_name||r.input_code}</td><td>${Number(r.qty||0)}</td><td>${r.unit||''}</td>
+      <td>${typeof money==='function'?money(Number(r.unit_cost||0)):'R'+Number(r.unit_cost||0).toFixed(2)}</td>
+      <td>${typeof money==='function'?money(Number(r.qty||0)*Number(r.unit_cost||0)):'R'+(Number(r.qty||0)*Number(r.unit_cost||0)).toFixed(2)}</td>
+      <td>${r.received_by||'-'}</td></tr>`).join('');
+  }
+
+  window.refreshStoreProductionData=loadStoreInputData;
+
+  // Hook into login completion without disrupting existing auth logic.
+  document.addEventListener('DOMContentLoaded',function(){
+    let tries=0;
+    const timer=setInterval(async function(){
+      tries++;
+      if(window.currentUser && token()){
+        clearInterval(timer);
+        try{await loadStoreInputData();}catch(e){console.error('Store input load failed',e);}
+      }else if(tries>80){clearInterval(timer);}
+    },250);
+
+    const store=document.getElementById('storeLocationSelect');
+    if(store) store.addEventListener('change',function(){
+      // Existing handler reloads; this is a safety refresh for browsers that suppress reload.
+      setTimeout(()=>loadStoreInputData().catch(console.error),100);
+    });
   });
 })();
 </script>
