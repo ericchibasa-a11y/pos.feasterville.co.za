@@ -3096,5 +3096,213 @@ document.addEventListener('DOMContentLoaded',function(){
   };
 })();
 </script>
+
+<script>
+/* EXACT RECEIVE STOCK BUTTON + LEDGER DATABASE FIX */
+(function(){
+ const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+ const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+ function token(){return localStorage.getItem('feastervilleCloudAccessToken')||''}
+ function headers(prefer){
+   const h={'apikey':KEY,'Authorization':'Bearer '+token(),'Content-Type':'application/json'};
+   if(prefer)h['Prefer']=prefer;
+   return h;
+ }
+ function store(){
+   const u=window.currentUser||{};
+   return u.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(u.store_code||'NDAYENI');
+ }
+ function today(){return new Date().toISOString().slice(0,10)}
+ async function jsonFetch(url,opt={}){
+   const r=await fetch(url,opt);
+   if(!r.ok)throw new Error(await r.text());
+   const txt=await r.text(); return txt?JSON.parse(txt):[];
+ }
+ async function inputMeta(code){
+   const rows=await jsonFetch(BASE+'/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store())+
+     '&code=eq.'+encodeURIComponent(code)+'&select=code,name,unit',{headers:headers()});
+   return rows[0]||{code,name:code,unit:'EA'};
+ }
+ async function loadTodayCount(code){
+   const rows=await jsonFetch(BASE+'/pos_store_input_counts?store_code=eq.'+encodeURIComponent(store())+
+     '&input_code=eq.'+encodeURIComponent(code)+'&count_date=eq.'+today()+'&select=*',{headers:headers()});
+   return rows[0]||null;
+ }
+ async function upsertCount(code, received){
+   const existing=await loadTodayCount(code);
+   const body=existing
+    ? {received_qty:received,updated_at:new Date().toISOString()}
+    : {store_code:store(),input_code:code,count_date:today(),opening_qty:0,received_qty:received,used_qty:0,physical_count:0,updated_at:new Date().toISOString()};
+   const url=existing?BASE+'/pos_store_input_counts?id=eq.'+existing.id:BASE+'/pos_store_input_counts';
+   await jsonFetch(url,{method:existing?'PATCH':'POST',headers:headers('return=representation'),body:JSON.stringify(body)});
+ }
+ async function totalReceipts(code){
+   const rows=await jsonFetch(BASE+'/pos_stock_receipts?store_code=eq.'+encodeURIComponent(store())+
+     '&input_code=eq.'+encodeURIComponent(code)+'&receipt_date=eq.'+today()+'&select=qty',{headers:headers()});
+   return rows.reduce((a,x)=>a+Number(x.qty||0),0);
+ }
+
+ // This is the exact handler used by the green RECEIVE STOCK button.
+ window.receiveProductionStock=async function(){
+   try{
+     if(!window.currentUser||window.currentUser.role!=='manager'){alert('Manager access required.');return}
+     const input=document.getElementById('piStockInput');
+     const qtyEl=document.getElementById('piStockQty');
+     const code=(input?.value||'').trim(), qty=Number(qtyEl?.value||0);
+     if(!code){alert('Select a production input.');return}
+     if(!(qty>0)){alert('Enter a quantity greater than zero.');return}
+     const meta=await inputMeta(code);
+     await jsonFetch(BASE+'/pos_stock_receipts',{
+       method:'POST',headers:headers('return=representation'),
+       body:JSON.stringify({
+         receipt_date:today(),supplier:null,reference:null,input_code:code,input_name:meta.name,
+         unit:meta.unit||'EA',qty:qty,unit_cost:0,
+         received_by:window.currentUser.display_name||window.currentUser.email||'Manager',
+         created_by:window.currentUser.id||null,store_code:store()
+       })
+     });
+     const received=await totalReceipts(code);
+     await upsertCount(code,received);
+     if(qtyEl)qtyEl.value='';
+     await window.refreshStoreProductionData?.();
+     await window.refreshLiveProductionLedger?.();
+     alert('Stock received and ledger updated for '+(store()==='SIVANA'?'Sivana':'Ndayini')+'.');
+   }catch(e){console.error('receiveProductionStock',e);alert('Receive stock failed: '+e.message)}
+ };
+
+ window.refreshLiveProductionLedger=async function(){
+   try{
+     const s=store(), d=today();
+     const inputs=await jsonFetch(BASE+'/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code',{headers:headers()});
+     const counts=await jsonFetch(BASE+'/pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&count_date=eq.'+d+'&select=*',{headers:headers()});
+     const map=Object.fromEntries(counts.map(x=>[x.input_code,x]));
+     const tbody=document.getElementById('productionLedgerBody');
+     if(!tbody)return;
+     const usageFn=typeof window.productionUsage==='function'?window.productionUsage:()=>0;
+     let receivedTotal=0,usedTotal=0,reorders=0;
+     tbody.innerHTML=inputs.map(p=>{
+       const c=map[p.code]||{};
+       const opening=Number(c.opening_qty||0);
+       const received=Number(c.received_qty||0);
+       const used=Number(c.used_qty||usageFn(p.code)||0);
+       const expected=opening+received-used;
+       const physical=Number(c.physical_count||0);
+       const variance=physical-expected;
+       const reorder=Number(p.reorder_level||5);
+       receivedTotal+=received;usedTotal+=used;if(expected<=reorder)reorders++;
+       const status=expected<=0?'<span class="badge bad">OUT</span>':expected<=reorder?'<span class="badge warn">REORDER</span>':'<span class="badge ok">OK</span>';
+       return `<tr><td>${p.code}</td><td>${p.name}</td><td>${p.unit}</td><td>${opening}</td><td>${received}</td><td>${used}</td><td>${expected}</td><td>${physical}</td><td>${variance}</td><td>${reorder}</td><td>${status}</td></tr>`;
+     }).join('');
+     const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v};
+     set('piCount',inputs.length);set('piReceived',receivedTotal.toFixed(2));set('piUsed',usedTotal.toFixed(2));set('piReorder',reorders);
+   }catch(e){console.error('refreshLiveProductionLedger',e)}
+ };
+
+ // Refresh DB ledger whenever Production Inputs screen is opened/changed.
+ const oldShow=window.showProductionInputs;
+ window.showProductionInputs=function(){
+   if(typeof oldShow==='function')oldShow.apply(this,arguments);
+   setTimeout(()=>window.refreshLiveProductionLedger?.(),0);
+ };
+ setTimeout(()=>window.refreshLiveProductionLedger?.(),1200);
+})();
+</script>
+
+<script>
+/* FIX BLANK RECEIVE-STOCK ITEM DROPDOWN */
+(function(){
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function storeCode(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+
+  function headers(){
+    const token=localStorage.getItem('feastervilleCloudAccessToken')||'';
+    return {
+      'apikey':KEY,
+      'Authorization':'Bearer '+token
+    };
+  }
+
+  async function loadStoreInputsForReceive(){
+    const sel=document.getElementById('piStockInput');
+    if(!sel) return;
+
+    const s=storeCode();
+    const url=BASE+'/pos_store_production_inputs?store_code=eq.'+
+      encodeURIComponent(s)+'&active=eq.true&select=code,name,unit&order=code';
+
+    const r=await fetch(url,{headers:headers()});
+    if(!r.ok) throw new Error(await r.text());
+    const rows=await r.json();
+
+    const previous=sel.value;
+    sel.innerHTML =
+      '<option value="">Select Production Input</option>' +
+      rows.map(x=>`<option value="${x.code}">${x.code} — ${x.name}</option>`).join('');
+
+    if(previous && rows.some(x=>x.code===previous)) sel.value=previous;
+  }
+
+  window.loadStoreInputsForReceive=loadStoreInputsForReceive;
+
+  async function refreshReceiveDropdown(){
+    try{
+      await loadStoreInputsForReceive();
+    }catch(e){
+      console.error('Receive input dropdown load failed',e);
+    }
+  }
+
+  // Keep dropdown populated when store changes or production screen refreshes.
+  const oldRefreshStore=window.refreshStoreProductionData;
+  if(typeof oldRefreshStore==='function'){
+    window.refreshStoreProductionData=async function(){
+      const result=await oldRefreshStore.apply(this,arguments);
+      await refreshReceiveDropdown();
+      return result;
+    };
+  }
+
+  const oldShow=window.showProductionInputs;
+  window.showProductionInputs=function(){
+    if(typeof oldShow==='function') oldShow.apply(this,arguments);
+    setTimeout(refreshReceiveDropdown,0);
+  };
+
+  document.addEventListener('change',function(e){
+    if(
+      e.target &&
+      (
+        e.target.id==='storeLocationSelect' ||
+        e.target.id==='receiveProductionStoreSelect' ||
+        e.target.id==='stockMovementStoreSelect' ||
+        e.target.classList?.contains('production-section-store')
+      )
+    ){
+      setTimeout(refreshReceiveDropdown,150);
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded',function(){
+    let n=0;
+    const t=setInterval(function(){
+      n++;
+      if(window.currentUser){
+        refreshReceiveDropdown();
+        if(n>20) clearInterval(t);
+      }
+      if(n>100) clearInterval(t);
+    },250);
+  });
+
+  setTimeout(refreshReceiveDropdown,1200);
+})();
+</script>
 </body>
 </html>
