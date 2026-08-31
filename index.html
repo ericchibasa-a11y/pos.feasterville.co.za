@@ -3305,5 +3305,153 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 </script>
 <!-- BUILD: RECEIVE_STOCK_JWT_FIX_20260831 -->
+
+<script>
+/* FEASTERVILLE AUTO JWT REFRESH FIX — 2026-08-31 */
+(function(){
+  'use strict';
+
+  const SUPABASE_URL = 'https://sflyjcgbxbcwspfuzone.supabase.co';
+  const API_KEY = 'sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const TOKEN_KEY = 'feastervilleCloudAccessToken';
+  const REFRESH_KEY = 'feastervilleCloudRefreshToken';
+
+  if (window.__feastervilleJwtRefreshInstalled) return;
+  window.__feastervilleJwtRefreshInstalled = true;
+
+  const originalFetch = window.fetch.bind(window);
+  let refreshPromise = null;
+
+  function getAccessToken(){
+    return sessionStorage.getItem(TOKEN_KEY) ||
+           localStorage.getItem(TOKEN_KEY) || '';
+  }
+
+  function getRefreshToken(){
+    return sessionStorage.getItem(REFRESH_KEY) ||
+           localStorage.getItem(REFRESH_KEY) || '';
+  }
+
+  function saveSession(data){
+    if (!data || !data.access_token) return false;
+    sessionStorage.setItem(TOKEN_KEY, data.access_token);
+    if (data.refresh_token) sessionStorage.setItem(REFRESH_KEY, data.refresh_token);
+    return true;
+  }
+
+  async function refreshSession(){
+    if (refreshPromise) return refreshPromise;
+
+    refreshPromise = (async function(){
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        throw new Error('Your login session has expired. Please sign in again.');
+      }
+
+      const r = await originalFetch(
+        SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token',
+        {
+          method:'POST',
+          headers:{
+            'apikey': API_KEY,
+            'Content-Type':'application/json'
+          },
+          body:JSON.stringify({refresh_token: refreshToken})
+        }
+      );
+
+      const raw = await r.text();
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch (_) {}
+
+      if (!r.ok || !data || !data.access_token) {
+        sessionStorage.removeItem(TOKEN_KEY);
+        sessionStorage.removeItem(REFRESH_KEY);
+        throw new Error(
+          (data && (data.message || data.error_description || data.error)) ||
+          'Your login session has expired. Please sign in again.'
+        );
+      }
+
+      saveSession(data);
+      return data.access_token;
+    })();
+
+    try {
+      return await refreshPromise;
+    } finally {
+      refreshPromise = null;
+    }
+  }
+
+  function isSupabaseRequest(input){
+    const url = typeof input === 'string'
+      ? input
+      : (input && input.url ? input.url : '');
+    return url.indexOf(SUPABASE_URL) === 0;
+  }
+
+  function isRefreshRequest(input){
+    const url = typeof input === 'string'
+      ? input
+      : (input && input.url ? input.url : '');
+    return url.indexOf('/auth/v1/token?grant_type=refresh_token') !== -1;
+  }
+
+  function withCurrentToken(init, token){
+    const next = Object.assign({}, init || {});
+    const headers = new Headers((init && init.headers) || {});
+    if (!headers.has('apikey')) headers.set('apikey', API_KEY);
+    if (token) headers.set('Authorization', 'Bearer ' + token);
+    next.headers = headers;
+    return next;
+  }
+
+  async function responseIsExpired(response){
+    if (!(response.status === 401 || response.status === 403)) return false;
+    try {
+      const clone = response.clone();
+      const text = await clone.text();
+      return /JWT expired|PGRST303|invalid JWT|token.*expired/i.test(text);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  window.fetch = async function(input, init){
+    if (!isSupabaseRequest(input) || isRefreshRequest(input)) {
+      return originalFetch(input, init);
+    }
+
+    // Always use the newest token from sessionStorage. This prevents older
+    // closures in the POS from continuing to send an expired token.
+    let token = getAccessToken();
+    let response = await originalFetch(input, withCurrentToken(init, token));
+
+    if (await responseIsExpired(response)) {
+      try {
+        token = await refreshSession();
+        response = await originalFetch(input, withCurrentToken(init, token));
+      } catch (err) {
+        console.error('Feasterville session refresh failed:', err);
+        alert('Your POS login session has expired. Please sign in again.');
+      }
+    }
+
+    return response;
+  };
+
+  // Refresh proactively shortly before the normal one-hour access-token expiry.
+  setInterval(async function(){
+    if (!getAccessToken() || !getRefreshToken()) return;
+    try { await refreshSession(); }
+    catch (_) {}
+  }, 45 * 60 * 1000);
+
+  window.feastervilleRefreshLoginSession = refreshSession;
+})();
+</script>
+<!-- BUILD: AUTO_JWT_REFRESH_20260831 -->
+
 </body>
 </html>
