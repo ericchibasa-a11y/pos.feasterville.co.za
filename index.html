@@ -2687,5 +2687,40 @@ document.addEventListener('DOMContentLoaded',function(){
  let tries=0,t=setInterval(()=>{tries++;if(window.currentUser&&tok()){clearInterval(t);load().catch(console.error)}else if(tries>100)clearInterval(t)},200);
 })();
 </script>
+
+<script>
+/* MANAGER STORE SELECTOR VISIBILITY FIX */
+(function(){
+ function fixStoreSelector(){
+   const u=window.currentUser;
+   const select=document.getElementById('storeLocationSelect');
+   if(!u || !select) return;
+   const container=select.closest('.store-switcher') || select.parentElement;
+   if(u.role==='manager'){
+     select.style.display='';
+     select.hidden=false;
+     select.disabled=false;
+     if(container){container.style.display='';container.hidden=false;}
+     if(!select.querySelector('option[value="NDAYENI"]')){
+       select.innerHTML='<option value="NDAYENI">Ndayini</option><option value="SIVANA">Sivana</option>';
+     }
+     const saved=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+     select.value=saved;
+   }else{
+     const assigned=u.store_code||'NDAYENI';
+     localStorage.setItem('feastervilleStoreCode',assigned);
+     select.value=assigned;
+     select.disabled=true;
+   }
+ }
+ window.fixStoreSelector=fixStoreSelector;
+ document.addEventListener('DOMContentLoaded',function(){
+   let n=0,t=setInterval(function(){
+     n++; if(window.currentUser){fixStoreSelector(); if(n>15)clearInterval(t);}
+     if(n>80)clearInterval(t);
+   },250);
+ });
+})();
+</script>
 </body>
 </html>
