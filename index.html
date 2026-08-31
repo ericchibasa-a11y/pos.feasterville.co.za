@@ -3453,5 +3453,117 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: AUTO_JWT_REFRESH_20260831 -->
 
+
+<script>
+/* FEASTERVILLE STORE SWITCH LIVE REFRESH FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if (window.__feastervilleStoreSwitchRefreshFix) return;
+  window.__feastervilleStoreSwitchRefreshFix = true;
+
+  let switchVersion = 0;
+  let timer = null;
+
+  function normalizeStore(v){
+    return String(v || '').toUpperCase() === 'SIVANA' ? 'SIVANA' : 'NDAYENI';
+  }
+
+  function isStoreSelector(el){
+    if (!el || el.tagName !== 'SELECT') return false;
+    return el.id === 'storeLocationSelect' ||
+           el.id === 'receiveProductionStoreSelect' ||
+           el.id === 'stockMovementStoreSelect' ||
+           el.id === 'usageProductionStoreSelect' ||
+           el.id === 'masterProductionStoreSelect' ||
+           el.id === 'recipeProductionStoreSelect' ||
+           el.id === 'productionCountStoreSelect' ||
+           el.classList.contains('production-section-store');
+  }
+
+  function syncSelectors(store, source){
+    localStorage.setItem('feastervilleStoreCode', store);
+
+    const ids = [
+      'storeLocationSelect',
+      'receiveProductionStoreSelect',
+      'stockMovementStoreSelect',
+      'usageProductionStoreSelect',
+      'masterProductionStoreSelect',
+      'recipeProductionStoreSelect',
+      'productionCountStoreSelect'
+    ];
+
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el !== source && el.value !== store) el.value = store;
+    });
+
+    document.querySelectorAll('select.production-section-store').forEach(el => {
+      if (el !== source && el.value !== store) el.value = store;
+    });
+  }
+
+  async function performRefresh(store, version){
+    // Give older listeners a moment to finish, then make the selected store
+    // authoritative and refresh both Receive Stock and the live ledger.
+    syncSelectors(store);
+
+    try {
+      if (typeof window.refreshStoreProductionData === 'function') {
+        await window.refreshStoreProductionData();
+      }
+      if (version !== switchVersion) return;
+
+      if (typeof window.loadStoreInputsForReceive === 'function') {
+        await window.loadStoreInputsForReceive();
+      }
+      if (version !== switchVersion) return;
+
+      if (typeof window.refreshLiveProductionLedger === 'function') {
+        await window.refreshLiveProductionLedger();
+      }
+      if (version !== switchVersion) return;
+
+      // Some legacy renders can overwrite the DB ledger, so refresh the live
+      // ledger once more after they have completed.
+      setTimeout(function(){
+        if (version !== switchVersion) return;
+        syncSelectors(store);
+        Promise.resolve(window.loadStoreInputsForReceive?.())
+          .then(() => window.refreshLiveProductionLedger?.())
+          .catch(console.error);
+      }, 300);
+    } catch (err) {
+      console.error('Store switch live refresh failed', err);
+      alert('Store refresh failed: ' + (err.message || err));
+    }
+  }
+
+  function schedule(store, source){
+    store = normalizeStore(store);
+    syncSelectors(store, source);
+    const version = ++switchVersion;
+
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function(){
+      performRefresh(store, version);
+    }, 180);
+  }
+
+  // Capture phase: save the selected store before older change handlers run.
+  document.addEventListener('change', function(e){
+    if (!isStoreSelector(e.target)) return;
+    schedule(e.target.value, e.target);
+  }, true);
+
+  // Also expose one canonical switch helper for future buttons/selectors.
+  window.switchFeastervilleProductionStore = function(store){
+    store = normalizeStore(store);
+    schedule(store, null);
+  };
+})();
+</script>
+<!-- BUILD: STORE_SWITCH_LIVE_REFRESH_FIX_20260831 -->
+
 </body>
 </html>
