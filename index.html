@@ -3779,5 +3779,147 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: LIVE_RECIPE_REPAIR_20260831 -->
 
+
+<script>
+/* FEASTERVILLE USER MANAGEMENT PASSWORD RESET UI REPAIR — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__feastervillePasswordResetUIFix) return;
+  window.__feastervillePasswordResetUIFix=true;
+
+  const FUNCTION_URL='https://sflyjcgbxbcwspfuzone.supabase.co/functions/v1/pos-user-admin';
+  const API_KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function token(){
+    return sessionStorage.getItem('feastervilleCloudAccessToken') ||
+           localStorage.getItem('feastervilleCloudAccessToken') || '';
+  }
+
+  async function adminCall(body){
+    const r=await fetch(FUNCTION_URL,{
+      method:'POST',
+      headers:{
+        'apikey':API_KEY,
+        'Authorization':'Bearer '+token(),
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    });
+    const text=await r.text();
+    let data={};
+    try{data=text?JSON.parse(text):{};}catch(_){}
+    if(!r.ok || data.error) throw new Error(data.error||text||('HTTP '+r.status));
+    return data;
+  }
+
+  async function resetPassword(userId,email){
+    if(!window.currentUser || window.currentUser.role!=='manager'){
+      alert('Manager access required.'); return;
+    }
+    const password=prompt('Enter a new password for '+(email||'this user')+'.\n\nMinimum 6 characters:');
+    if(password===null) return;
+    if(password.length<6){alert('Password must be at least 6 characters.');return;}
+    const confirmPassword=prompt('Re-enter the new password to confirm:');
+    if(confirmPassword===null) return;
+    if(password!==confirmPassword){alert('Passwords do not match.');return;}
+
+    try{
+      await adminCall({action:'password',user_id:userId,password});
+      alert('Password reset successfully for '+(email||'user')+'.');
+    }catch(e){
+      alert('Password reset failed: '+e.message);
+    }
+  }
+
+  function enhanceUserRows(){
+    if(!window.currentUser || window.currentUser.role!=='manager') return;
+    // Existing user-management renders differ between builds. Add a reset
+    // button to any row/card carrying a user id and email.
+    document.querySelectorAll('[data-user-id]').forEach(row=>{
+      if(row.querySelector('.fv-reset-password')) return;
+      const id=row.getAttribute('data-user-id');
+      if(!id) return;
+      const email=row.getAttribute('data-email') ||
+                  row.querySelector('[data-email]')?.getAttribute('data-email') ||
+                  row.textContent.match(/[\w.+-]+@[\w.-]+\.\w+/)?.[0] || '';
+      const b=document.createElement('button');
+      b.type='button';
+      b.className='fv-reset-password';
+      b.textContent='RESET PASSWORD';
+      b.style.marginLeft='6px';
+      b.onclick=()=>resetPassword(id,email);
+      row.appendChild(b);
+    });
+  }
+
+  // A direct helper is exposed so the existing user list renderer can call it.
+  window.resetPOSUserPassword=resetPassword;
+
+  // Wrap common user-list refresh/render functions when present.
+  ['loadUsers','refreshUsers','loadPOSUsers','renderUsers','renderSalespersons'].forEach(name=>{
+    const old=window[name];
+    if(typeof old==='function' && !old.__fvWrapped){
+      const wrapped=async function(){
+        const result=await old.apply(this,arguments);
+        setTimeout(enhanceUserRows,50);
+        return result;
+      };
+      wrapped.__fvWrapped=true;
+      window[name]=wrapped;
+    }
+  });
+
+  // If no compatible row metadata exists, install a small manager-only reset
+  // panel inside the Salesperson & User Management section.
+  async function installFallback(){
+    if(!window.currentUser || window.currentUser.role!=='manager' || !token()) return;
+
+    const headings=[...document.querySelectorAll('h1,h2,h3,h4')];
+    const heading=headings.find(x=>/Salesperson\s*&\s*User Management/i.test(x.textContent||''));
+    if(!heading) return;
+    const panel=heading.closest('.panel,.card,section,div') || heading.parentElement;
+    if(!panel || panel.querySelector('#fvPasswordResetPanel')) return;
+
+    const box=document.createElement('div');
+    box.id='fvPasswordResetPanel';
+    box.style.cssText='margin-top:16px;padding:14px;border:1px solid #ddd;border-radius:8px;background:#fafafa';
+    box.innerHTML='<h3 style="margin-top:0">Reset User Password</h3>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">'+
+      '<label style="min-width:260px">User<br><select id="fvResetUser" style="min-width:260px"><option>Loading users...</option></select></label>'+
+      '<button type="button" class="primary" id="fvResetBtn">RESET PASSWORD</button></div>'+
+      '<small>Manager only. Select a salesperson/user and set a new password.</small>';
+    panel.appendChild(box);
+
+    try{
+      const data=await adminCall({action:'list'});
+      const sel=box.querySelector('#fvResetUser');
+      const users=(data.users||[]).filter(u=>u.id);
+      sel.innerHTML='<option value="">-- Select User --</option>'+
+        users.map(u=>`<option value="${u.id}" data-email="${u.email||''}">${u.display_name||u.email||u.id} — ${u.email||''} — ${u.store_code||''}</option>`).join('');
+      box.querySelector('#fvResetBtn').onclick=function(){
+        const opt=sel.options[sel.selectedIndex];
+        if(!sel.value){alert('Please select a user.');return;}
+        resetPassword(sel.value,opt?.dataset?.email||opt?.textContent||'');
+      };
+    }catch(e){
+      box.querySelector('#fvResetUser').innerHTML='<option value="">Could not load users</option>';
+      const note=document.createElement('div');
+      note.style.marginTop='8px';
+      note.textContent='User list failed: '+e.message;
+      box.appendChild(note);
+    }
+  }
+
+  let tries=0;
+  const timer=setInterval(()=>{
+    tries++;
+    enhanceUserRows();
+    installFallback().catch(console.error);
+    if(tries>120) clearInterval(timer);
+  },500);
+})();
+</script>
+<!-- BUILD: USER_PASSWORD_RESET_UI_20260831 -->
+
 </body>
 </html>
