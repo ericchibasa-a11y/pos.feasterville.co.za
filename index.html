@@ -2988,5 +2988,113 @@ document.addEventListener('DOMContentLoaded',function(){
   observer.observe(document.documentElement,{childList:true,subtree:true});
 })();
 </script>
+
+<script>
+/* RECEIVE STOCK -> LIVE STORE LEDGER FIX */
+(function(){
+  function storeCode(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+  function sbHeaders(){
+    const token=localStorage.getItem('feastervilleCloudAccessToken')||'';
+    return {
+      'apikey':'sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM',
+      'Authorization':'Bearer '+token,
+      'Content-Type':'application/json',
+      'Prefer':'return=representation'
+    };
+  }
+  const base='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+
+  async function saveReceiptLive(row){
+    const r=await fetch(base+'/pos_stock_receipts',{
+      method:'POST',headers:sbHeaders(),body:JSON.stringify(row)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return await r.json();
+  }
+
+  async function syncTodayReceived(store,inputCode){
+    const today=new Date().toISOString().slice(0,10);
+    const q=`?store_code=eq.${encodeURIComponent(store)}&input_code=eq.${encodeURIComponent(inputCode)}&receipt_date=eq.${today}&select=qty`;
+    const rr=await fetch(base+'/pos_stock_receipts'+q,{headers:sbHeaders()});
+    if(!rr.ok) throw new Error(await rr.text());
+    const receipts=await rr.json();
+    const received=receipts.reduce((a,x)=>a+(Number(x.qty)||0),0);
+
+    const cq=`?store_code=eq.${encodeURIComponent(store)}&input_code=eq.${encodeURIComponent(inputCode)}&count_date=eq.${today}&select=*`;
+    const cr=await fetch(base+'/pos_store_input_counts'+cq,{headers:sbHeaders()});
+    if(!cr.ok) throw new Error(await cr.text());
+    const rows=await cr.json();
+    if(rows.length){
+      const ur=await fetch(base+`/pos_store_input_counts?id=eq.${rows[0].id}`,{
+        method:'PATCH',headers:sbHeaders(),
+        body:JSON.stringify({received_qty:received,updated_at:new Date().toISOString()})
+      });
+      if(!ur.ok) throw new Error(await ur.text());
+    }else{
+      const nr=await fetch(base+'/pos_store_input_counts',{
+        method:'POST',headers:sbHeaders(),
+        body:JSON.stringify({
+          store_code:store,input_code:inputCode,count_date:today,
+          opening_qty:0,received_qty:received,used_qty:0,physical_count:0,
+          updated_at:new Date().toISOString()
+        })
+      });
+      if(!nr.ok) throw new Error(await nr.text());
+    }
+  }
+
+  // Replace receipt action so every receipt is persisted to the store ledger.
+  window.recordProductionReceipt=async function(){
+    try{
+      if(!window.currentUser || window.currentUser.role!=='manager'){
+        alert('Manager access required.'); return;
+      }
+      const inputEl=document.getElementById('piStockInput')||document.getElementById('movementInput');
+      const qtyEl=document.getElementById('piStockQty')||document.getElementById('movementQty');
+      const supplierEl=document.getElementById('piStockSupplier')||document.getElementById('movementSupplier');
+      const refEl=document.getElementById('piStockReference')||document.getElementById('movementReference');
+
+      const code=(inputEl&&inputEl.value||'').trim();
+      const qty=Number(qtyEl&&qtyEl.value||0);
+      if(!code){alert('Select a production input.');return;}
+      if(!(qty>0)){alert('Enter a quantity greater than zero.');return;}
+
+      const list=window.rawMaterials||[];
+      const item=list.find(x=>String(x.code)===code)||{};
+      const store=storeCode();
+      const today=new Date().toISOString().slice(0,10);
+
+      await saveReceiptLive({
+        receipt_date:today,
+        supplier:(supplierEl&&supplierEl.value||'').trim()||null,
+        reference:(refEl&&refEl.value||'').trim()||null,
+        input_code:code,
+        input_name:item.name||inputEl.options?.[inputEl.selectedIndex]?.text||code,
+        unit:item.unit||'EA',
+        qty:qty,
+        unit_cost:0,
+        received_by:window.currentUser.display_name||window.currentUser.email||'Manager',
+        created_by:window.currentUser.id||null,
+        store_code:store
+      });
+
+      await syncTodayReceived(store,code);
+      if(qtyEl)qtyEl.value='';
+      if(typeof window.refreshStoreProductionData==='function')await window.refreshStoreProductionData();
+      if(typeof window.refreshProductionInputs==='function')window.refreshProductionInputs();
+      if(typeof window.showProductionInputs==='function')window.showProductionInputs();
+      alert(`Stock received successfully for ${store==='SIVANA'?'Sivana':'Ndayini'} and the Production Input Stock Ledger has been updated.`);
+    }catch(e){
+      console.error(e);
+      alert('Could not receive stock: '+e.message);
+    }
+  };
+})();
+</script>
 </body>
 </html>
