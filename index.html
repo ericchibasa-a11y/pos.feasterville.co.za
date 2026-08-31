@@ -4153,6 +4153,10 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
     try{
       if(!code) return;
       // Call the original POS add() function directly. It owns the cart state.
+      if(typeof window.feastervilleDirectAdd==='function'){
+        window.feastervilleDirectAdd(null,code);
+        return;
+      }
       if(typeof add==='function'){
         add(code);
         return;
@@ -4177,7 +4181,13 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
       const m=(btn.textContent||'').trim().match(/^([^\s—]+)/);
       code=m?m[1]:'';
     }
-    addItem(code);
+    // IMPORTANT: this older capture handler runs before later product handlers.
+    // Route the click into the newest direct-cart function when available.
+    if(typeof window.feastervilleDirectAdd==='function'){
+      window.feastervilleDirectAdd(e,code);
+    }else{
+      addItem(code);
+    }
   },true);
 
   // Ensure every rendered product button has an explicit code attribute.
@@ -4313,6 +4323,16 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
 })();
 </script>
 <!-- BUILD: DIRECT_CART_FIX_20260831 -->
+
+
+<script>
+/* FEASTERVILLE PRODUCT EVENT CONFLICT FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  window.feastervilleProductClickVersion='V20_EVENT_CONFLICT_FIXED';
+})();
+</script>
+<!-- BUILD: PRODUCT_EVENT_CONFLICT_FIX_20260831 -->
 
 </body>
 </html>
