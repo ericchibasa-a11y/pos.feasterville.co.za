@@ -2821,5 +2821,82 @@ document.addEventListener('DOMContentLoaded',function(){
   };
 })();
 </script>
+
+<script>
+/* STORE SELECTORS FOR ALL PRODUCTION MANAGEMENT SECTIONS */
+(function(){
+ const LABELS={NDAYENI:'Ndayini',SIVANA:'Sivana'};
+ function store(){
+   const u=window.currentUser||{};
+   return u.role==='manager'
+     ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+     : (u.store_code||'NDAYENI');
+ }
+ function markup(id){
+   if(!window.currentUser)return '';
+   if(window.currentUser.role!=='manager')
+     return `<div class="section-store-box"><b>Store:</b> ${LABELS[store()]||store()}</div>`;
+   const s=store();
+   return `<div class="section-store-box" style="margin:10px 0;padding:10px 12px;background:#f2f2f2;border:1px solid #ddd;border-radius:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+     <label for="${id}"><b>Select Store:</b></label>
+     <select id="${id}" class="production-section-store" style="padding:8px 12px;min-width:180px">
+       <option value="NDAYENI" ${s==='NDAYENI'?'selected':''}>Ndayini</option>
+       <option value="SIVANA" ${s==='SIVANA'?'selected':''}>Sivana</option>
+     </select>
+     <span style="font-size:13px">Only data for this store is shown.</span>
+   </div>`;
+ }
+ async function switchStore(value){
+   localStorage.setItem('feastervilleStoreCode',value);
+   const global=document.getElementById('storeLocationSelect');
+   if(global)global.value=value;
+   document.querySelectorAll('.production-section-store').forEach(x=>x.value=value);
+   if(typeof window.refreshStoreProductionData==='function')await window.refreshStoreProductionData();
+   try{if(typeof window.refreshProductionInputs==='function')window.refreshProductionInputs()}catch(_){}
+   try{if(typeof window.renderUsageDetails==='function')window.renderUsageDetails()}catch(_){}
+   try{if(typeof window.loadPIRecipe==='function')window.loadPIRecipe()}catch(_){}
+   inject();
+ }
+ function bind(root=document){
+   root.querySelectorAll('.production-section-store').forEach(sel=>{
+     if(sel.dataset.bound)return;
+     sel.dataset.bound='1';
+     sel.addEventListener('change',()=>switchStore(sel.value).catch(e=>alert('Store refresh failed: '+e.message)));
+   });
+ }
+ function addAfterHeading(panel, headingText, id){
+   if(!panel || panel.querySelector('#'+id))return;
+   const headings=[...panel.querySelectorAll('h2,h3,h4')];
+   let h=headings.find(x=>x.textContent.toLowerCase().includes(headingText.toLowerCase()));
+   if(!h)return;
+   h.insertAdjacentHTML('afterend',markup(id));
+ }
+ function inject(){
+   // Search globally because these headings live in different manager panels.
+   const all=[...document.querySelectorAll('h2,h3,h4')];
+   const specs=[
+     ['Receive Production Input Stock','receiveProductionStoreSelect'],
+     ['Production Input Usage From Sales','usageProductionStoreSelect'],
+     ['Master Production Inputs','masterProductionStoreSelect'],
+     ['Final Product → Production Inputs','recipeProductionStoreSelect']
+   ];
+   specs.forEach(([text,id])=>{
+     if(document.getElementById(id))return;
+     const h=all.find(x=>x.textContent.trim().toLowerCase().includes(text.toLowerCase()));
+     if(h)h.insertAdjacentHTML('afterend',markup(id));
+   });
+   bind(document);
+ }
+ window.refreshProductionSectionStoreSelectors=inject;
+ document.addEventListener('DOMContentLoaded',()=>{
+   let n=0,t=setInterval(()=>{
+     n++; if(window.currentUser){inject(); if(n>20)clearInterval(t)}
+     if(n>100)clearInterval(t);
+   },250);
+ });
+ const obs=new MutationObserver(()=>{if(window.currentUser)inject()});
+ obs.observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
