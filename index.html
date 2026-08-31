@@ -4131,5 +4131,141 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
 </script>
 <!-- BUILD: SIMPLE_DIRECT_SALES_CLICK_FIX_20260831 -->
 
+
+<script>
+/* FEASTERVILLE AUTH DISPLAY CONSISTENCY FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvAuthDisplayConsistencyFix) return;
+  window.__fvAuthDisplayConsistencyFix=true;
+
+  const TOKEN_KEY='feastervilleCloudAccessToken';
+  const REFRESH_KEY='feastervilleCloudRefreshToken';
+  const USER_KEY='feastervilleUser';
+  const U='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function token(){
+    return sessionStorage.getItem(TOKEN_KEY)||'';
+  }
+
+  function setSignedOut(){
+    try{sessionStorage.removeItem(USER_KEY);}catch(_){}
+    window.currentUser=null;
+    try{currentUser=null;}catch(_){}
+    const st=document.getElementById('liveStatus');
+    if(st) st.textContent='Sign in required';
+    const badge=document.getElementById('userBadge');
+    if(badge) badge.textContent='Not logged in';
+    const cloud=document.getElementById('liveUser');
+    if(cloud) cloud.textContent='';
+    const logout=document.getElementById('liveLogout');
+    if(logout) logout.style.display='none';
+    const overlay=document.getElementById('liveLoginOverlay');
+    if(overlay) overlay.style.removeProperty('display');
+    document.body.classList.remove('fv-live-authenticated');
+  }
+
+  function setSignedIn(user){
+    if(!user) return;
+    window.currentUser=user;
+    try{currentUser=user;}catch(_){}
+    try{sessionStorage.setItem(USER_KEY,JSON.stringify(user));}catch(_){}
+
+    const label=user.label || ((user.role==='manager'?'Manager: ':'Salesperson: ')+(user.name||user.username||'User'));
+    const st=document.getElementById('liveStatus');
+    if(st) st.textContent='ONLINE - shared database';
+    const badge=document.getElementById('userBadge');
+    if(badge) badge.textContent=label;
+    const cloud=document.getElementById('liveUser');
+    if(cloud) cloud.textContent=label;
+    const logout=document.getElementById('liveLogout');
+    if(logout) logout.style.display='';
+    const overlay=document.getElementById('liveLoginOverlay');
+    if(overlay) overlay.style.setProperty('display','none','important');
+    document.body.classList.add('fv-live-authenticated');
+
+    // Salespersons must stay locked to their assigned store.
+    const storeSelect=document.getElementById('storeLocationSelect');
+    if(storeSelect && user.role!=='manager'){
+      if(user.store_code) storeSelect.value=user.store_code;
+      storeSelect.disabled=true;
+      const wrap=storeSelect.closest('label') || storeSelect.parentElement;
+      if(wrap) wrap.style.display='none';
+    }else if(storeSelect && user.role==='manager'){
+      storeSelect.disabled=false;
+    }
+  }
+
+  async function get(path, bearer){
+    const r=await fetch(U+path,{
+      headers:{
+        apikey:K,
+        Authorization:'Bearer '+bearer,
+        'Content-Type':'application/json'
+      }
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  async function validateAndRepair(){
+    const t=token();
+    if(!t){
+      setSignedOut();
+      return;
+    }
+    try{
+      const authUser=await get('/auth/v1/user',t);
+      const rows=await get('/rest/v1/pos_profiles?user_id=eq.'+
+        encodeURIComponent(authUser.id)+
+        '&select=user_id,display_name,role,active,store_code',t);
+      const p=Array.isArray(rows)&&rows[0]?rows[0]:null;
+      if(!p || p.active===false) throw new Error('Inactive or missing POS profile');
+
+      const u={
+        id:authUser.id,
+        username:authUser.email,
+        name:p.display_name||authUser.email,
+        display_name:p.display_name||authUser.email,
+        role:p.role||'salesperson',
+        store_code:p.store_code||null,
+        label:(p.role==='manager'?'Manager: ':'Salesperson: ')+(p.display_name||authUser.email)
+      };
+      setSignedIn(u);
+      try{if(typeof applyRights==='function')applyRights();}catch(_){}
+      try{if(typeof window.enforceStoreAccess==='function')window.enforceStoreAccess();}catch(_){}
+    }catch(err){
+      console.error('Session validation failed',err);
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(REFRESH_KEY);
+      localStorage.removeItem(TOKEN_KEY); // remove stale token left by older builds
+      localStorage.removeItem(REFRESH_KEY);
+      setSignedOut();
+    }
+  }
+
+  // Correct inconsistent legacy labels shortly after startup/login without polling.
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',()=>setTimeout(validateAndRepair,350));
+  }else{
+    setTimeout(validateAndRepair,350);
+  }
+
+  // Hook successful profile assignment from any existing login flow.
+  const originalApply=window.applyProfile;
+  if(typeof originalApply==='function'){
+    window.applyProfile=function(user,profile){
+      const result=originalApply.apply(this,arguments);
+      setTimeout(()=>{ if(window.currentUser) setSignedIn(window.currentUser); },0);
+      return result;
+    };
+  }
+
+  window.refreshFeastervilleAuthDisplay=validateAndRepair;
+})();
+</script>
+<!-- BUILD: AUTH_DISPLAY_CONSISTENCY_FIX_20260831 -->
+
 </body>
 </html>
