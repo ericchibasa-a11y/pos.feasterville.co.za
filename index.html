@@ -2999,7 +2999,7 @@ document.addEventListener('DOMContentLoaded',function(){
       : (u.store_code||'NDAYENI');
   }
   function sbHeaders(){
-    const token=localStorage.getItem('feastervilleCloudAccessToken')||'';
+    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
     return {
       'apikey':'sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM',
       'Authorization':'Bearer '+token,
@@ -3102,7 +3102,7 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){
  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
- function token(){return localStorage.getItem('feastervilleCloudAccessToken')||''}
+ function token(){return sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||''}
  function headers(prefer){
    const h={'apikey':KEY,'Authorization':'Bearer '+token(),'Content-Type':'application/json'};
    if(prefer)h['Prefer']=prefer;
@@ -3222,7 +3222,7 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   function headers(){
-    const token=localStorage.getItem('feastervilleCloudAccessToken')||'';
+    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
     return {
       'apikey':KEY,
       'Authorization':'Bearer '+token
@@ -3304,5 +3304,6 @@ document.addEventListener('DOMContentLoaded',function(){
   setTimeout(refreshReceiveDropdown,1200);
 })();
 </script>
+<!-- BUILD: RECEIVE_STOCK_JWT_FIX_20260831 -->
 </body>
 </html>
