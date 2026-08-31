@@ -3579,5 +3579,261 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: LIVE_PRODUCTION_LEDGER_DISPLAY_FIX_20260831 -->
 
+
+<script>
+/* FEASTERVILLE LIVE MANAGER REPORTS / RECONCILIATION SYNC — 2026-08-31
+   Keeps reports driven from live Supabase sales and live production-input counts.
+   Manager only; isolated salesperson mode is untouched. */
+(function(){
+  'use strict';
+  if(window.__fvLiveManagerReportsSync) return;
+  window.__fvLiveManagerReportsSync=true;
+
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  let syncing=false;
+  let lastStore='';
+  let liveRawRows=[];
+
+  function isManager(){
+    return !!(window.currentUser && window.currentUser.role==='manager');
+  }
+  function token(){
+    return sessionStorage.getItem('feastervilleCloudAccessToken') ||
+           localStorage.getItem('feastervilleCloudAccessToken') || '';
+  }
+  function store(){
+    return localStorage.getItem('feastervilleStoreCode') || 'NDAYENI';
+  }
+  function today(){
+    const d=new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  async function getJson(path){
+    const t=token();
+    if(!t) throw new Error('Manager session not available.');
+    const r=await fetch(BASE+'/'+path,{
+      headers:{apikey:KEY,Authorization:'Bearer '+t}
+    });
+    const body=await r.text();
+    if(!r.ok) throw new Error(body||('HTTP '+r.status));
+    return body?JSON.parse(body):[];
+  }
+  function num(v){return Number(v||0);}
+  function mapSale(s){
+    const items=(s.pos_sale_items||[]).map(i=>({
+      code:i.code,
+      name:i.name,
+      category:i.category||'',
+      qty:num(i.qty),
+      price:num(i.price)
+    }));
+    return {
+      id:s.id,
+      orderNo:s.order_no,
+      order_no:s.order_no,
+      date:s.sale_date,
+      sale_date:s.sale_date,
+      time:s.sale_time||'',
+      sale_time:s.sale_time||'',
+      cashier:s.cashier||'',
+      orderType:s.order_type||'TAKEAWAY',
+      order_type:s.order_type||'TAKEAWAY',
+      payment:s.payment||'',
+      received:num(s.received),
+      total:num(s.total),
+      store_code:s.store_code,
+      items:items,
+      pos_sale_items:items
+    };
+  }
+
+  async function syncLiveData(renderAfter=true){
+    if(!isManager() || syncing) return;
+    syncing=true;
+    try{
+      const s=store(), d=today();
+      const [saleRows,inputRows,countRows]=await Promise.all([
+        getJson('pos_sales?store_code=eq.'+encodeURIComponent(s)+
+          '&select=id,order_no,sale_date,sale_time,cashier,order_type,payment,received,total,store_code,pos_sale_items(code,name,category,qty,price)'+
+          '&order=order_no.asc&limit=5000'),
+        getJson('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+
+          '&active=eq.true&select=code,name,unit,category,reorder_level&order=code.asc'),
+        getJson('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+
+          '&count_date=eq.'+encodeURIComponent(d)+
+          '&select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty,updated_at')
+      ]);
+
+      // Replace the legacy in-memory sales array with the selected store's live sales.
+      const mapped=(saleRows||[]).map(mapSale);
+      try{
+        sales.splice(0,sales.length,...mapped);
+      }catch(_){
+        try{ sales=mapped; }catch(__){}
+      }
+      window.liveManagerSales=mapped;
+
+      const cm=Object.fromEntries((countRows||[]).map(x=>[x.input_code,x]));
+      liveRawRows=(inputRows||[]).map(p=>{
+        const c=cm[p.code]||{};
+        const opening=num(c.opening_qty);
+        const stockIn=num(c.received_qty);
+        const sold=num(c.used_qty);
+        const expected=opening+stockIn-sold;
+        const count=num(c.physical_count);
+        const variance=count-expected;
+        return {
+          code:p.code,
+          name:p.name,
+          category:p.category||'',
+          unit:p.unit||'EA',
+          reorder:num(p.reorder_level),
+          opening:opening,
+          stockIn:stockIn,
+          sold:sold,
+          used:sold,
+          expected:expected,
+          count:count,
+          variance:variance
+        };
+      });
+      window.liveRawReconciliationRows=liveRawRows;
+      lastStore=s;
+
+      try{ summary(); }catch(_){}
+      if(renderAfter) renderVisibleSections();
+      const stamp=document.getElementById('fvManagerDataStamp');
+      if(stamp) stamp.textContent='Live data updated '+new Date().toLocaleTimeString();
+    }catch(e){
+      console.error('Live manager report sync failed',e);
+    }finally{
+      syncing=false;
+    }
+  }
+
+  // Production-input reconciliation/report rows now come directly from the DB.
+  try{
+    window.__fvLegacyRawRows=rawRows;
+    rawRows=function(){
+      return liveRawRows.length ? liveRawRows.slice() : window.__fvLegacyRawRows();
+    };
+  }catch(e){console.error(e);}
+
+  function activeType(panelId, fallback){
+    const panel=document.getElementById(panelId);
+    const b=panel && panel.querySelector('.inventory-actions .cat.active');
+    const onclick=b && (b.getAttribute('onclick')||'');
+    const m=onclick.match(/show(?:Report|Recon)\('([^']+)'/);
+    return m?m[1]:fallback;
+  }
+
+  function renderVisibleSections(){
+    if(!isManager()) return;
+
+    const reports=document.getElementById('reportsPanel');
+    if(reports && getComputedStyle(reports).display!=='none'){
+      try{ showReport(activeType('reportsPanel','sales'),null); }catch(e){console.error(e);}
+    }
+
+    const recon=document.getElementById('reconPanel');
+    if(recon && getComputedStyle(recon).display!=='none'){
+      try{ showRecon(activeType('reconPanel','finished'),null); }catch(e){console.error(e);}
+    }
+
+    const inventoryPanel=document.getElementById('inventoryListingPanel');
+    if(inventoryPanel && getComputedStyle(inventoryPanel).display!=='none'){
+      // Preserve whichever inventory/count view is already on screen by refreshing
+      // the most common default master listing only if it is currently rendered.
+      const content=document.getElementById('inventoryMasterContent');
+      if(content && content.innerHTML){
+        const txt=content.textContent||'';
+        try{
+          if(/RAW MATERIAL|PRODUCTION INPUT COUNT SHEET/i.test(txt)) showInvCount('raw',null);
+          else if(/SELLABLE|FINISHED PRODUCT COUNT SHEET/i.test(txt)) showInvCount('finished',null);
+          else showInvMaster('all',null);
+        }catch(e){console.error(e);}
+      }
+    }
+  }
+
+  // Wrap report/reconciliation button actions so a click first refreshes live data,
+  // then draws the requested report.
+  const originalShowReport=window.showReport || (typeof showReport==='function'?showReport:null);
+  if(originalShowReport){
+    window.__fvOriginalShowReport=originalShowReport;
+    window.showReport=function(type,btn){
+      if(!isManager()) return originalShowReport(type,btn);
+      syncLiveData(false).then(()=>originalShowReport(type,btn)).catch(()=>originalShowReport(type,btn));
+    };
+    try{showReport=window.showReport;}catch(_){}
+  }
+
+  const originalShowRecon=window.showRecon || (typeof showRecon==='function'?showRecon:null);
+  if(originalShowRecon){
+    window.__fvOriginalShowRecon=originalShowRecon;
+    window.showRecon=function(type,btn){
+      if(!isManager()) return originalShowRecon(type,btn);
+      syncLiveData(false).then(()=>originalShowRecon(type,btn)).catch(()=>originalShowRecon(type,btn));
+    };
+    try{showRecon=window.showRecon;}catch(_){}
+  }
+
+  function addLiveStamp(){
+    if(!isManager() || document.getElementById('fvManagerDataStamp')) return;
+    const nav=document.getElementById('managerInventoryNav');
+    if(!nav) return;
+    const p=document.createElement('div');
+    p.id='fvManagerDataStamp';
+    p.className='small';
+    p.style.marginTop='8px';
+    p.textContent='Live data synchronising...';
+    nav.appendChild(p);
+  }
+
+  // Store changes must immediately swap all report/reconciliation data.
+  document.addEventListener('change',function(e){
+    if(!isManager() || !e.target) return;
+    if(
+      e.target.id==='storeLocationSelect' ||
+      e.target.id==='receiveProductionStoreSelect' ||
+      e.target.id==='stockMovementStoreSelect' ||
+      e.target.id==='usageProductionStoreSelect' ||
+      e.target.id==='productionCountStoreSelect' ||
+      e.target.classList?.contains('production-section-store')
+    ){
+      const v=e.target.value;
+      if(v==='NDAYENI'||v==='SIVANA') localStorage.setItem('feastervilleStoreCode',v);
+      setTimeout(()=>syncLiveData(true),120);
+    }
+  },true);
+
+  // One manager-only 5 second live refresh; does not run in salesperson mode.
+  let timer=null;
+  function start(){
+    if(timer || !isManager()) return;
+    addLiveStamp();
+    syncLiveData(true);
+    timer=setInterval(function(){
+      if(!isManager()){
+        clearInterval(timer); timer=null; return;
+      }
+      if(document.visibilityState!=='visible') return;
+      if(lastStore!==store()) { syncLiveData(true); return; }
+      syncLiveData(true);
+    },5000);
+  }
+  setTimeout(start,900);
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible') start();
+  });
+
+  window.refreshAllManagerSalesInventoryData=function(){
+    return syncLiveData(true);
+  };
+})();
+</script>
+<!-- BUILD: LIVE_MANAGER_REPORTS_RECON_SYNC_20260831 -->
+
 </body>
 </html>
