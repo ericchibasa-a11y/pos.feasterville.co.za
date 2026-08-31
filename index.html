@@ -2203,7 +2203,7 @@ const U='https://sflyjcgbxbcwspfuzone.supabase.co',K='sb_publishable_iASq-tni6KY
 const $=id=>document.getElementById(id);
 function sm(t,b){if($('staffMessage')){$('staffMessage').textContent=t||'';$('staffMessage').style.color=b?'#a00':'#155b00';}}
 async function ac(p){const t=sessionStorage.getItem(TK)||'';if(!t)throw Error('Sign in as Manager first.');const r=await fetch(U+'/functions/v1/pos-user-admin',{method:'POST',headers:{apikey:K,Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(p)});const x=await r.text();let d={};try{d=x?JSON.parse(x):{};}catch(_){d={error:x};}if(!r.ok)throw Error(d.error||x||('HTTP '+r.status));return d;}
-async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="7">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td>${x.role==='manager'?'ALL STORES':`<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><select id="staffStore_${x.id}"><option value="NDAYENI" ${x.store_code==='NDAYENI'?'selected':''}>Ndayeni</option><option value="SIVANA" ${x.store_code==='SIVANA'?'selected':''}>Sivana</option></select><button type="button" onclick="ftSaveStaffStore('${x.id}')">SAVE STORE</button></div>`}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" onclick="ftStaffPassword('${x.id}',${JSON.stringify(x.email||'')})">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="7">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
+async function loadStaff(){const b=$('staffRows');if(!b)return;b.innerHTML='<tr><td colspan="7">Loading live users...</td></tr>';try{const d=await ac({action:'list'}),u=d.users||[];b.innerHTML=u.length?u.map(x=>`<tr><td>${x.display_name||''}</td><td>${x.email||''}</td><td>${x.role||'salesperson'}</td><td>${x.role==='manager'?'ALL STORES':`<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><select id="staffStore_${x.id}"><option value="NDAYENI" ${x.store_code==='NDAYENI'?'selected':''}>Ndayeni</option><option value="SIVANA" ${x.store_code==='SIVANA'?'selected':''}>Sivana</option></select><button type="button" onclick="ftSaveStaffStore('${x.id}')">SAVE STORE</button></div>`}</td><td><b>${x.active===false?'INACTIVE':'ACTIVE'}</b></td><td>${x.last_sign_in_at?new Date(x.last_sign_in_at).toLocaleString():'Never'}</td><td><button type="button" onclick="ftStaffActive('${x.id}',${x.active===false})">${x.active===false?'ACTIVATE':'DEACTIVATE'}</button> <button type="button" class="fv-live-reset-password" data-user-id="${x.id}" data-user-email="${String(x.email||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">RESET PASSWORD</button></td></tr>`).join(''):'<tr><td colspan="7">No users found.</td></tr>';sm(u.length+' live user(s) loaded.');}catch(e){b.innerHTML='<tr><td colspan="6">'+e.message+'</td></tr>';sm(e.message,true);}}
 window.ftStaffActive=async(id,a)=>{try{await ac({action:'active',user_id:id,active:a});sm(a?'User activated.':'User deactivated.');await loadStaff();}catch(e){sm(e.message,true);}};
 window.ftSaveStaffStore=async function(id){
   const sel=document.getElementById('staffStore_'+id);
@@ -3920,6 +3920,85 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 </script>
 <!-- BUILD: USER_PASSWORD_RESET_UI_20260831 -->
+
+
+<script>
+/* FEASTERVILLE LIVE STAFF RESET PASSWORD CLICK FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvLiveStaffResetClickFix) return;
+  window.__fvLiveStaffResetClickFix=true;
+
+  const FN='https://sflyjcgbxbcwspfuzone.supabase.co/functions/v1/pos-user-admin';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function getToken(){
+    return sessionStorage.getItem('feastervilleCloudAccessToken') ||
+           localStorage.getItem('feastervilleCloudAccessToken') || '';
+  }
+
+  async function callAdmin(body){
+    const tok=getToken();
+    if(!tok) throw new Error('Your manager session has expired. Please sign in again.');
+    const r=await fetch(FN,{
+      method:'POST',
+      headers:{
+        'apikey':KEY,
+        'Authorization':'Bearer '+tok,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    });
+    const raw=await r.text();
+    let data={};
+    try{data=raw?JSON.parse(raw):{};}catch(_){}
+    if(!r.ok || data.error) throw new Error(data.error||raw||('HTTP '+r.status));
+    return data;
+  }
+
+  async function doReset(id,email,button){
+    if(!id){ alert('User ID is missing. Refresh users and try again.'); return; }
+    if(!window.currentUser || window.currentUser.role!=='manager'){
+      alert('Manager access required.'); return;
+    }
+
+    const p1=prompt('Enter NEW password for '+(email||'selected user')+':\n\nMinimum 6 characters.');
+    if(p1===null) return;
+    if(p1.length<6){ alert('Password must be at least 6 characters.'); return; }
+
+    const p2=prompt('Confirm the NEW password:');
+    if(p2===null) return;
+    if(p1!==p2){ alert('Passwords do not match.'); return; }
+
+    const oldText=button?.textContent;
+    if(button){ button.disabled=true; button.textContent='RESETTING...'; }
+
+    try{
+      await callAdmin({action:'password',user_id:id,password:p1});
+      alert('Password reset successfully for '+(email||'user')+'.');
+    }catch(e){
+      alert('Password reset failed: '+e.message);
+    }finally{
+      if(button){ button.disabled=false; button.textContent=oldText||'RESET PASSWORD'; }
+    }
+  }
+
+  // Delegated click handler works even after REFRESH USERS rebuilds the table.
+  document.addEventListener('click',function(e){
+    const btn=e.target.closest && e.target.closest('.fv-live-reset-password');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    doReset(btn.dataset.userId||'',btn.dataset.userEmail||'',btn);
+  },true);
+
+  // Keep compatibility if any older renderer still calls ftStaffPassword().
+  window.ftStaffPassword=function(id,email){
+    return doReset(id,email,null);
+  };
+})();
+</script>
+<!-- BUILD: LIVE_STAFF_RESET_CLICK_FIX_20260831 -->
 
 </body>
 </html>
