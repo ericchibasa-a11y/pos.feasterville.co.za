@@ -1215,6 +1215,124 @@ function printReceipt(){
 })();
 </script>
 
+
+<script>
+/* ===== STORE SWITCH + LEGACY SHARED-INVENTORY BLOCKER v2 ===== */
+(function(){
+  const sel=document.getElementById('storeLocationSelect');
+
+  function store(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (document.getElementById('storeLocationSelect')?.value || localStorage.getItem('feastervilleStoreCode') || 'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+
+  async function hardStoreRefresh(){
+    const sc=store();
+    localStorage.setItem('feastervilleStoreCode',sc);
+
+    // Never allow old shared production arrays to be the source for live screens.
+    try{
+      if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)) rawMaterials.splice(0,rawMaterials.length);
+    }catch(_){}
+
+    if(typeof window.refreshStoreProductionData==='function'){
+      await window.refreshStoreProductionData();
+    }
+
+    // Refresh every production screen from the cloud-selected store.
+    try{ if(typeof window.refreshProductionInputs==='function') window.refreshProductionInputs(); }catch(_){}
+    try{ if(typeof window.loadPIRecipe==='function') window.loadPIRecipe(); }catch(_){}
+    try{ if(typeof window.renderUsageDetails==='function') window.renderUsageDetails(); }catch(_){}
+
+    // Update visible store labels.
+    document.querySelectorAll('[data-production-store]').forEach(e=>e.textContent=sc);
+  }
+
+  if(sel){
+    sel.addEventListener('change',function(){
+      localStorage.setItem('feastervilleStoreCode',sel.value);
+      setTimeout(()=>hardStoreRefresh().catch(console.error),50);
+    });
+  }
+
+  // Old "receiveProductionStock" used localStorage. Route it to the store-aware receipt path.
+  window.receiveProductionStock=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    const code=document.getElementById('piStockInput')?.value;
+    const qty=Number(document.getElementById('piStockQty')?.value||0);
+    if(!code || qty<=0){alert('Select an input and enter a valid quantity.');return;}
+    const p=(window.storeProductionInputs||[]).find(x=>x.code===code);
+    if(!p){alert('This production input does not belong to '+store()+'.');return;}
+
+    // Fill the proper movement controls then use the cloud/store-aware recorder.
+    const mi=document.getElementById('movementInput'); if(mi)mi.value=code;
+    const mq=document.getElementById('movementQty'); if(mq)mq.value=qty;
+    const md=document.getElementById('movementDate'); if(md && !md.value)md.value=new Date().toISOString().slice(0,10);
+    if(typeof window.recordProductionReceipt==='function') await window.recordProductionReceipt();
+    const q=document.getElementById('piStockQty'); if(q)q.value=1;
+    await hardStoreRefresh();
+  };
+
+  // Stop the legacy separated-stock function from writing production inputs to shared localStorage.
+  const oldAddSeparatedStock=window.addSeparatedStock;
+  window.addSeparatedStock=async function(){
+    const type=document.getElementById('stockType')?.value;
+    if(type!=='raw'){
+      if(typeof oldAddSeparatedStock==='function') return oldAddSeparatedStock();
+      return;
+    }
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    const code=document.getElementById('stockProduct')?.value;
+    const qty=Number(document.getElementById('stockQty')?.value||0);
+    if(!code||qty<=0)return;
+    const p=(window.storeProductionInputs||[]).find(x=>x.code===code);
+    if(!p){alert('This production input is not active for '+store()+'.');return;}
+    const mi=document.getElementById('movementInput'); if(mi)mi.value=code;
+    const mq=document.getElementById('movementQty'); if(mq)mq.value=qty;
+    if(typeof window.recordProductionReceipt==='function') await window.recordProductionReceipt();
+    await hardStoreRefresh();
+  };
+
+  // Old stock-in selector must also use only the current store's production inputs.
+  window.reloadSeparatedProducts=function(){
+    const type=document.getElementById('stockType')?.value;
+    const target=document.getElementById('stockProduct');
+    if(!target)return;
+    const rows=type==='raw' ? (window.storeProductionInputs||[]) :
+      ((typeof activeProducts==='function')?activeProducts():[]);
+    target.innerHTML=rows.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    const ex=document.getElementById('stockExplanation');
+    if(ex)ex.textContent=type==='raw'
+      ? `Purchased to produce sold products — ${store()} only.`
+      : 'Purchased ready to sell to customers.';
+  };
+
+  // The legacy raw count setter is not permitted to write shared rawInventory.
+  const oldSetSeparatedCount=window.setSeparatedCount;
+  window.setSeparatedCount=function(type,code,value){
+    if(type==='raw'){
+      return window.setProductionCount(code,value);
+    }
+    if(typeof oldSetSeparatedCount==='function') return oldSetSeparatedCount(type,code,value);
+  };
+
+  document.addEventListener('DOMContentLoaded',function(){
+    let n=0;
+    const t=setInterval(()=>{
+      n++;
+      if(window.currentUser && sessionStorage.getItem('feastervilleCloudAccessToken')){
+        clearInterval(t);
+        hardStoreRefresh().catch(console.error);
+      }else if(n>100) clearInterval(t);
+    },200);
+  });
+
+  window.hardStoreProductionRefresh=hardStoreRefresh;
+})();
+</script>
+
 </body></html>';
 
   w.document.open();
@@ -2603,6 +2721,124 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 </script>
 
+
+<script>
+/* ===== STORE SWITCH + LEGACY SHARED-INVENTORY BLOCKER v2 ===== */
+(function(){
+  const sel=document.getElementById('storeLocationSelect');
+
+  function store(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (document.getElementById('storeLocationSelect')?.value || localStorage.getItem('feastervilleStoreCode') || 'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+
+  async function hardStoreRefresh(){
+    const sc=store();
+    localStorage.setItem('feastervilleStoreCode',sc);
+
+    // Never allow old shared production arrays to be the source for live screens.
+    try{
+      if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)) rawMaterials.splice(0,rawMaterials.length);
+    }catch(_){}
+
+    if(typeof window.refreshStoreProductionData==='function'){
+      await window.refreshStoreProductionData();
+    }
+
+    // Refresh every production screen from the cloud-selected store.
+    try{ if(typeof window.refreshProductionInputs==='function') window.refreshProductionInputs(); }catch(_){}
+    try{ if(typeof window.loadPIRecipe==='function') window.loadPIRecipe(); }catch(_){}
+    try{ if(typeof window.renderUsageDetails==='function') window.renderUsageDetails(); }catch(_){}
+
+    // Update visible store labels.
+    document.querySelectorAll('[data-production-store]').forEach(e=>e.textContent=sc);
+  }
+
+  if(sel){
+    sel.addEventListener('change',function(){
+      localStorage.setItem('feastervilleStoreCode',sel.value);
+      setTimeout(()=>hardStoreRefresh().catch(console.error),50);
+    });
+  }
+
+  // Old "receiveProductionStock" used localStorage. Route it to the store-aware receipt path.
+  window.receiveProductionStock=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    const code=document.getElementById('piStockInput')?.value;
+    const qty=Number(document.getElementById('piStockQty')?.value||0);
+    if(!code || qty<=0){alert('Select an input and enter a valid quantity.');return;}
+    const p=(window.storeProductionInputs||[]).find(x=>x.code===code);
+    if(!p){alert('This production input does not belong to '+store()+'.');return;}
+
+    // Fill the proper movement controls then use the cloud/store-aware recorder.
+    const mi=document.getElementById('movementInput'); if(mi)mi.value=code;
+    const mq=document.getElementById('movementQty'); if(mq)mq.value=qty;
+    const md=document.getElementById('movementDate'); if(md && !md.value)md.value=new Date().toISOString().slice(0,10);
+    if(typeof window.recordProductionReceipt==='function') await window.recordProductionReceipt();
+    const q=document.getElementById('piStockQty'); if(q)q.value=1;
+    await hardStoreRefresh();
+  };
+
+  // Stop the legacy separated-stock function from writing production inputs to shared localStorage.
+  const oldAddSeparatedStock=window.addSeparatedStock;
+  window.addSeparatedStock=async function(){
+    const type=document.getElementById('stockType')?.value;
+    if(type!=='raw'){
+      if(typeof oldAddSeparatedStock==='function') return oldAddSeparatedStock();
+      return;
+    }
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    const code=document.getElementById('stockProduct')?.value;
+    const qty=Number(document.getElementById('stockQty')?.value||0);
+    if(!code||qty<=0)return;
+    const p=(window.storeProductionInputs||[]).find(x=>x.code===code);
+    if(!p){alert('This production input is not active for '+store()+'.');return;}
+    const mi=document.getElementById('movementInput'); if(mi)mi.value=code;
+    const mq=document.getElementById('movementQty'); if(mq)mq.value=qty;
+    if(typeof window.recordProductionReceipt==='function') await window.recordProductionReceipt();
+    await hardStoreRefresh();
+  };
+
+  // Old stock-in selector must also use only the current store's production inputs.
+  window.reloadSeparatedProducts=function(){
+    const type=document.getElementById('stockType')?.value;
+    const target=document.getElementById('stockProduct');
+    if(!target)return;
+    const rows=type==='raw' ? (window.storeProductionInputs||[]) :
+      ((typeof activeProducts==='function')?activeProducts():[]);
+    target.innerHTML=rows.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    const ex=document.getElementById('stockExplanation');
+    if(ex)ex.textContent=type==='raw'
+      ? `Purchased to produce sold products — ${store()} only.`
+      : 'Purchased ready to sell to customers.';
+  };
+
+  // The legacy raw count setter is not permitted to write shared rawInventory.
+  const oldSetSeparatedCount=window.setSeparatedCount;
+  window.setSeparatedCount=function(type,code,value){
+    if(type==='raw'){
+      return window.setProductionCount(code,value);
+    }
+    if(typeof oldSetSeparatedCount==='function') return oldSetSeparatedCount(type,code,value);
+  };
+
+  document.addEventListener('DOMContentLoaded',function(){
+    let n=0;
+    const t=setInterval(()=>{
+      n++;
+      if(window.currentUser && sessionStorage.getItem('feastervilleCloudAccessToken')){
+        clearInterval(t);
+        hardStoreRefresh().catch(console.error);
+      }else if(n>100) clearInterval(t);
+    },200);
+  });
+
+  window.hardStoreProductionRefresh=hardStoreRefresh;
+})();
+</script>
+
 </body></html>';
     w.document.open();w.document.write(html);w.document.close();w.focus();
     setTimeout(function(){w.print();},200);
@@ -3878,6 +4114,124 @@ document.addEventListener('DOMContentLoaded',function(){
       try{renderUsageDetails();}catch(_){}
     };
   }
+})();
+</script>
+
+
+<script>
+/* ===== STORE SWITCH + LEGACY SHARED-INVENTORY BLOCKER v2 ===== */
+(function(){
+  const sel=document.getElementById('storeLocationSelect');
+
+  function store(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (document.getElementById('storeLocationSelect')?.value || localStorage.getItem('feastervilleStoreCode') || 'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+
+  async function hardStoreRefresh(){
+    const sc=store();
+    localStorage.setItem('feastervilleStoreCode',sc);
+
+    // Never allow old shared production arrays to be the source for live screens.
+    try{
+      if(typeof rawMaterials!=='undefined' && Array.isArray(rawMaterials)) rawMaterials.splice(0,rawMaterials.length);
+    }catch(_){}
+
+    if(typeof window.refreshStoreProductionData==='function'){
+      await window.refreshStoreProductionData();
+    }
+
+    // Refresh every production screen from the cloud-selected store.
+    try{ if(typeof window.refreshProductionInputs==='function') window.refreshProductionInputs(); }catch(_){}
+    try{ if(typeof window.loadPIRecipe==='function') window.loadPIRecipe(); }catch(_){}
+    try{ if(typeof window.renderUsageDetails==='function') window.renderUsageDetails(); }catch(_){}
+
+    // Update visible store labels.
+    document.querySelectorAll('[data-production-store]').forEach(e=>e.textContent=sc);
+  }
+
+  if(sel){
+    sel.addEventListener('change',function(){
+      localStorage.setItem('feastervilleStoreCode',sel.value);
+      setTimeout(()=>hardStoreRefresh().catch(console.error),50);
+    });
+  }
+
+  // Old "receiveProductionStock" used localStorage. Route it to the store-aware receipt path.
+  window.receiveProductionStock=async function(){
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    const code=document.getElementById('piStockInput')?.value;
+    const qty=Number(document.getElementById('piStockQty')?.value||0);
+    if(!code || qty<=0){alert('Select an input and enter a valid quantity.');return;}
+    const p=(window.storeProductionInputs||[]).find(x=>x.code===code);
+    if(!p){alert('This production input does not belong to '+store()+'.');return;}
+
+    // Fill the proper movement controls then use the cloud/store-aware recorder.
+    const mi=document.getElementById('movementInput'); if(mi)mi.value=code;
+    const mq=document.getElementById('movementQty'); if(mq)mq.value=qty;
+    const md=document.getElementById('movementDate'); if(md && !md.value)md.value=new Date().toISOString().slice(0,10);
+    if(typeof window.recordProductionReceipt==='function') await window.recordProductionReceipt();
+    const q=document.getElementById('piStockQty'); if(q)q.value=1;
+    await hardStoreRefresh();
+  };
+
+  // Stop the legacy separated-stock function from writing production inputs to shared localStorage.
+  const oldAddSeparatedStock=window.addSeparatedStock;
+  window.addSeparatedStock=async function(){
+    const type=document.getElementById('stockType')?.value;
+    if(type!=='raw'){
+      if(typeof oldAddSeparatedStock==='function') return oldAddSeparatedStock();
+      return;
+    }
+    if(!window.currentUser || window.currentUser.role!=='manager'){alert('Manager access required.');return;}
+    const code=document.getElementById('stockProduct')?.value;
+    const qty=Number(document.getElementById('stockQty')?.value||0);
+    if(!code||qty<=0)return;
+    const p=(window.storeProductionInputs||[]).find(x=>x.code===code);
+    if(!p){alert('This production input is not active for '+store()+'.');return;}
+    const mi=document.getElementById('movementInput'); if(mi)mi.value=code;
+    const mq=document.getElementById('movementQty'); if(mq)mq.value=qty;
+    if(typeof window.recordProductionReceipt==='function') await window.recordProductionReceipt();
+    await hardStoreRefresh();
+  };
+
+  // Old stock-in selector must also use only the current store's production inputs.
+  window.reloadSeparatedProducts=function(){
+    const type=document.getElementById('stockType')?.value;
+    const target=document.getElementById('stockProduct');
+    if(!target)return;
+    const rows=type==='raw' ? (window.storeProductionInputs||[]) :
+      ((typeof activeProducts==='function')?activeProducts():[]);
+    target.innerHTML=rows.map(p=>`<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+    const ex=document.getElementById('stockExplanation');
+    if(ex)ex.textContent=type==='raw'
+      ? `Purchased to produce sold products — ${store()} only.`
+      : 'Purchased ready to sell to customers.';
+  };
+
+  // The legacy raw count setter is not permitted to write shared rawInventory.
+  const oldSetSeparatedCount=window.setSeparatedCount;
+  window.setSeparatedCount=function(type,code,value){
+    if(type==='raw'){
+      return window.setProductionCount(code,value);
+    }
+    if(typeof oldSetSeparatedCount==='function') return oldSetSeparatedCount(type,code,value);
+  };
+
+  document.addEventListener('DOMContentLoaded',function(){
+    let n=0;
+    const t=setInterval(()=>{
+      n++;
+      if(window.currentUser && sessionStorage.getItem('feastervilleCloudAccessToken')){
+        clearInterval(t);
+        hardStoreRefresh().catch(console.error);
+      }else if(n>100) clearInterval(t);
+    },200);
+  });
+
+  window.hardStoreProductionRefresh=hardStoreRefresh;
 })();
 </script>
 
