@@ -710,9 +710,16 @@ function cats(){
  document.getElementById('categories').innerHTML=c.map(x=>`<button class="cat ${x==='ALL'?'active':''}" onclick="filterCat('${x.replaceAll("'","\\'")}',this)">${x}</button>`).join('');
 }
 function filterCat(cat,btn){
- document.querySelectorAll('.cat').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
- document.getElementById('products').innerHTML=activeProducts().filter(p=>cat==='ALL'||p.category===cat).map(p=>`
- <button class="product" onclick="add('${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
+ document.querySelectorAll('.cat').forEach(b=>b.classList.remove('active'));
+ if(btn && btn.classList) btn.classList.add('active');
+ else {
+   const allBtn=[...document.querySelectorAll('.cat')].find(b=>(b.textContent||'').trim()===(cat||'ALL'));
+   if(allBtn) allBtn.classList.add('active');
+ }
+ const box=document.getElementById('products');
+ if(!box)return;
+ box.innerHTML=activeProducts().filter(p=>cat==='ALL'||p.category===cat).map(p=>`
+ <button type="button" class="product" data-product-code="${p.code}" onclick="add('${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
 }
 function add(code){
  const p=activeProducts().find(x=>x.code===code); if(!p)return;
@@ -4057,6 +4064,82 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
 })();
 </script>
 <!-- BUILD: LOGIN_OVERLAY_RECOVERY_20260831 -->
+
+
+<script>
+/* FEASTERVILLE SALESPERSON SALES RESPONSE FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvSalespersonSalesResponseFix) return;
+  window.__fvSalespersonSalesResponseFix=true;
+
+  function makeSellingScreenReady(){
+    const u=window.currentUser;
+    if(!u) return;
+
+    // Selling controls are available to both manager and salesperson.
+    ['categories','products','cart'].forEach(function(id){
+      const n=document.getElementById(id);
+      if(n){ n.style.pointerEvents='auto'; n.style.opacity='1'; }
+    });
+
+    const complete=[...document.querySelectorAll('button')].find(function(b){
+      return /COMPLETE SALE/i.test(b.textContent||'');
+    });
+    if(complete){
+      complete.disabled=false;
+      complete.style.pointerEvents='auto';
+      complete.style.opacity='1';
+    }
+
+    try{ if(typeof cats==='function') cats(); }catch(e){console.error(e);}
+    try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(e){console.error(e);}
+    try{ if(typeof render==='function') render(); }catch(e){console.error(e);}
+
+    // Load the live menu for the salesperson's assigned store after profile
+    // and token are both available.
+    try{
+      if(typeof window.loadLiveMenuForStore==='function'){
+        Promise.resolve(window.loadLiveMenuForStore()).then(function(){
+          try{ if(typeof cats==='function') cats(); }catch(_){}
+          try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(_){}
+        }).catch(console.error);
+      }
+    }catch(e){console.error(e);}
+  }
+
+  // Delegated fallback for product buttons. This remains active even when the
+  // live menu rebuilds the product grid.
+  document.addEventListener('click',function(e){
+    const b=e.target.closest && e.target.closest('.product[data-product-code]');
+    if(!b) return;
+    const code=b.getAttribute('data-product-code');
+    if(!code) return;
+    // If the inline onclick already changed the cart, do not double-add.
+    // We only intervene when onclick is absent.
+    if(!b.getAttribute('onclick') && typeof window.add==='function'){
+      e.preventDefault();
+      window.add(code);
+    }
+  },false);
+
+  let tries=0;
+  const timer=setInterval(function(){
+    tries++;
+    if(window.currentUser){
+      makeSellingScreenReady();
+      if(tries>20) clearInterval(timer);
+    }
+    if(tries>80) clearInterval(timer);
+  },250);
+
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden) makeSellingScreenReady();
+  });
+  window.refreshSalespersonSellingScreen=makeSellingScreenReady;
+})();
+</script>
+<!-- BUILD: SALESPERSON_SALES_RESPONSE_FIX_20260831 -->
 
 </body>
 </html>
