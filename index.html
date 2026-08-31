@@ -3401,5 +3401,183 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: SERVER_SIDE_USAGE_AND_MANAGER_PRODUCTION_RESTORE_20260831 -->
 
+
+<script>
+/* FEASTERVILLE LIVE PRODUCTION LEDGER DISPLAY FIX — 2026-08-31
+   Manager-only, lightweight DB refresh. No salesperson polling. */
+(function(){
+  'use strict';
+  if(window.__fvLiveProductionLedgerDisplayFix) return;
+  window.__fvLiveProductionLedgerDisplayFix=true;
+
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  function isManager(){
+    return !!(window.currentUser && window.currentUser.role==='manager');
+  }
+  function token(){
+    return sessionStorage.getItem('feastervilleCloudAccessToken') ||
+           localStorage.getItem('feastervilleCloudAccessToken') || '';
+  }
+  function store(){
+    return localStorage.getItem('feastervilleStoreCode') || 'NDAYENI';
+  }
+  function today(){
+    const d=new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  async function getJson(path){
+    const t=token();
+    if(!t) throw new Error('Manager session not available.');
+    const r=await fetch(BASE+'/'+path,{
+      headers:{apikey:KEY,Authorization:'Bearer '+t}
+    });
+    const text=await r.text();
+    if(!r.ok) throw new Error(text||('HTTP '+r.status));
+    return text?JSON.parse(text):[];
+  }
+  function n(v){ return Number(v||0); }
+  function fmt(v){ return n(v).toFixed(2); }
+
+  async function refreshLedger(){
+    if(!isManager()) return;
+    const tbody=document.getElementById('productionLedgerBody');
+    if(!tbody) return;
+
+    const s=store(), d=today();
+    const [inputs,counts]=await Promise.all([
+      getJson('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+
+        '&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
+      getJson('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+
+        '&count_date=eq.'+encodeURIComponent(d)+
+        '&select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty,updated_at')
+    ]);
+
+    const map=Object.fromEntries((counts||[]).map(x=>[x.input_code,x]));
+    let receivedTotal=0, usedTotal=0, reorderItems=0;
+
+    tbody.innerHTML=(inputs||[]).map(p=>{
+      const c=map[p.code]||{};
+      const opening=n(c.opening_qty);
+      const received=n(c.received_qty);
+      const used=n(c.used_qty);
+      const expected=opening+received-used;
+      const physical=n(c.physical_count);
+      const variance=physical-expected;
+      const reorder=n(p.reorder_level);
+      receivedTotal+=received;
+      usedTotal+=used;
+      if(expected<=reorder) reorderItems++;
+
+      const status=expected<=0
+        ? '<span class="badge bad">OUT</span>'
+        : expected<=reorder
+          ? '<span class="badge warn">REORDER</span>'
+          : '<span class="badge ok">OK</span>';
+
+      return '<tr>'+
+        '<td>'+p.code+'</td>'+
+        '<td>'+p.name+'</td>'+
+        '<td>'+p.unit+'</td>'+
+        '<td>'+fmt(opening)+'</td>'+
+        '<td>'+fmt(received)+'</td>'+
+        '<td><b>'+fmt(used)+'</b></td>'+
+        '<td>'+fmt(expected)+'</td>'+
+        '<td>'+fmt(physical)+'</td>'+
+        '<td>'+fmt(variance)+'</td>'+
+        '<td>'+fmt(reorder)+'</td>'+
+        '<td>'+status+'</td>'+
+      '</tr>';
+    }).join('');
+
+    const put=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    put('piCount',(inputs||[]).length);
+    put('piReceived',fmt(receivedTotal));
+    put('piUsed',fmt(usedTotal));
+    put('piReorder',reorderItems);
+
+    const countBody=document.getElementById('productionCountBody');
+    if(countBody){
+      countBody.innerHTML=(inputs||[]).map(p=>{
+        const c=map[p.code]||{};
+        const opening=n(c.opening_qty),received=n(c.received_qty),used=n(c.used_qty);
+        const expected=opening+received-used,physical=n(c.physical_count),variance=physical-expected;
+        const action=variance<0?'INVESTIGATE SHORTAGE':variance>0?'CHECK SURPLUS':'OK';
+        return '<tr>'+
+          '<td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td>'+
+          '<td>'+fmt(expected)+'</td>'+
+          '<td><input type="number" min="0" step="0.01" value="'+physical+
+            '" onchange="setProductionCount(\\''+p.code+'\\',this.value)"></td>'+
+          '<td>'+fmt(variance)+'</td><td>'+action+'</td>'+
+        '</tr>';
+      }).join('');
+    }
+
+    const stamp=document.getElementById('fvLedgerRefreshStamp');
+    if(stamp) stamp.textContent='Last updated: '+new Date().toLocaleTimeString();
+  }
+
+  window.refreshLiveProductionLedger=refreshLedger;
+  window.refreshManagerProductionInputs=async function(){
+    try{ if(typeof window.refreshStoreProductionData==='function') await window.refreshStoreProductionData(); }catch(e){console.error(e);}
+    try{ await refreshLedger(); }catch(e){console.error(e);}
+  };
+
+  function addRefreshControl(){
+    if(!isManager()) return;
+    const body=document.getElementById('productionLedgerBody');
+    if(!body) return;
+    const table=body.closest('table');
+    if(!table || document.getElementById('fvLedgerRefreshBtn')) return;
+    const bar=document.createElement('div');
+    bar.style.cssText='display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap';
+    bar.innerHTML='<button type="button" id="fvLedgerRefreshBtn" class="primary">REFRESH LEDGER</button>'+
+      '<span id="fvLedgerRefreshStamp" class="small"></span>';
+    table.parentElement.insertBefore(bar,table);
+    document.getElementById('fvLedgerRefreshBtn').onclick=function(){
+      refreshLedger().catch(e=>alert('Ledger refresh failed: '+e.message));
+    };
+  }
+
+  // Refresh on manager store changes.
+  document.addEventListener('change',function(e){
+    if(!isManager()) return;
+    if(e.target && (
+      e.target.id==='storeLocationSelect' ||
+      e.target.id==='receiveProductionStoreSelect' ||
+      e.target.id==='stockMovementStoreSelect' ||
+      e.target.id==='usageProductionStoreSelect' ||
+      e.target.classList?.contains('production-section-store')
+    )){
+      const val=e.target.value;
+      if(val==='NDAYENI'||val==='SIVANA') localStorage.setItem('feastervilleStoreCode',val);
+      setTimeout(()=>refreshLedger().catch(console.error),150);
+    }
+  },true);
+
+  // Lightweight manager-only auto refresh. This never runs for isolated salespersons.
+  let timer=null;
+  function start(){
+    if(timer || !isManager()) return;
+    addRefreshControl();
+    refreshLedger().catch(console.error);
+    timer=setInterval(function(){
+      if(!isManager()){ clearInterval(timer); timer=null; return; }
+      if(document.visibilityState!=='visible') return;
+      const body=document.getElementById('productionLedgerBody');
+      if(!body) return;
+      refreshLedger().catch(console.error);
+    },5000);
+  }
+
+  setTimeout(start,1000);
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible') start();
+  });
+})();
+</script>
+<!-- BUILD: LIVE_PRODUCTION_LEDGER_DISPLAY_FIX_20260831 -->
+
 </body>
 </html>
