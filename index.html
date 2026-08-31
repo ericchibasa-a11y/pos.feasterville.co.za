@@ -3362,5 +3362,44 @@ document.addEventListener('DOMContentLoaded',function(){
 <!-- BUILD: ISOLATED_SALESPERSON_MODE_20260831 -->
 
 <!-- BUILD: REMOVE_INVENTORY_LISTING_RIGHTS_FROM_SALESPERSON_20260831 -->
+
+<script>
+/* FEASTERVILLE MANAGER PRODUCTION INPUT RESTORE — DB usage is now server-side */
+(function(){
+  'use strict';
+  if(window.__fvManagerProductionRestore) return;
+  window.__fvManagerProductionRestore=true;
+
+  function restoreManagerProduction(){
+    const u=window.currentUser;
+    if(!u || u.role!=='manager') return;
+    try{
+      if(typeof window.refreshStoreProductionData==='function')
+        window.refreshStoreProductionData().catch(console.error);
+    }catch(e){console.error(e)}
+    try{
+      if(typeof window.refreshLiveProductionLedger==='function')
+        window.refreshLiveProductionLedger().catch(console.error);
+    }catch(e){console.error(e)}
+    try{
+      if(typeof window.refreshFinalProductRecipeBuilder==='function')
+        window.refreshFinalProductRecipeBuilder().catch(console.error);
+    }catch(e){console.error(e)}
+  }
+
+  // Manager-only refresh after authentication. No salesperson polling added.
+  window.refreshManagerProductionInputs=restoreManagerProduction;
+  document.addEventListener('click',function(e){
+    const t=e.target;
+    if(!t) return;
+    if((t.id==='managerInventoryNav') || /Production Inputs/i.test(t.textContent||'')){
+      setTimeout(restoreManagerProduction,50);
+    }
+  });
+  setTimeout(restoreManagerProduction,900);
+})();
+</script>
+<!-- BUILD: SERVER_SIDE_USAGE_AND_MANAGER_PRODUCTION_RESTORE_20260831 -->
+
 </body>
 </html>
