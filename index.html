@@ -1938,7 +1938,7 @@ document.addEventListener('DOMContentLoaded',function(){
     const profile = await getProfile(authData.user);
     applyProfile(authData.user, profile);
 
-    el('liveLoginOverlay').style.display = 'none';
+    el('liveLoginOverlay').style.setProperty('display','none','important');
     el('liveLogout').style.display = '';
     setStatus('ONLINE - shared database');
 
@@ -1959,8 +1959,20 @@ document.addEventListener('DOMContentLoaded',function(){
         body:JSON.stringify({email:email, password:password})
       });
 
-      await activate(data);
+      // Credentials have been accepted by Supabase. Remove the login overlay
+      // immediately and with !important so no legacy CSS can keep it visible.
+      const loginOverlay = el('liveLoginOverlay');
+      if (loginOverlay) loginOverlay.style.setProperty('display','none','important');
       setMessage('');
+      try {
+        await activate(data);
+      } catch (activateErr) {
+        // Authentication itself succeeded. Keep the POS open and surface any
+        // secondary data-load issue in the top status instead of trapping the
+        // user forever on the login screen.
+        console.error('Post-login initialization warning:', activateErr);
+        setStatus('ONLINE - some data still loading');
+      }
     } catch (err) {
       console.error(err);
       setMessage(err.message, true);
@@ -3999,6 +4011,52 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 </script>
 <!-- BUILD: LIVE_STAFF_RESET_CLICK_FIX_20260831 -->
+
+
+<style>
+body.fv-live-authenticated #liveLoginOverlay{display:none!important}
+</style>
+<script>
+/* FEASTERVILLE LOGIN OVERLAY RECOVERY — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvLoginOverlayRecovery) return;
+  window.__fvLoginOverlayRecovery=true;
+
+  const TOKEN_KEY='feastervilleCloudAccessToken';
+
+  function token(){
+    return sessionStorage.getItem(TOKEN_KEY) ||
+           localStorage.getItem(TOKEN_KEY) || '';
+  }
+
+  function releaseOverlay(){
+    const t=token();
+    if(!t) return false;
+    const overlay=document.getElementById('liveLoginOverlay');
+    if(overlay) overlay.style.setProperty('display','none','important');
+    document.body.classList.add('fv-live-authenticated');
+    const logout=document.getElementById('liveLogout');
+    if(logout) logout.style.display='';
+    return true;
+  }
+
+  // Login stores the access token before profile/state loading. If any
+  // secondary renderer is slow or throws, do not leave the authenticated
+  // user trapped behind the login overlay.
+  let tries=0;
+  const timer=setInterval(function(){
+    tries++;
+    if(releaseOverlay() || tries>120) clearInterval(timer);
+  },250);
+
+  window.addEventListener('storage',releaseOverlay);
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden) releaseOverlay();
+  });
+})();
+</script>
+<!-- BUILD: LOGIN_OVERLAY_RECOVERY_20260831 -->
 
 </body>
 </html>
