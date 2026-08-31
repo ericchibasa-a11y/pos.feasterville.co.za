@@ -2898,5 +2898,95 @@ document.addEventListener('DOMContentLoaded',function(){
  obs.observe(document.documentElement,{childList:true,subtree:true});
 })();
 </script>
+
+<script>
+/* STORE SELECTOR — PRODUCTION INPUT STOCK MOVEMENTS */
+(function(){
+  function activeStore(){
+    const u=window.currentUser||{};
+    return u.role==='manager'
+      ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+      : (u.store_code||'NDAYENI');
+  }
+
+  function makeSelector(){
+    const u=window.currentUser;
+    if(!u) return '';
+    const s=activeStore();
+
+    if(u.role!=='manager'){
+      return `<div id="stockMovementStoreHolder" style="margin:10px 0;padding:10px 12px;background:#f2f2f2;border-radius:8px">
+        <b>Store:</b> ${s==='SIVANA'?'Sivana':'Ndayini'}
+      </div>`;
+    }
+
+    return `<div id="stockMovementStoreHolder" style="margin:10px 0;padding:10px 12px;background:#f2f2f2;border:1px solid #ddd;border-radius:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label for="stockMovementStoreSelect"><b>Select Store:</b></label>
+      <select id="stockMovementStoreSelect" class="production-section-store" style="padding:8px 12px;min-width:180px">
+        <option value="NDAYENI" ${s==='NDAYENI'?'selected':''}>Ndayini</option>
+        <option value="SIVANA" ${s==='SIVANA'?'selected':''}>Sivana</option>
+      </select>
+      <span style="font-size:13px">Purchases/receipts and stock movement data are for this store only.</span>
+    </div>`;
+  }
+
+  async function changeStore(value){
+    localStorage.setItem('feastervilleStoreCode',value);
+
+    document.querySelectorAll('.production-section-store').forEach(el=>{
+      if(el.tagName==='SELECT') el.value=value;
+    });
+
+    const global=document.getElementById('storeLocationSelect');
+    if(global) global.value=value;
+
+    if(typeof window.refreshStoreProductionData==='function'){
+      await window.refreshStoreProductionData();
+    }
+    if(typeof window.refreshProductionInputs==='function'){
+      window.refreshProductionInputs();
+    }
+    if(typeof window.refreshProductionSectionStoreSelectors==='function'){
+      window.refreshProductionSectionStoreSelectors();
+    }
+    inject();
+  }
+
+  function inject(){
+    if(document.getElementById('stockMovementStoreHolder')) return;
+
+    const headings=[...document.querySelectorAll('h2,h3,h4')];
+    const heading=headings.find(h =>
+      h.textContent.trim().toLowerCase().includes('production input stock movements')
+    );
+    if(!heading) return;
+
+    heading.insertAdjacentHTML('afterend',makeSelector());
+
+    const sel=document.getElementById('stockMovementStoreSelect');
+    if(sel){
+      sel.addEventListener('change',function(){
+        changeStore(this.value).catch(e=>alert('Store refresh failed: '+e.message));
+      });
+    }
+  }
+
+  window.refreshStockMovementStoreSelector=inject;
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    let n=0;
+    const timer=setInterval(()=>{
+      n++;
+      if(window.currentUser) inject();
+      if(n>100 || (window.currentUser && n>20)) clearInterval(timer);
+    },250);
+  });
+
+  const observer=new MutationObserver(()=>{
+    if(window.currentUser) inject();
+  });
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
