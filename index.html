@@ -719,7 +719,7 @@ function filterCat(cat,btn){
  const box=document.getElementById('products');
  if(!box)return;
  box.innerHTML=activeProducts().filter(p=>cat==='ALL'||p.category===cat).map(p=>`
- <button type="button" class="product" data-product-code="${p.code}" onclick="add('${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
+ <button type="button" class="product" data-product-code="${p.code}" onclick="return feastervilleDirectAdd(event,'${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
 }
 function add(code){
  const p=activeProducts().find(x=>x.code===code); if(!p)return;
@@ -4205,6 +4205,114 @@ body.fv-live-authenticated #liveLoginOverlay{display:none!important}
 })();
 </script>
 <!-- BUILD: PRODUCT_CLICK_HARD_FIX_20260831 -->
+
+
+<script>
+/* FEASTERVILLE DIRECT CART FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvDirectCartFix) return;
+  window.__fvDirectCartFix=true;
+
+  function toast(msg, bad){
+    let n=document.getElementById('fvSalesToast');
+    if(!n){
+      n=document.createElement('div');
+      n.id='fvSalesToast';
+      n.style.cssText='position:fixed;right:14px;bottom:14px;z-index:200000;padding:12px 16px;border-radius:8px;background:#222;color:#fff;font-weight:bold;box-shadow:0 2px 12px #0005';
+      document.body.appendChild(n);
+    }
+    n.style.background=bad?'#a40000':'#315d00';
+    n.textContent=msg;
+    n.style.display='block';
+    clearTimeout(n._t);
+    n._t=setTimeout(()=>n.style.display='none',1800);
+  }
+
+  function manualRender(){
+    const body=document.getElementById('cart');
+    if(!body) throw new Error('Cart area is missing.');
+    body.innerHTML=cart.map(i=>`<tr><td><b>${i.code}</b><br><span class="small">${i.name}</span></td>
+      <td class="qty"><button type="button" onclick="changeQty('${i.code}',-1)">−</button> ${i.qty}
+      <button type="button" onclick="changeQty('${i.code}',1)">+</button></td>
+      <td>${money(i.qty*i.price)}</td>
+      <td><button type="button" class="remove" onclick="changeQty('${i.code}',-999)">×</button></td></tr>`).join('');
+    const sub=cart.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0);
+    const d=document.getElementById('discount');
+    const disc=Number(d?.value||0);
+    const total=Math.max(sub-disc,0);
+    const rec=Number(document.getElementById('received')?.value||0);
+    if(document.getElementById('subtotal')) document.getElementById('subtotal').textContent=money(sub);
+    if(document.getElementById('total')) document.getElementById('total').textContent=money(total);
+    if(document.getElementById('change')) document.getElementById('change').textContent=money(Math.max(rec-total,0));
+  }
+
+  window.feastervilleDirectAdd=function(ev,code){
+    try{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      const list=typeof activeProducts==='function' ? activeProducts() : [];
+      const p=list.find(x=>String(x.code)===String(code));
+      if(!p){
+        toast('Item '+code+' is not available for this store.',true);
+        return false;
+      }
+
+      const existing=cart.find(i=>String(i.code)===String(code));
+      if(existing) existing.qty=Number(existing.qty||0)+1;
+      else cart.push({
+        code:p.code,
+        name:p.name,
+        category:p.category||'',
+        price:Number(p.price||0),
+        qty:1
+      });
+
+      try{ render(); }
+      catch(err){
+        console.error('Normal cart render failed; using fallback.',err);
+        manualRender();
+      }
+
+      toast('Added '+p.code+' to order');
+      return false;
+    }catch(err){
+      console.error('Direct add failed',err);
+      toast('Add failed: '+(err?.message||err),true);
+      return false;
+    }
+  };
+
+  function wire(){
+    document.querySelectorAll('#products .product').forEach(function(btn){
+      btn.type='button';
+      btn.disabled=false;
+      btn.style.setProperty('pointer-events','auto','important');
+      btn.style.setProperty('touch-action','manipulation','important');
+      const code=btn.dataset.productCode || ((btn.textContent||'').trim().match(/^([^\s—]+)/)||[])[1] || '';
+      if(code){
+        btn.dataset.productCode=code;
+        btn.onclick=function(ev){ return window.feastervilleDirectAdd(ev,code); };
+      }
+    });
+  }
+
+  const start=function(){
+    const box=document.getElementById('products');
+    if(!box) return;
+    new MutationObserver(wire).observe(box,{childList:true,subtree:true});
+    wire();
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+  else start();
+
+  // Re-wire after live store menu/profile refreshes.
+  setInterval(wire,750);
+})();
+</script>
+<!-- BUILD: DIRECT_CART_FIX_20260831 -->
 
 </body>
 </html>
