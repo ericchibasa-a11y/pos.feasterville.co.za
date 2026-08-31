@@ -1942,6 +1942,34 @@ document.addEventListener('DOMContentLoaded',function(){
     el('liveLogout').style.display = '';
     setStatus('ONLINE - shared database');
 
+    // Salespersons only need their assigned store selling screen.
+    // Do NOT run the heavy manager production/report rebuilds during login.
+    if (window.currentUser && window.currentUser.role === 'salesperson') {
+      try {
+        localStorage.setItem('feastervilleStoreCode', window.currentUser.store_code || 'NDAYENI');
+      } catch (_) {}
+
+      try {
+        if (typeof window.loadLiveMenuForStore === 'function') {
+          await window.loadLiveMenuForStore();
+        } else {
+          try { if (typeof rebuildSalesCatalogueReliable === 'function') rebuildSalesCatalogueReliable(); } catch (_) {}
+          try { if (typeof cats === 'function') cats(); } catch (_) {}
+          try { if (typeof filterCat === 'function') filterCat('ALL', null); } catch (_) {}
+        }
+      } catch (menuErr) {
+        console.error('Salesperson menu load warning', menuErr);
+      }
+
+      // Load sales history asynchronously after the POS is already open.
+      setTimeout(function(){
+        try { pullSales().catch(console.error); } catch (_) {}
+      }, 100);
+
+      return;
+    }
+
+    // Managers keep the full state/report initialization.
     await pullState();
     await pullSales();
   }
@@ -2584,7 +2612,9 @@ document.addEventListener('DOMContentLoaded',function(){
     const timer=setInterval(function(){
       tries++;
       if(window.currentUser && sessionStorage.getItem(TOKEN_KEY)){
-        loadLiveMenuForStore().catch(console.error);
+        if (window.currentUser.role !== 'salesperson') {
+          loadLiveMenuForStore().catch(console.error);
+        }
         clearInterval(timer);
       }else if(tries>80){
         clearInterval(timer);
@@ -2642,6 +2672,7 @@ document.addEventListener('DOMContentLoaded',function(){
  }
  async function load(){
    if(!tok()||!window.currentUser)return;
+   if(window.currentUser.role==='salesperson') return;
    const store=sc(); localStorage.setItem('feastervilleStoreCode',store);
    const [ins,cnts,recs]=await Promise.all([
      api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&select=code,name,unit,category,reorder_level&order=code.asc'),
@@ -3305,5 +3336,64 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 </script>
 <!-- BUILD: RECEIVE_STOCK_JWT_FIX_20260831 -->
+
+<script>
+/* FEASTERVILLE LIGHTWEIGHT SALESPERSON LOGIN FIX — 2026-08-31 */
+(function(){
+  'use strict';
+  if(window.__fvLightSalespersonLoginFix) return;
+  window.__fvLightSalespersonLoginFix=true;
+
+  const URL='https://sflyjcgbxbcwspfuzone.supabase.co';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  window.loadLightSalespersonMenu=async function(){
+    const u=window.currentUser;
+    if(!u || u.role!=='salesperson') return;
+    const token=sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+    if(!token) return;
+    const store=u.store_code||'NDAYENI';
+
+    const r=await fetch(URL+'/rest/v1/pos_store_products?store_code=eq.'+
+      encodeURIComponent(store)+'&active=eq.true&select=code,name,category,price,active&order=category.asc,code.asc',{
+      headers:{
+        apikey:KEY,
+        Authorization:'Bearer '+token,
+        'Content-Type':'application/json'
+      }
+    });
+    const text=await r.text();
+    if(!r.ok) throw new Error(text||('HTTP '+r.status));
+    const items=text?JSON.parse(text):[];
+
+    try{
+      if(typeof liveStoreProducts!=='undefined'){
+        liveStoreProducts[store]=items;
+      }
+    }catch(_){}
+    window.liveStoreProducts=window.liveStoreProducts||{};
+    window.liveStoreProducts[store]=items;
+
+    try{ if(typeof cats==='function') cats(); }catch(_){}
+    try{ if(typeof filterCat==='function') filterCat('ALL',null); }catch(_){}
+    try{ if(typeof render==='function') render(); }catch(_){}
+  };
+
+  // Once login succeeds, open immediately and load only the sales menu.
+  const watch=setInterval(function(){
+    if(window.currentUser && window.currentUser.role==='salesperson'){
+      clearInterval(watch);
+      const overlay=document.getElementById('liveLoginOverlay');
+      if(overlay) overlay.style.setProperty('display','none','important');
+      const msg=document.getElementById('liveLoginMessage');
+      if(msg) msg.textContent='';
+      window.loadLightSalespersonMenu().catch(console.error);
+    }
+  },200);
+  setTimeout(()=>clearInterval(watch),15000);
+})();
+</script>
+<!-- BUILD: LIGHTWEIGHT_SALESPERSON_LOGIN_FIX_20260831 -->
+
 </body>
 </html>
