@@ -209,7 +209,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 </section>
 
 
-<section class="panel inventory-panel" style="grid-column:1/-1">
+<section class="panel inventory-panel manager-only" id="inventoryListingPanel" style="grid-column:1/-1">
 <h2>Inventory Listing & Count Sheets</h2>
 <p class="small">Separate <b>Sellable / Finished Products</b> from <b>Purchased Production Inputs / Raw Materials</b>.</p>
 <div class="inventory-actions">
@@ -1959,7 +1959,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
       // Hide every manager-only/production panel without invoking their renderers.
       document.querySelectorAll('.manager-only').forEach(n=>n.style.display='none');
-      ['accessPanel','recipePanel','reportsPanel','userPanel','reconPanel','productionInputsPanel','stockMovementPanel','usagePanel','easyLinkPanel','masterProductionEditorPanel','managerInventoryNav'].forEach(function(id){
+      ['accessPanel','recipePanel','reportsPanel','userPanel','reconPanel','productionInputsPanel','stockMovementPanel','usagePanel','easyLinkPanel','masterProductionEditorPanel','managerInventoryNav','inventoryListingPanel'].forEach(function(id){
         const n=document.getElementById(id); if(n)n.style.display='none';
       });
 
@@ -3360,5 +3360,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <!-- BUILD: RECEIVE_STOCK_JWT_FIX_20260831 -->
 
 <!-- BUILD: ISOLATED_SALESPERSON_MODE_20260831 -->
+
+<!-- BUILD: REMOVE_INVENTORY_LISTING_RIGHTS_FROM_SALESPERSON_20260831 -->
 </body>
 </html>
