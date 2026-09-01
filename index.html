@@ -3908,5 +3908,22 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: SALESPERSON_DAILY_CASHUP_20260831 -->
 
+
+<script>
+/* STRICT STORE LOCK + AUTHORITATIVE PRODUCTION LEDGER V31 */
+(function(){
+ if(window.__fvStrictStoreLedger)return; window.__fvStrictStoreLedger=true;
+ const B='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+ const U=()=>window.salesSessionUser||window.currentUser||null,T=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+ const D=()=>{let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+ function S(){let u=U();return u&&u.role!=='manager'?(u.store_code||'NDAYENI'):(localStorage.getItem('feastervilleStoreCode')||'NDAYENI')}
+ function lock(){let u=U();if(!u||u.role==='manager')return;let s=u.store_code||'NDAYENI';localStorage.setItem('feastervilleStoreCode',s);document.querySelectorAll('select').forEach(e=>{if(/store/i.test(e.id||'')||e.classList.contains('production-section-store')){if(e.querySelector('option[value="'+s+'"]'))e.value=s;e.disabled=true;e.title='Locked to '+s}})}
+ async function G(p){let r=await fetch(B+'/'+p,{headers:{apikey:K,Authorization:'Bearer '+T()}}),x=await r.text();if(!r.ok)throw Error(x||r.status);return x?JSON.parse(x):[]}
+ async function L(){let u=U();if(!u||u.role!=='manager')return;let s=S(),d=D(),a=await Promise.all([G('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),G('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&count_date=eq.'+d+'&select=input_code,opening_qty,received_qty,used_qty,physical_count')]),ins=a[0],cnt=a[1],m=Object.fromEntries(cnt.map(x=>[x.input_code,x])),b=document.getElementById('productionLedgerBody');if(!b)return;let R=0,X=0,Q=0;b.innerHTML=ins.map(p=>{let c=m[p.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,x=+c.used_qty||0,e=o+r-x,ph=+c.physical_count||0,v=ph-e,rl=+p.reorder_level||0;R+=r;X+=x;if(e<=rl)Q++;return '<tr><td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td><td>'+o.toFixed(2)+'</td><td>'+r.toFixed(2)+'</td><td><b>'+x.toFixed(2)+'</b></td><td><b>'+e.toFixed(2)+'</b></td><td>'+ph.toFixed(2)+'</td><td>'+v.toFixed(2)+'</td><td>'+rl.toFixed(2)+'</td><td>'+(e<=0?'OUT':e<=rl?'REORDER':'OK')+'</td></tr>'}).join('');[['piCount',ins.length],['piReceived',R.toFixed(2)],['piUsed',X.toFixed(2)],['piReorder',Q]].forEach(z=>{let e=document.getElementById(z[0]);if(e)e.textContent=z[1]})}
+ window.refreshLiveProductionLedger=L;document.addEventListener('change',e=>{lock();if(U()?.role==='manager'&&/store/i.test(e.target?.id||''))setTimeout(()=>L().catch(console.error),100)},true);setInterval(()=>{lock();if(U()?.role==='manager'&&document.visibilityState==='visible')L().catch(console.error)},5000);setTimeout(()=>{lock();L().catch(console.error)},1000);
+})();
+</script>
+<!-- BUILD: STRICT_STORE_LOCK_LEDGER_V31 -->
+
 </body>
 </html>
