@@ -4129,5 +4129,84 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: STABLE_SALES_NO_FLICKER_V37 -->
 
+
+<script>
+/* REMOVE DUPLICATE DAILY SALES TRANSACTIONS V38 */
+(function(){
+  'use strict';
+  if(window.__fvRemoveDuplicateTransactionsV38) return;
+  window.__fvRemoveDuplicateTransactionsV38 = true;
+
+  function cleanupDuplicates(){
+    const report = document.getElementById('reportContent');
+    if(!report) return;
+
+    // Keep the V37 stable transaction section only.
+    const keep = document.getElementById('fvStableTransactionsV37');
+
+    // Remove older injected V35 transaction block if present.
+    const oldV35 = document.getElementById('fvDailyTransactionsV35');
+    if(oldV35) oldV35.remove();
+
+    // Remove any other duplicate headings/sections named "Daily Sales Transactions".
+    const headings = Array.from(report.querySelectorAll('h3')).filter(h =>
+      (h.textContent || '').trim().toLowerCase() === 'daily sales transactions'
+    );
+
+    headings.forEach(h => {
+      if(keep && keep.contains(h)) return;
+
+      // If heading belongs to a dedicated wrapper, remove wrapper; otherwise
+      // remove heading plus the immediately following store/date line and table wrapper.
+      const parent = h.parentElement;
+      if(parent && parent !== report && parent.id && parent.id !== 'fvStableTransactionsV37'){
+        parent.remove();
+        return;
+      }
+
+      let node = h.nextElementSibling;
+      h.remove();
+      let removed = 0;
+      while(node && removed < 2){
+        const next = node.nextElementSibling;
+        if(node.matches('.small, div, table')){
+          node.remove();
+          removed++;
+        } else break;
+        node = next;
+      }
+    });
+  }
+
+  // Run after report renders, and when Sales Report is clicked.
+  setTimeout(cleanupDuplicates, 1000);
+  document.addEventListener('click', function(e){
+    const t=e.target;
+    if(t && /sales report/i.test(t.textContent || '')){
+      setTimeout(cleanupDuplicates, 400);
+    }
+  }, true);
+
+  // Light observer only on report area; no periodic redraw and no blinking.
+  const attach = () => {
+    const report = document.getElementById('reportContent');
+    if(!report) return false;
+    const obs = new MutationObserver(() => cleanupDuplicates());
+    obs.observe(report, {childList:true, subtree:true});
+    return true;
+  };
+  if(!attach()){
+    let tries=0;
+    const timer=setInterval(()=>{
+      tries++;
+      if(attach() || tries>20) clearInterval(timer);
+    },250);
+  }
+
+  window.cleanupDailySalesTransactionDuplicates = cleanupDuplicates;
+})();
+</script>
+<!-- BUILD: REMOVE_DUPLICATE_DAILY_SALES_V38 -->
+
 </body>
 </html>
