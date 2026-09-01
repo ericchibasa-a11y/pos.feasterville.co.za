@@ -3976,5 +3976,164 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: PRESENCE_SIGNOFF_V33 -->
 
+
+<script>
+/* DAILY SALES TRANSACTIONS WITH COMPLETION TIME V34 */
+(function(){
+ 'use strict';
+ if(window.__fvDailySalesTimeV34)return; window.__fvDailySalesTimeV34=true;
+ const oldShowReport=window.showReport;
+ function cleanTime(t){
+   t=String(t||'').trim();
+   if(!t) return '—';
+   return t.length>=8?t.slice(0,8):t;
+ }
+ window.showReport=function(type,btn){
+   const result=oldShowReport.apply(this,arguments);
+   if(type!=='sales') return result;
+   try{
+     const box=document.getElementById('reportContent');
+     const dateEl=document.getElementById('date');
+     const selected=dateEl?dateEl.value:'';
+     const rows=(window.liveManagerSales||window.sales||[]).filter(s=>(s.sale_date||s.date)===selected);
+     const ordered=rows.slice().sort((a,b)=>String(a.sale_time||a.time||'').localeCompare(String(b.sale_time||b.time||'')));
+     const table=document.createElement('div');
+     table.innerHTML='<h3>Daily Sales Transactions</h3>'+
+       '<table class="inv-table"><thead><tr><th>Order No.</th><th>Date</th><th>Time Completed</th><th>Cashier</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+
+       (ordered.length?ordered.map(s=>'<tr><td>'+String(s.order_no||s.orderNo||'')+'</td><td>'+String(s.sale_date||s.date||'')+'</td><td><b>'+cleanTime(s.sale_time||s.time)+'</b></td><td>'+String(s.cashier||'')+'</td><td>'+String(s.payment||'')+'</td><td>'+((typeof money==='function')?money(Number(s.total||0)):'R'+Number(s.total||0).toFixed(2))+'</td></tr>').join(''):'<tr><td colspan="6">No sales for selected date.</td></tr>')+
+       '</tbody></table>';
+     box.appendChild(table);
+   }catch(e){console.error('Daily sales time table',e)}
+   return result;
+ };
+})();
+</script>
+<!-- BUILD: DAILY_SALES_COMPLETION_TIME_V34 -->
+
+
+<script>
+/* DAILY SALES TRANSACTIONS LIVE SUPABASE FIX V35 */
+(function(){
+  'use strict';
+  if(window.__fvDailySalesLiveV35) return;
+  window.__fvDailySalesLiveV35 = true;
+
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+
+  function selectedStore(){
+    return localStorage.getItem('feastervilleStoreCode') || 'NDAYENI';
+  }
+
+  function selectedDate(){
+    const el=document.getElementById('date');
+    if(el && el.value) return el.value;
+    const d=new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+
+  function fmtTime(t){
+    if(!t) return '—';
+    t=String(t);
+    return t.length>=8?t.slice(0,8):t;
+  }
+
+  function money2(n){
+    return 'R'+Number(n||0).toFixed(2);
+  }
+
+  async function getSales(){
+    const s=selectedStore(), d=selectedDate();
+    const q='pos_sales?store_code=eq.'+encodeURIComponent(s)+
+      '&sale_date=eq.'+encodeURIComponent(d)+
+      '&select=id,order_no,sale_date,sale_time,cashier,payment,total'+
+      '&order=sale_time.desc';
+    const r=await fetch(BASE+'/'+q,{headers:{apikey:KEY,Authorization:'Bearer '+token()}});
+    const txt=await r.text();
+    if(!r.ok) throw new Error(txt||('HTTP '+r.status));
+    return txt?JSON.parse(txt):[];
+  }
+
+  function ensureTarget(){
+    let root=document.getElementById('reportContent');
+    if(!root){
+      const panel=document.getElementById('reportsPanel');
+      if(panel) root=panel;
+    }
+    return root;
+  }
+
+  async function renderTransactions(){
+    const u=window.currentUser||null;
+    if(!u || u.role!=='manager' || !token()) return;
+
+    const root=ensureTarget();
+    if(!root) return;
+
+    let box=document.getElementById('fvDailyTransactionsV35');
+    if(!box){
+      box=document.createElement('div');
+      box.id='fvDailyTransactionsV35';
+      box.style.marginTop='22px';
+      root.appendChild(box);
+    }
+
+    box.innerHTML='<h3>Daily Sales Transactions</h3><div class="small">Loading live transactions...</div>';
+
+    try{
+      const rows=await getSales();
+      box.innerHTML=
+        '<h3>Daily Sales Transactions</h3>'+
+        '<div class="small" style="margin-bottom:8px">Store: <b>'+selectedStore()+'</b> &nbsp; Date: <b>'+selectedDate()+'</b></div>'+
+        '<div style="overflow:auto">'+
+        '<table class="inv-table"><thead><tr>'+
+        '<th>Order No.</th><th>Date</th><th>Time Completed</th><th>Cashier</th><th>Payment</th><th>Total</th>'+
+        '</tr></thead><tbody>'+
+        (rows.length ? rows.map(r =>
+          '<tr>'+
+          '<td>'+String(r.order_no??'')+'</td>'+
+          '<td>'+String(r.sale_date??'')+'</td>'+
+          '<td><b>'+fmtTime(r.sale_time)+'</b></td>'+
+          '<td>'+String(r.cashier??'')+'</td>'+
+          '<td>'+String(r.payment??'')+'</td>'+
+          '<td>'+money2(r.total)+'</td>'+
+          '</tr>'
+        ).join('') : '<tr><td colspan="6">No sales for selected date.</td></tr>')+
+        '</tbody></table></div>';
+    }catch(e){
+      console.error('V35 daily transaction render failed',e);
+      box.innerHTML='<h3>Daily Sales Transactions</h3><div class="small">Could not load live transactions.</div>';
+    }
+  }
+
+  const originalShowReport=window.showReport;
+  if(typeof originalShowReport==='function'){
+    window.showReport=function(type,btn){
+      const r=originalShowReport.apply(this,arguments);
+      if(type==='sales') setTimeout(renderTransactions,150);
+      return r;
+    };
+  }
+
+  document.addEventListener('change',function(e){
+    if(e.target && (e.target.id==='date' || /store/i.test(e.target.id||''))){
+      setTimeout(renderTransactions,150);
+    }
+  },true);
+
+  let tries=0;
+  const timer=setInterval(function(){
+    tries++;
+    const panel=document.getElementById('reportsPanel');
+    if(panel && panel.offsetParent!==null) renderTransactions();
+    if(tries>120) clearInterval(timer);
+  },1000);
+
+  window.refreshDailySalesTransactions=renderTransactions;
+})();
+</script>
+<!-- BUILD: DAILY_SALES_TRANSACTIONS_LIVE_V35 -->
+
 </body>
 </html>
