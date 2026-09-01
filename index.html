@@ -4135,5 +4135,129 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: DAILY_SALES_TRANSACTIONS_LIVE_V35 -->
 
+
+<script>
+/* FINAL SALES REPORT RENDERER WITH TRANSACTION COMPLETION TIME V36 */
+(function(){
+  'use strict';
+  if(window.__fvSalesReportV36) return;
+  window.__fvSalesReportV36 = true;
+
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const previousShowReport=window.showReport;
+
+  const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+  const store=()=>localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+  const date=()=>{
+    const e=document.getElementById('date');
+    if(e && e.value) return e.value;
+    const d=new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  };
+  const moneyV=n=>'R'+Number(n||0).toFixed(2);
+  const tm=t=>t?String(t).slice(0,8):'—';
+
+  async function fetchSales(){
+    const q='pos_sales?store_code=eq.'+encodeURIComponent(store())+
+      '&sale_date=eq.'+encodeURIComponent(date())+
+      '&select=id,order_no,sale_date,sale_time,cashier,order_type,payment,received,total,store_code,pos_sale_items(code,name,category,qty,price)'+
+      '&order=sale_time.desc&limit=5000';
+    const r=await fetch(BASE+'/'+q,{headers:{apikey:KEY,Authorization:'Bearer '+token()}});
+    const txt=await r.text();
+    if(!r.ok) throw new Error(txt||('HTTP '+r.status));
+    return txt?JSON.parse(txt):[];
+  }
+
+  async function renderSales(btn){
+    if(btn){
+      document.querySelectorAll('#reportsPanel .cat').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    const box=document.getElementById('reportContent');
+    if(!box) return;
+
+    box.innerHTML='<h3>Sales Report — '+date()+'</h3><div class="small">Loading live sales...</div>';
+
+    try{
+      const ss=await fetchSales();
+      const total=ss.reduce((a,s)=>a+Number(s.total||0),0);
+      const byPay=p=>ss.filter(s=>String(s.payment||'').toLowerCase()===p.toLowerCase()).reduce((a,s)=>a+Number(s.total||0),0);
+      const itemMap={};
+      let units=0;
+      ss.forEach(s=>(s.pos_sale_items||[]).forEach(i=>{
+        units+=Number(i.qty||0);
+        if(!itemMap[i.code]) itemMap[i.code]={name:i.name,qty:0,value:0};
+        itemMap[i.code].qty+=Number(i.qty||0);
+        itemMap[i.code].value+=Number(i.qty||0)*Number(i.price||0);
+      }));
+      const items=Object.entries(itemMap).sort((a,b)=>b[1].value-a[1].value);
+
+      box.innerHTML=
+        '<h3>Sales Report — '+date()+'</h3>'+
+        '<div class="inv-grid">'+
+          '<div class="inv-card">Orders<br><b>'+ss.length+'</b></div>'+
+          '<div class="inv-card">Total Sales<br><b>'+moneyV(total)+'</b></div>'+
+          '<div class="inv-card">Units Sold<br><b>'+units+'</b></div>'+
+          '<div class="inv-card">Average Order<br><b>'+moneyV(ss.length?total/ss.length:0)+'</b></div>'+
+        '</div>'+
+        '<table class="inv-table"><tr><th>Payment</th><th>Sales</th></tr>'+
+          '<tr><td>Cash</td><td>'+moneyV(byPay('Cash'))+'</td></tr>'+
+          '<tr><td>Card</td><td>'+moneyV(byPay('Card'))+'</td></tr>'+
+          '<tr><td>EFT</td><td>'+moneyV(byPay('EFT'))+'</td></tr>'+
+          '<tr><td>Other</td><td>'+moneyV(byPay('Other'))+'</td></tr>'+
+        '</table>'+
+        '<h3>Product Sales</h3>'+
+        '<table class="inv-table"><tr><th>Code</th><th>Product</th><th>Qty</th><th>Sales Value</th></tr>'+
+          items.map(([c,v])=>'<tr><td>'+c+'</td><td>'+v.name+'</td><td>'+v.qty+'</td><td>'+moneyV(v.value)+'</td></tr>').join('')+
+        '</table>'+
+        '<h3 style="margin-top:24px">Daily Sales Transactions</h3>'+
+        '<div class="small" style="margin-bottom:8px">Store: <b>'+store()+'</b> &nbsp; Date: <b>'+date()+'</b></div>'+
+        '<div style="overflow:auto">'+
+        '<table class="inv-table">'+
+          '<thead><tr><th>Order No.</th><th>Date</th><th>Time Completed</th><th>Cashier</th><th>Payment</th><th>Total</th></tr></thead>'+
+          '<tbody>'+
+          (ss.length?ss.map(s=>
+            '<tr><td>'+String(s.order_no??'')+'</td>'+
+            '<td>'+String(s.sale_date??'')+'</td>'+
+            '<td><b>'+tm(s.sale_time)+'</b></td>'+
+            '<td>'+String(s.cashier??'')+'</td>'+
+            '<td>'+String(s.payment??'')+'</td>'+
+            '<td>'+moneyV(s.total)+'</td></tr>'
+          ).join(''):'<tr><td colspan="6">No sales for selected date.</td></tr>')+
+          '</tbody>'+
+        '</table></div>';
+
+    }catch(e){
+      console.error('V36 sales report load failed',e);
+      box.innerHTML='<h3>Sales Report — '+date()+'</h3><div class="small">Could not load live sales report.</div>';
+    }
+  }
+
+  window.showReport=function(type,btn){
+    if(type==='sales'){
+      renderSales(btn);
+      return;
+    }
+    return previousShowReport.apply(this,arguments);
+  };
+
+  document.addEventListener('change',function(e){
+    if(e.target && (e.target.id==='date' || /store/i.test(e.target.id||''))){
+      const reports=document.getElementById('reportsPanel');
+      if(reports && getComputedStyle(reports).display!=='none') renderSales(null);
+    }
+  },true);
+
+  window.refreshLiveSalesReportV36=()=>renderSales(null);
+
+  setTimeout(function(){
+    const reports=document.getElementById('reportsPanel');
+    if(reports && getComputedStyle(reports).display!=='none') renderSales(document.querySelector('#reportsPanel .cat.active'));
+  },1200);
+})();
+</script>
+<!-- BUILD: SALES_REPORT_COMPLETION_TIME_V36 -->
+
 </body>
 </html>
