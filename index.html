@@ -3954,5 +3954,27 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: USER_PRESENCE_MANAGER_VIEW_V32 -->
 
+
+<script>
+/* PRESENCE SIGN-OFF TIME V33 */
+(function(){
+ 'use strict';
+ const B='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+ const U=()=>window.salesSessionUser||window.currentUser||null,T=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+ function fmt(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+ async function req(path,opt={}){let h=Object.assign({apikey:K,Authorization:'Bearer '+T(),'Content-Type':'application/json'},opt.headers||{}),r=await fetch(B+'/'+path,Object.assign({},opt,{headers:h})),t=await r.text();if(!r.ok)throw Error(t||r.status);return t?JSON.parse(t):null}
+ async function signoff(){let u=U();if(!u||!u.id||!T())return;let now=new Date().toISOString();await req('pos_user_presence?user_id=eq.'+encodeURIComponent(u.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'OFFLINE',last_seen_at:now,signed_off_at:now})}).catch(()=>{})}
+ // A new login clears the old sign-off time for the active session.
+ async function clearSignoff(){let u=U();if(!u||!u.id||!T())return;await req('pos_user_presence?user_id=eq.'+encodeURIComponent(u.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({signed_off_at:null})}).catch(()=>{})}
+ // Upgrade manager presence table to include Sign-Off Time.
+ async function renderV33(){let u=U();if(!u||u.role!=='manager'||!T())return;let p=document.getElementById('fvPresencePanel');if(!p)return;let head=p.querySelector('thead tr');if(head&&!head.querySelector('[data-signoff]')){let th=document.createElement('th');th.textContent='Sign-Off Time';th.dataset.signoff='1';head.insertBefore(th,head.lastElementChild)}let rows=await req('pos_user_presence?select=user_id,display_name,role,store_code,logged_in_at,last_seen_at,signed_off_at,status&order=last_seen_at.desc'),b=document.getElementById('fvPresenceBody');if(!b)return;let now=Date.now();b.innerHTML=(rows||[]).map(r=>{let online=r.status==='ONLINE'&&(now-new Date(r.last_seen_at).getTime())<120000;return '<tr class="'+(online?'on':'off')+'"><td>'+r.display_name+'</td><td>'+r.role+'</td><td>'+(r.store_code||'Manager / All Stores')+'</td><td>'+fmt(r.logged_in_at)+'</td><td>'+fmt(r.last_seen_at)+'</td><td>'+(online?'—':fmt(r.signed_off_at||r.last_seen_at))+'</td><td>'+(online?'ONLINE':'OFFLINE')+'</td></tr>'}).join('')||'<tr><td colspan="7">No login activity yet.</td></tr>'}
+ setTimeout(clearSignoff,1400);setInterval(()=>{if(U()?.role==='manager')renderV33().catch(console.error)},30000);setTimeout(()=>renderV33().catch(console.error),1800);
+ // Explicit logout clicks get an exact sign-off timestamp. beforeunload remains a best-effort fallback.
+ document.addEventListener('click',function(e){let t=e.target;if(t&&(/logout|sign out|log out/i.test((t.textContent||'')+' '+(t.id||''))))signoff()},true);
+ window.addEventListener('beforeunload',signoff);window.refreshUserPresence=renderV33;
+})();
+</script>
+<!-- BUILD: PRESENCE_SIGNOFF_V33 -->
+
 </body>
 </html>
