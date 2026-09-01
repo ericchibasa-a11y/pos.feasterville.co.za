@@ -4208,5 +4208,83 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: REMOVE_DUPLICATE_DAILY_SALES_V38 -->
 
+
+<script>
+/* FINAL PRODUCT -> PRODUCTION INPUTS LIVE REPAIR V39 */
+(function(){
+'use strict';
+if(window.__fvRecipeV39)return;window.__fvRecipeV39=true;
+const B='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const T=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+const M=()=>window.currentUser&&window.currentUser.role==='manager';
+const S=()=>localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+let products=[],inputs=[],recipes={},selected='';
+
+async function req(path,opt={}){
+ let h=Object.assign({apikey:K,Authorization:'Bearer '+T(),'Content-Type':'application/json'},opt.headers||{});
+ let r=await fetch(B+'/'+path,Object.assign({},opt,{headers:h})),t=await r.text();
+ if(!r.ok)throw Error(t||r.status);return t?JSON.parse(t):null;
+}
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load(){
+ if(!M()||!T())return;
+ let s=S();
+ let a=await Promise.all([
+  req('pos_store_products?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name&order=code.asc'),
+  req('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit&order=code.asc'),
+  req('pos_state?key=eq.recipes&select=value')
+ ]);
+ products=a[0]||[];inputs=a[1]||[];recipes=(a[2]&&a[2][0]&&a[2][0].value)||{};
+ if(typeof recipes==='string'){try{recipes=JSON.parse(recipes)}catch(e){recipes={}}}
+ renderProducts();
+}
+function renderProducts(){
+ let p=document.getElementById('easyProduct');if(!p)return;
+ let old=selected||p.value;
+ p.innerHTML='<option value="">-- Select Final Product --</option>'+products.map(x=>'<option value="'+esc(x.code)+'">'+esc(x.code)+' — '+esc(x.name)+'</option>').join('');
+ if(old&&products.some(x=>x.code===old)){p.value=old;selected=old;showBuilder()}else{selected='';hideBuilder()}
+}
+function hideBuilder(){
+ let a=document.getElementById('inputBuilder'),b=document.getElementById('selectedProductBox');if(a)a.style.display='none';if(b)b.style.display='none';
+}
+function showBuilder(){
+ let prod=products.find(x=>x.code===selected),box=document.getElementById('selectedProductBox'),nm=document.getElementById('selectedProductName'),area=document.getElementById('inputBuilder'),inp=document.getElementById('easyInput');
+ if(box)box.style.display='block';if(nm)nm.textContent=prod?(prod.code+' — '+prod.name):selected;if(area)area.style.display='block';
+ if(inp)inp.innerHTML='<option value="">-- Select Production Input --</option>'+inputs.map(x=>'<option value="'+esc(x.code)+'">'+esc(x.code)+' — '+esc(x.name)+' ('+esc(x.unit)+')</option>').join('');
+ draw();
+}
+function draw(){
+ let list=Array.isArray(recipes[selected])?recipes[selected]:[],sum=document.getElementById('easyRecipeSummary'),tbl=document.getElementById('easyRecipeTable');
+ if(sum)sum.innerHTML='<b>Linked inputs:</b> '+list.length+' &nbsp; <span class="small">Changes are saved live.</span>';
+ if(tbl)tbl.innerHTML='<table class="inv-table"><thead><tr><th>Production Input</th><th>Qty Used</th><th>Unit</th><th>Action</th></tr></thead><tbody>'+
+ (list.length?list.map((r,i)=>{let x=inputs.find(z=>z.code===r.inputCode);return '<tr><td>'+esc(x?x.name:r.inputCode)+'</td><td>'+Number(r.qty||0)+'</td><td>'+esc(x?x.unit:'')+'</td><td><button type="button" class="danger" onclick="fvRecipeRemoveV39('+i+')">REMOVE</button></td></tr>'}).join(''):'<tr><td colspan="4">No production inputs linked yet.</td></tr>')+'</tbody></table>';
+}
+async function save(){
+ let rows=await req('pos_state?key=eq.recipes&select=value'),latest=(rows&&rows[0]&&rows[0].value)||{};
+ if(typeof latest==='string'){try{latest=JSON.parse(latest)}catch(e){latest={}}}
+ latest[selected]=recipes[selected]||[];
+ await req('pos_state?key=eq.recipes',{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({value:latest})});
+ recipes=latest;try{localStorage.setItem('feastervilleRecipes',JSON.stringify(recipes))}catch(e){}
+}
+window.easyProductSelected=function(){let p=document.getElementById('easyProduct');selected=p?p.value:'';if(!selected){hideBuilder();return}showBuilder()};
+window.easyChangeProduct=function(){selected='';let p=document.getElementById('easyProduct');if(p)p.value='';hideBuilder()};
+window.easyAdd=async function(){
+ if(!M()){alert('Manager access required.');return}
+ if(!selected){alert('Select a final product first.');return}
+ let i=document.getElementById('easyInput'),q=document.getElementById('easyQty'),code=i&&i.value,qty=Number(q&&q.value||0);
+ if(!code){alert('Select a production input.');return}if(!(qty>0)){alert('Enter a quantity greater than zero.');return}
+ let list=Array.isArray(recipes[selected])?recipes[selected].slice():[],found=list.find(x=>x.inputCode===code);
+ if(found)found.qty=qty;else list.push({inputCode:code,qty:qty});recipes[selected]=list;
+ try{await save();draw();if(i)i.value='';if(q)q.value='1';alert('Production input saved successfully.')}catch(e){console.error(e);alert('Could not save production input: '+e.message)}
+};
+window.fvRecipeRemoveV39=async function(i){if(!M())return;let list=Array.isArray(recipes[selected])?recipes[selected].slice():[];list.splice(i,1);recipes[selected]=list;try{await save();draw()}catch(e){alert('Could not remove input: '+e.message)}};
+window.refreshFinalProductRecipeBuilder=load;
+document.addEventListener('click',e=>{let t=e.target;if(t&&(/Final Product.*Production Inputs/i.test(t.textContent||'')||/EASY LINK INPUTS/i.test(t.textContent||'')))setTimeout(()=>load().catch(console.error),100)},true);
+document.addEventListener('change',e=>{if(e.target&&/store/i.test(e.target.id||''))setTimeout(()=>load().catch(console.error),150)},true);
+setTimeout(()=>load().catch(console.error),1200);
+})();
+</script>
+<!-- BUILD: FINAL_PRODUCT_INPUTS_LIVE_REPAIR_V39 -->
+
 </body>
 </html>
