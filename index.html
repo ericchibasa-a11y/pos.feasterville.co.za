@@ -3925,5 +3925,34 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <!-- BUILD: STRICT_STORE_LOCK_LEDGER_V31 -->
 
+
+<style>
+#fvPresencePanel{display:none;margin:14px 0;padding:14px;background:#fff;border:1px solid #ddd;border-radius:10px}
+#fvPresencePanel table{width:100%;border-collapse:collapse}#fvPresencePanel th,#fvPresencePanel td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+#fvPresencePanel .on{font-weight:700}#fvPresencePanel .off{opacity:.65}
+</style>
+<script>
+/* FEASTERVILLE LIVE USER PRESENCE — manager visibility */
+(function(){
+ 'use strict';
+ if(window.__fvPresenceInstalled)return;window.__fvPresenceInstalled=true;
+ const B='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+ const U=()=>window.salesSessionUser||window.currentUser||null;
+ const T=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+ function H(extra){return Object.assign({apikey:K,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+ async function A(path,opt={}){let r=await fetch(B+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||r.status);return t?JSON.parse(t):null}
+ function fmt(x){if(!x)return'';let d=new Date(x);return d.toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+ async function beat(first=false){let u=U();if(!u||!u.id||!T())return;let now=new Date().toISOString(),payload={user_id:u.id,display_name:u.name||u.display_name||u.email||'User',role:u.role||'salesperson',store_code:u.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||null):(u.store_code||null),last_seen_at:now,status:'ONLINE'};if(first)payload.logged_in_at=now;await A('pos_user_presence?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(payload)}).catch(console.error)}
+ async function offline(){let u=U();if(!u||!u.id||!T())return;await A('pos_user_presence?user_id=eq.'+encodeURIComponent(u.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'OFFLINE',last_seen_at:new Date().toISOString()})}).catch(()=>{})}
+ function ensurePanel(){let u=U();if(!u||u.role!=='manager'||document.getElementById('fvPresencePanel'))return;let host=document.getElementById('accessPanel')||document.getElementById('userPanel')||document.body;let p=document.createElement('div');p.id='fvPresencePanel';p.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Online means active within the last 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody id="fvPresenceBody"></tbody></table></div>';host.appendChild(p);p.style.display='block'}
+ async function render(){let u=U();if(!u||u.role!=='manager')return;ensurePanel();let rows=await A('pos_user_presence?select=user_id,display_name,role,store_code,logged_in_at,last_seen_at,status&order=last_seen_at.desc');let b=document.getElementById('fvPresenceBody');if(!b)return;let now=Date.now();b.innerHTML=(rows||[]).map(r=>{let online=r.status==='ONLINE'&&(now-new Date(r.last_seen_at).getTime())<120000;return '<tr class="'+(online?'on':'off')+'"><td>'+r.display_name+'</td><td>'+r.role+'</td><td>'+(r.store_code||'Manager / All Stores')+'</td><td>'+fmt(r.logged_in_at)+'</td><td>'+fmt(r.last_seen_at)+'</td><td>'+(online?'ONLINE':'OFFLINE')+'</td></tr>'}).join('')||'<tr><td colspan="6">No login activity yet.</td></tr>'}
+ let started=false;function start(){if(started)return;let u=U();if(!u||!u.id)return;started=true;beat(true);setInterval(()=>beat(false),30000);if(u.role==='manager'){ensurePanel();render();setInterval(()=>render().catch(console.error),30000)}}
+ let n=0,t=setInterval(()=>{n++;start();if(started||n>120)clearInterval(t)},250);
+ window.addEventListener('beforeunload',offline);
+ window.refreshUserPresence=render;
+})();
+</script>
+<!-- BUILD: USER_PRESENCE_MANAGER_VIEW_V32 -->
+
 </body>
 </html>
