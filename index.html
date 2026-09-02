@@ -493,7 +493,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 
 <section class="panel manager-only" id="purchasingPanel" style="grid-column:1/-1;display:none">
   <h2>Purchasing & Reorder</h2>
-  <p class="small">Manager only. Plan fewer purchasing trips using current store counts, recent usage and Fresh / Weekly / Monthly buying cycles. This screen reuses the existing Production Inputs master list.</p>
+  <p class="small">Manager only. Plan purchasing by store using the live Production Input master, stock counts, purchase cycles, safety stock and target stock.</p>
   <div class="inventory-actions" style="margin-bottom:10px">
     <button type="button" class="primary" onclick="fvPurchasingLoad()">REFRESH REORDER DASHBOARD</button>
     <button type="button" class="cat" onclick="fvPurchasingSaveSettings()">SAVE PURCHASE SETTINGS</button>
@@ -502,7 +502,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
   <div id="purchasingSummary" class="small" style="margin:8px 0"></div>
   <div style="overflow:auto">
     <table class="inv-table">
-      <thead><tr><th>Status</th><th>Store</th><th>Input</th><th>Unit</th><th>Current</th><th>Avg Daily Usage</th><th>Group</th><th>Cycle Days</th><th>Safety</th><th>Target</th><th>Suggested Buy</th><th>Supplier</th><th>Unit Cost</th></tr></thead>
+      <thead><tr><th>Status</th><th>Store</th><th>Input</th><th>Unit</th><th>Current Stock</th><th>Avg Daily Usage</th><th>Group</th><th>Cycle Days</th><th>Safety</th><th>Target</th><th>Suggested Buy</th><th>Supplier</th><th>Unit Cost</th></tr></thead>
       <tbody id="purchasingRows"><tr><td colspan="13">Open this section and click Refresh Reorder Dashboard.</td></tr></tbody>
     </table>
   </div>
@@ -809,34 +809,7 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div>
-<script>
-/* FEASTERVILLE PURCHASING & REORDER — MANAGER ONLY V40 */
-(function(){
-'use strict';
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
-const isManager=()=>{const u=window.salesSessionUser||window.currentUser;return !!(u&&u.role==='manager')};
-let rows=[];
-function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function req(path,opt={}){const h=Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},opt.headers||{});const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h}));const t=await r.text();if(!r.ok)throw new Error(t||('HTTP '+r.status));return t?JSON.parse(t):null}
-function num(v){v=Number(v||0);return Number.isFinite(v)?v:0}
-function calc(r){const current=num(r.current_stock), avg=num(r.avg_daily_usage), cycle=Math.max(1,num(r.purchase_cycle_days)||7), safety=num(r.safety_stock);let target=num(r.target_stock);if(target<=0)target=(avg*cycle)+safety;const suggested=Math.max(0,target-current);return {target,suggested}}
-function status(r){const c=calc(r);if(c.suggested<=0)return ['OK','✓'];if(num(r.current_stock)<=num(r.safety_stock))return ['BUY','●'];return ['PLAN','!']}
-function draw(){const tb=document.getElementById('purchasingRows');if(!tb)return;let total=0,buy=0;tb.innerHTML=rows.length?rows.map((r,i)=>{const c=calc(r),st=status(r);total+=c.suggested*num(r.preferred_unit_cost);if(c.suggested>0)buy++;return `<tr data-i="${i}"><td><b>${st[1]} ${st[0]}</b></td><td>${esc(r.store_code)}</td><td><b>${esc(r.code)}</b><br>${esc(r.name)}</td><td>${esc(r.unit)}</td><td>${num(r.current_stock).toFixed(2)}</td><td>${num(r.avg_daily_usage).toFixed(2)}</td><td><select data-f="purchase_group"><option ${r.purchase_group==='FRESH'?'selected':''}>FRESH</option><option ${r.purchase_group==='WEEKLY'?'selected':''}>WEEKLY</option><option ${r.purchase_group==='MONTHLY'?'selected':''}>MONTHLY</option></select></td><td><input class="stock-input" type="number" min="1" data-f="purchase_cycle_days" value="${num(r.purchase_cycle_days)||7}"></td><td><input class="stock-input" type="number" min="0" step="0.01" data-f="safety_stock" value="${num(r.safety_stock)}"></td><td><input class="stock-input" type="number" min="0" step="0.01" data-f="target_stock" value="${num(r.target_stock)}" placeholder="Auto"></td><td><b>${c.suggested.toFixed(2)}</b></td><td><input data-f="preferred_supplier" value="${esc(r.preferred_supplier||'')}" style="min-width:120px"></td><td><input class="stock-input" type="number" min="0" step="0.01" data-f="preferred_unit_cost" value="${num(r.preferred_unit_cost)}"></td></tr>`}).join(''):'<tr><td colspan="13">No active production inputs found.</td></tr>';
-const sm=document.getElementById('purchasingSummary');if(sm)sm.innerHTML=`<b>${buy}</b> input/store lines currently suggest purchasing. Estimated purchase value: <b>R${total.toFixed(2)}</b>. Zero target stock uses Avg Daily Usage × Cycle Days + Safety Stock.`;
-tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('change',()=>{const tr=el.closest('tr'),r=rows[Number(tr.dataset.i)],f=el.dataset.f;r[f]=el.type==='number'?num(el.value):el.value;draw()}));}
-async function history(){const box=document.getElementById('purchaseRunHistory');try{const x=await req('pos_purchase_runs?select=id,run_date,status,supplier,transport_cost,created_at&order=id.desc&limit=10');box.innerHTML=x.length?'<table class="inv-table"><thead><tr><th>List #</th><th>Date</th><th>Status</th><th>Supplier</th><th>Transport</th></tr></thead><tbody>'+x.map(a=>`<tr><td>${a.id}</td><td>${esc(a.run_date)}</td><td>${esc(a.status)}</td><td>${esc(a.supplier||'')}</td><td>R${num(a.transport_cost).toFixed(2)}</td></tr>`).join('')+'</tbody></table>':'No purchase lists created yet.'}catch(e){box.textContent='Could not load purchase history: '+e.message}}
-window.fvPurchasingLoad=async function(){if(!isManager()){alert('Manager access required.');return}const tb=document.getElementById('purchasingRows');tb.innerHTML='<tr><td colspan="13">Loading live purchasing data…</td></tr>';try{const [inputs,counts]=await Promise.all([req('pos_store_production_inputs?active=eq.true&select=store_code,code,name,unit,purchase_group,purchase_cycle_days,safety_stock,target_stock,preferred_supplier,preferred_unit_cost&order=store_code,code'),req('pos_store_input_counts?select=store_code,input_code,count_date,physical_count,used_qty&order=count_date.desc&limit=5000')]);const latest={},usage={};counts.forEach(c=>{const k=c.store_code+'|'+c.input_code;if(latest[k]===undefined&&c.physical_count!==null)latest[k]=num(c.physical_count);if(!usage[k])usage[k]={sum:0,dates:new Set()};usage[k].sum+=num(c.used_qty);usage[k].dates.add(c.count_date)});rows=inputs.map(r=>{const k=r.store_code+'|'+r.code,u=usage[k]||{sum:0,dates:new Set()};return Object.assign({},r,{current_stock:num(latest[k]),avg_daily_usage:u.dates.size?u.sum/u.dates.size:0})});draw();history()}catch(e){tb.innerHTML='<tr><td colspan="13">Could not load: '+esc(e.message)+'</td></tr>'}};
-window.fvPurchasingSaveSettings=async function(){if(!isManager())return;try{for(const r of rows){await req('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(r.store_code)+'&code=eq.'+encodeURIComponent(r.code),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({purchase_group:r.purchase_group,purchase_cycle_days:Math.max(1,Math.round(num(r.purchase_cycle_days)||7)),safety_stock:num(r.safety_stock),target_stock:num(r.target_stock),preferred_supplier:r.preferred_supplier||null,preferred_unit_cost:num(r.preferred_unit_cost)||null})})}alert('Purchase settings saved successfully.')}catch(e){alert('Could not save purchase settings: '+e.message)}};
-window.fvPurchasingCreateRun=async function(){if(!isManager())return;if(!rows.length){alert('Refresh the reorder dashboard first.');return}const selected=rows.map(r=>({r,c:calc(r)})).filter(x=>x.c.suggested>0);if(!selected.length){alert('Nothing currently requires purchasing based on the saved targets.');return}try{const run=await req('pos_purchase_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'DRAFT',notes:'Generated from Purchasing & Reorder dashboard'})});const id=run[0].id;const items=selected.map(x=>({run_id:id,store_code:x.r.store_code,input_code:x.r.code,input_name:x.r.name,unit:x.r.unit,current_stock:num(x.r.current_stock),avg_daily_usage:num(x.r.avg_daily_usage),safety_stock:num(x.r.safety_stock),target_stock:x.c.target,suggested_qty:x.c.suggested,order_qty:x.c.suggested,unit_cost:num(x.r.preferred_unit_cost)}));await req('pos_purchase_run_items',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(items)});alert('Purchase List #'+id+' created for '+items.length+' store/input lines.');history()}catch(e){alert('Could not create purchase list: '+e.message)}};
-document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-manager-target="purchasingPanel"]');if(b)setTimeout(()=>window.fvPurchasingLoad(),100)},true);
-})();
-</script>
-<!-- BUILD: PURCHASING_REORDER_MANAGER_V40 -->
-
-</body></html>';
+    '</div></body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -4332,6 +4305,109 @@ setTimeout(()=>load().catch(console.error),1200);
 })();
 </script>
 <!-- BUILD: FINAL_PRODUCT_INPUTS_LIVE_REPAIR_V39 -->
+
+
+<script>
+/* FEASTERVILLE PURCHASING & REORDER — SAFE LIVE ADD-ON V41 */
+(function(){
+'use strict';
+if(window.__fvPurchasingV41)return; window.__fvPurchasingV41=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const getToken=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const isManager=()=>!!(window.currentUser&&window.currentUser.role==='manager');
+let purchaseRows=[];
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>{const n=Number(v||0);return Number.isFinite(n)?n:0};
+async function req(path,opt={}){
+  const token=getToken();
+  if(!token) throw new Error('Sign in again before using Purchasing & Reorder.');
+  const headers=Object.assign({apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},opt.headers||{});
+  const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers}));
+  const text=await r.text();
+  if(!r.ok) throw new Error(text||('HTTP '+r.status));
+  return text?JSON.parse(text):null;
+}
+function calc(r){
+  const current=num(r.current_stock), avg=num(r.avg_daily_usage), cycle=Math.max(1,num(r.purchase_cycle_days)||7), safety=num(r.safety_stock);
+  let target=num(r.target_stock);
+  if(target<=0) target=(avg*cycle)+safety;
+  return {target,suggested:Math.max(0,target-current)};
+}
+function collectEdits(){
+  const tb=document.getElementById('purchasingRows'); if(!tb)return;
+  tb.querySelectorAll('tr[data-i]').forEach(tr=>{
+    const r=purchaseRows[Number(tr.dataset.i)]; if(!r)return;
+    tr.querySelectorAll('[data-f]').forEach(el=>{const f=el.dataset.f;r[f]=el.type==='number'?num(el.value):el.value;});
+  });
+}
+function draw(){
+  const tb=document.getElementById('purchasingRows'); if(!tb)return;
+  let estimated=0, suggestedLines=0;
+  tb.innerHTML=purchaseRows.length?purchaseRows.map((r,i)=>{
+    const c=calc(r), needs=c.suggested>0; if(needs)suggestedLines++; estimated+=c.suggested*num(r.preferred_unit_cost);
+    const stat=!needs?'OK':num(r.current_stock)<=num(r.safety_stock)?'BUY':'PLAN';
+    return `<tr data-i="${i}"><td><b>${stat}</b></td><td>${esc(r.store_code)}</td><td><b>${esc(r.code)}</b><br>${esc(r.name)}</td><td>${esc(r.unit)}</td><td>${num(r.current_stock).toFixed(2)}</td><td>${num(r.avg_daily_usage).toFixed(2)}</td><td><select data-f="purchase_group"><option ${r.purchase_group==='FRESH'?'selected':''}>FRESH</option><option ${r.purchase_group==='WEEKLY'?'selected':''}>WEEKLY</option><option ${r.purchase_group==='MONTHLY'?'selected':''}>MONTHLY</option></select></td><td><input class="stock-input" type="number" min="1" data-f="purchase_cycle_days" value="${Math.max(1,num(r.purchase_cycle_days)||7)}"></td><td><input class="stock-input" type="number" min="0" step="0.01" data-f="safety_stock" value="${num(r.safety_stock)}"></td><td><input class="stock-input" type="number" min="0" step="0.01" data-f="target_stock" value="${num(r.target_stock)}" placeholder="Auto"></td><td><b>${c.suggested.toFixed(2)}</b></td><td><input data-f="preferred_supplier" value="${esc(r.preferred_supplier||'')}" style="min-width:120px"></td><td><input class="stock-input" type="number" min="0" step="0.01" data-f="preferred_unit_cost" value="${num(r.preferred_unit_cost)}"></td></tr>`;
+  }).join(''):'<tr><td colspan="13">No active production inputs found.</td></tr>';
+  const sm=document.getElementById('purchasingSummary');
+  if(sm)sm.innerHTML=`<b>${suggestedLines}</b> store/input lines suggest purchasing. Estimated value: <b>R${estimated.toFixed(2)}</b>. When Target is zero, the system uses Avg Daily Usage × Cycle Days + Safety Stock.`;
+  tb.querySelectorAll('input,select').forEach(el=>el.addEventListener('change',()=>{collectEdits();draw();}));
+}
+async function loadHistory(){
+  const box=document.getElementById('purchaseRunHistory'); if(!box)return;
+  try{
+    const runs=await req('pos_purchase_runs?select=id,run_date,status,supplier,transport_cost,created_at&order=id.desc&limit=10');
+    box.innerHTML=runs&&runs.length?'<table class="inv-table"><thead><tr><th>List #</th><th>Date</th><th>Status</th><th>Supplier</th><th>Transport</th></tr></thead><tbody>'+runs.map(a=>`<tr><td>${a.id}</td><td>${esc(a.run_date)}</td><td>${esc(a.status)}</td><td>${esc(a.supplier||'')}</td><td>R${num(a.transport_cost).toFixed(2)}</td></tr>`).join('')+'</tbody></table>':'No purchase lists created yet.';
+  }catch(e){box.textContent='Could not load purchase history: '+e.message;}
+}
+window.fvPurchasingLoad=async function(){
+  if(!isManager()){alert('Manager access required.');return;}
+  const tb=document.getElementById('purchasingRows'); if(!tb)return;
+  tb.innerHTML='<tr><td colspan="13">Loading live purchasing data…</td></tr>';
+  try{
+    const [inputs,counts]=await Promise.all([
+      req('pos_store_production_inputs?active=eq.true&select=store_code,code,name,unit,purchase_group,purchase_cycle_days,safety_stock,target_stock,preferred_supplier,preferred_unit_cost&order=store_code.asc,code.asc'),
+      req('pos_store_input_counts?select=store_code,input_code,count_date,opening_qty,received_qty,used_qty,physical_count&order=count_date.desc&limit=5000')
+    ]);
+    const latest={}, usage={};
+    (counts||[]).forEach(c=>{
+      const k=c.store_code+'|'+c.input_code;
+      if(!usage[k])usage[k]={sum:0,dates:new Set()}; usage[k].sum+=num(c.used_qty); if(c.count_date)usage[k].dates.add(c.count_date);
+      if(latest[k]===undefined){
+        if(c.physical_count!==null && c.physical_count!==undefined) latest[k]=num(c.physical_count);
+        else latest[k]=Math.max(0,num(c.opening_qty)+num(c.received_qty)-num(c.used_qty));
+      }
+    });
+    purchaseRows=(inputs||[]).map(r=>{const k=r.store_code+'|'+r.code,u=usage[k]||{sum:0,dates:new Set()};return Object.assign({},r,{current_stock:num(latest[k]),avg_daily_usage:u.dates.size?u.sum/u.dates.size:0});});
+    draw(); await loadHistory();
+  }catch(e){tb.innerHTML='<tr><td colspan="13">Could not load: '+esc(e.message)+'</td></tr>';}
+};
+window.fvPurchasingSaveSettings=async function(){
+  if(!isManager()){alert('Manager access required.');return;} collectEdits();
+  try{
+    for(const r of purchaseRows){
+      await req('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(r.store_code)+'&code=eq.'+encodeURIComponent(r.code),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({purchase_group:r.purchase_group,purchase_cycle_days:Math.max(1,Math.round(num(r.purchase_cycle_days)||7)),safety_stock:num(r.safety_stock),target_stock:num(r.target_stock),preferred_supplier:r.preferred_supplier||null,preferred_unit_cost:num(r.preferred_unit_cost)||null})});
+    }
+    alert('Purchase settings saved successfully.'); draw();
+  }catch(e){alert('Could not save purchase settings: '+e.message);}
+};
+window.fvPurchasingCreateRun=async function(){
+  if(!isManager()){alert('Manager access required.');return;} collectEdits();
+  if(!purchaseRows.length){alert('Refresh the reorder dashboard first.');return;}
+  const selected=purchaseRows.map(r=>({r,c:calc(r)})).filter(x=>x.c.suggested>0);
+  if(!selected.length){alert('Nothing currently requires purchasing based on the current targets.');return;}
+  try{
+    const run=await req('pos_purchase_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'DRAFT',notes:'Generated from Purchasing & Reorder dashboard'})});
+    const id=run[0].id;
+    const items=selected.map(x=>({run_id:id,store_code:x.r.store_code,input_code:x.r.code,input_name:x.r.name,unit:x.r.unit,current_stock:num(x.r.current_stock),avg_daily_usage:num(x.r.avg_daily_usage),safety_stock:num(x.r.safety_stock),target_stock:x.c.target,suggested_qty:x.c.suggested,order_qty:x.c.suggested,unit_cost:num(x.r.preferred_unit_cost)}));
+    await req('pos_purchase_run_items',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(items)});
+    alert('Purchase List #'+id+' created for '+items.length+' store/input lines.'); await loadHistory();
+  }catch(e){alert('Could not create purchase list: '+e.message);}
+};
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-manager-target="purchasingPanel"]');if(b)setTimeout(()=>window.fvPurchasingLoad(),120);},true);
+})();
+</script>
+<!-- BUILD: PURCHASING_REORDER_SAFE_V41 -->
 
 </body>
 </html>
