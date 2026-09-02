@@ -744,9 +744,9 @@ function filterCat(cat,btn){
  const rows=activeProducts().filter(p=>cat==='ALL'||p.category===cat);
  box.innerHTML=rows.map(p=>`
  <button class="product" onclick="add('${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
- if(!rows.length){
+ if(!rows.length && cat==='ALL'){
    const fallback=activeProducts();
-   if(cat==='ALL' && fallback.length){
+   if(fallback.length){
      box.innerHTML=fallback.map(p=>`
      <button class="product" onclick="add('${p.code}')"><span class="name">${p.code} — ${p.name}</span><span class="price">${money(p.price)}</span></button>`).join('');
    }
@@ -827,217 +827,7 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div>
-<script>
-/* FEASTERVILLE SALE CATALOGUE RECOVERY — V42 */
-(function(){
-  if(window.__fvSaleCatalogueV42)return; window.__fvSaleCatalogueV42=true;
-  function repaint(){
-    try{
-      if(typeof cats==='function') cats();
-      if(typeof filterCat==='function') filterCat('ALL',null);
-    }catch(e){
-      console.error('Sale catalogue repaint failed',e);
-      try{
-        const box=document.getElementById('products');
-        if(box && typeof activeProducts==='function' && typeof money==='function'){
-          const rows=activeProducts()||[];
-          box.innerHTML=rows.map(p=>
-            '<button class="product" onclick="add(\''+String(p.code).replace(/'/g,"\\'")+'\')">'+
-            '<span class="name">'+p.code+' — '+p.name+'</span>'+
-            '<span class="price">'+money(p.price)+'</span></button>'
-          ).join('');
-        }
-      }catch(_){}
-    }
-  }
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(repaint,100));
-  window.addEventListener('load',()=>setTimeout(repaint,300));
-  document.addEventListener('click',e=>{
-    const t=e.target;
-    if(t && ((t.id||'')==='liveLoginBtn' || /sign in|login/i.test((t.textContent||'').trim()))){
-      setTimeout(repaint,1200);
-      setTimeout(repaint,2500);
-    }
-  },true);
-  document.addEventListener('change',e=>{
-    if(e.target && /store/i.test(e.target.id||'')) setTimeout(repaint,250);
-  },true);
-  window.fvRepaintSaleCatalogueV42=repaint;
-})();
-</script>
-<!-- BUILD: SALE_CATALOGUE_RECOVERY_V42 -->
-
-
-<script>
-/* FEASTERVILLE FINAL PRODUCT -> PRODUCTION INPUTS — LIVE STORE FIX V43 */
-(function(){
-'use strict';
-if(window.__fvRecipeOldLiveV43)return; window.__fvRecipeOldLiveV43=true;
-
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
-const isManager=()=>!!(window.currentUser&&window.currentUser.role==='manager');
-const store=()=>localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-let liveProducts=[], liveInputs=[], liveRecipes={};
-
-async function req(path,opt={}){
-  const t=token();
-  if(!t)throw new Error('Sign in again.');
-  const headers=Object.assign({
-    apikey:KEY,
-    Authorization:'Bearer '+t,
-    'Content-Type':'application/json'
-  },opt.headers||{});
-  const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers}));
-  const body=await r.text();
-  if(!r.ok)throw new Error(body||('HTTP '+r.status));
-  return body?JSON.parse(body):null;
-}
-
-function inputOptions(selected=''){
-  return '<option value="">-- Select Production Input --</option>'+
-    liveInputs.map(x=>'<option value="'+esc(x.code)+'" '+(x.code===selected?'selected':'')+'>'+
-      esc(x.code)+' — '+esc(x.name)+' ('+esc(x.unit||'')+')</option>').join('');
-}
-
-function ensureBuilder(){
-  const product=document.getElementById('recipeFinalProduct');
-  const area=document.getElementById('recipeBuilderArea');
-  const rows=document.getElementById('recipeInputRows');
-  if(!product||!area||!rows)return;
-  if(!product.value){
-    area.style.display='none';
-    rows.innerHTML='';
-    const saved=document.getElementById('savedRecipeOld');
-    if(saved)saved.innerHTML='';
-    return;
-  }
-  area.style.display='block';
-  if(!rows.querySelector('.old-recipe-row')) window.addRecipeInputRowOld();
-  renderSaved();
-}
-
-function renderProducts(){
-  const p=document.getElementById('recipeFinalProduct');
-  if(!p)return;
-  const old=p.value;
-  p.innerHTML='<option value="">-- Select Final Product --</option>'+
-    liveProducts.map(x=>'<option value="'+esc(x.code)+'">'+esc(x.code)+' — '+esc(x.name)+'</option>').join('');
-  if(old&&liveProducts.some(x=>x.code===old))p.value=old;
-  ensureBuilder();
-}
-
-function renderSaved(){
-  const p=document.getElementById('recipeFinalProduct');
-  const box=document.getElementById('savedRecipeOld');
-  if(!p||!box||!p.value)return;
-  const list=Array.isArray(liveRecipes[p.value])?liveRecipes[p.value]:[];
-  box.innerHTML='<h3>Saved Recipe</h3><table class="inv-table"><thead><tr><th>Production Input</th><th>Qty</th><th>Unit</th></tr></thead><tbody>'+
-    (list.length?list.map(x=>{
-      const i=liveInputs.find(z=>z.code===x.inputCode);
-      return '<tr><td>'+esc(i?i.name:x.inputCode)+'</td><td>'+Number(x.qty||0)+'</td><td>'+esc(i?i.unit:'')+'</td></tr>';
-    }).join(''):'<tr><td colspan="3">No inputs linked yet.</td></tr>')+
-    '</tbody></table>';
-}
-
-window.addRecipeInputRowOld=function(){
-  if(!isManager()){alert('Manager access required.');return;}
-  const rows=document.getElementById('recipeInputRows');
-  if(!rows)return;
-  const row=document.createElement('div');
-  row.className='order-head old-recipe-row';
-  row.style.margin='8px 0';
-  row.innerHTML='<select class="oldRecipeInput" style="min-width:280px">'+inputOptions()+'</select>'+
-    '<input class="oldRecipeQty" type="number" min="0.001" step="0.001" value="1" style="width:120px">'+
-    '<button type="button" onclick="this.parentElement.remove()">REMOVE</button>';
-  rows.appendChild(row);
-};
-
-window.renderSavedRecipeOld=renderSaved;
-
-window.saveOldLayoutRecipe=async function(){
-  if(!isManager()){alert('Manager access required.');return;}
-  const p=document.getElementById('recipeFinalProduct');
-  const product=p&&p.value;
-  if(!product){alert('Please select a final product first.');return;}
-  const links=[...document.querySelectorAll('.old-recipe-row')].map(row=>({
-    inputCode:row.querySelector('.oldRecipeInput')?.value||'',
-    qty:Number(row.querySelector('.oldRecipeQty')?.value||0)
-  })).filter(x=>x.inputCode&&x.qty>0);
-  if(!links.length){alert('Please add at least one production input.');return;}
-  try{
-    const state=await req('pos_state?key=eq.recipes&select=value');
-    let latest=(state&&state[0]&&state[0].value)||{};
-    if(typeof latest==='string'){try{latest=JSON.parse(latest)}catch(_){latest={}}}
-    latest[product]=links;
-    await req('pos_state?key=eq.recipes',{
-      method:'PATCH',
-      headers:{Prefer:'return=minimal'},
-      body:JSON.stringify({value:latest})
-    });
-    liveRecipes=latest;
-    try{localStorage.setItem('feastervilleRecipes',JSON.stringify(latest))}catch(_){}
-    renderSaved();
-    alert('Recipe saved to the live database successfully.');
-  }catch(e){
-    console.error('V43 recipe save',e);
-    alert('Recipe was NOT saved to the live database. '+e.message);
-  }
-};
-
-async function loadLiveRecipeBuilder(){
-  if(!isManager()||!token())return;
-  try{
-    const s=store();
-    const a=await Promise.all([
-      req('pos_store_products?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name&order=code.asc'),
-      req('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit&order=code.asc'),
-      req('pos_state?key=eq.recipes&select=value')
-    ]);
-    liveProducts=a[0]||[];
-    liveInputs=a[1]||[];
-    liveRecipes=(a[2]&&a[2][0]&&a[2][0].value)||{};
-    if(typeof liveRecipes==='string'){try{liveRecipes=JSON.parse(liveRecipes)}catch(_){liveRecipes={}}}
-    renderProducts();
-    document.querySelectorAll('.oldRecipeInput').forEach(sel=>{
-      const old=sel.value; sel.innerHTML=inputOptions(old);
-    });
-  }catch(e){
-    console.error('V43 recipe load',e);
-    const p=document.getElementById('recipeFinalProduct');
-    if(p && p.options.length<=1){
-      p.innerHTML='<option value="">-- Could not load final products --</option>';
-    }
-  }
-}
-window.refreshFinalProductProductionInputsV43=loadLiveRecipeBuilder;
-
-document.addEventListener('change',function(e){
-  if(e.target&&e.target.id==='recipeFinalProduct')ensureBuilder();
-  if(e.target&&e.target.classList&&e.target.classList.contains('production-section-store')){
-    setTimeout(()=>loadLiveRecipeBuilder(),250);
-  }
-},true);
-
-document.addEventListener('click',function(e){
-  const t=e.target;
-  if(t&&/Final Product.*Production Inputs/i.test(t.textContent||'')){
-    setTimeout(()=>loadLiveRecipeBuilder(),150);
-  }
-},true);
-
-document.addEventListener('DOMContentLoaded',()=>setTimeout(loadLiveRecipeBuilder,800));
-window.addEventListener('load',()=>setTimeout(loadLiveRecipeBuilder,1200));
-setTimeout(loadLiveRecipeBuilder,1800);
-})();
-</script>
-<!-- BUILD: FINAL_PRODUCT_PRODUCTION_INPUTS_LIVE_STORE_FIX_V43 -->
-
-</body></html>';
+    '</div></body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -4637,5 +4427,212 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 </script>
 <!-- BUILD: PURCHASING_REORDER_SAFE_V41 -->
 
+
+<script>
+/* FEASTERVILLE SALE CATALOGUE RECOVERY — V42 */
+(function(){
+  if(window.__fvSaleCatalogueV42)return; window.__fvSaleCatalogueV42=true;
+  function repaint(){
+    try{
+      if(typeof cats==='function') cats();
+      if(typeof filterCat==='function') filterCat('ALL',null);
+    }catch(e){
+      console.error('Sale catalogue repaint failed',e);
+      try{
+        const box=document.getElementById('products');
+        if(box && typeof activeProducts==='function' && typeof money==='function'){
+          const rows=activeProducts()||[];
+          box.innerHTML=rows.map(p=>
+            '<button class="product" onclick="add(\''+String(p.code).replace(/'/g,"\\'")+'\')">'+
+            '<span class="name">'+p.code+' — '+p.name+'</span>'+
+            '<span class="price">'+money(p.price)+'</span></button>'
+          ).join('');
+        }
+      }catch(_){}
+    }
+  }
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(repaint,100));
+  window.addEventListener('load',()=>setTimeout(repaint,300));
+  document.addEventListener('click',e=>{
+    const t=e.target;
+    if(t && ((t.id||'')==='liveLoginBtn' || /sign in|login/i.test((t.textContent||'').trim()))){
+      setTimeout(repaint,1200);
+      setTimeout(repaint,2500);
+    }
+  },true);
+  document.addEventListener('change',e=>{
+    if(e.target && /store/i.test(e.target.id||'')) setTimeout(repaint,250);
+  },true);
+  window.fvRepaintSaleCatalogueV42=repaint;
+})();
+</script>
+<!-- BUILD: SALE_CATALOGUE_RECOVERY_V42_SAFE -->
+<script>
+/* FEASTERVILLE FINAL PRODUCT -> PRODUCTION INPUTS — LIVE STORE FIX V43 */
+(function(){
+'use strict';
+if(window.__fvRecipeOldLiveV43)return; window.__fvRecipeOldLiveV43=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const isManager=()=>!!(window.currentUser&&window.currentUser.role==='manager');
+const store=()=>localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let liveProducts=[], liveInputs=[], liveRecipes={};
+
+async function req(path,opt={}){
+  const t=token();
+  if(!t)throw new Error('Sign in again.');
+  const headers=Object.assign({
+    apikey:KEY,
+    Authorization:'Bearer '+t,
+    'Content-Type':'application/json'
+  },opt.headers||{});
+  const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers}));
+  const body=await r.text();
+  if(!r.ok)throw new Error(body||('HTTP '+r.status));
+  return body?JSON.parse(body):null;
+}
+
+function inputOptions(selected=''){
+  return '<option value="">-- Select Production Input --</option>'+
+    liveInputs.map(x=>'<option value="'+esc(x.code)+'" '+(x.code===selected?'selected':'')+'>'+
+      esc(x.code)+' — '+esc(x.name)+' ('+esc(x.unit||'')+')</option>').join('');
+}
+
+function ensureBuilder(){
+  const product=document.getElementById('recipeFinalProduct');
+  const area=document.getElementById('recipeBuilderArea');
+  const rows=document.getElementById('recipeInputRows');
+  if(!product||!area||!rows)return;
+  if(!product.value){
+    area.style.display='none';
+    rows.innerHTML='';
+    const saved=document.getElementById('savedRecipeOld');
+    if(saved)saved.innerHTML='';
+    return;
+  }
+  area.style.display='block';
+  if(!rows.querySelector('.old-recipe-row')) window.addRecipeInputRowOld();
+  renderSaved();
+}
+
+function renderProducts(){
+  const p=document.getElementById('recipeFinalProduct');
+  if(!p)return;
+  const old=p.value;
+  p.innerHTML='<option value="">-- Select Final Product --</option>'+
+    liveProducts.map(x=>'<option value="'+esc(x.code)+'">'+esc(x.code)+' — '+esc(x.name)+'</option>').join('');
+  if(old&&liveProducts.some(x=>x.code===old))p.value=old;
+  ensureBuilder();
+}
+
+function renderSaved(){
+  const p=document.getElementById('recipeFinalProduct');
+  const box=document.getElementById('savedRecipeOld');
+  if(!p||!box||!p.value)return;
+  const list=Array.isArray(liveRecipes[p.value])?liveRecipes[p.value]:[];
+  box.innerHTML='<h3>Saved Recipe</h3><table class="inv-table"><thead><tr><th>Production Input</th><th>Qty</th><th>Unit</th></tr></thead><tbody>'+
+    (list.length?list.map(x=>{
+      const i=liveInputs.find(z=>z.code===x.inputCode);
+      return '<tr><td>'+esc(i?i.name:x.inputCode)+'</td><td>'+Number(x.qty||0)+'</td><td>'+esc(i?i.unit:'')+'</td></tr>';
+    }).join(''):'<tr><td colspan="3">No inputs linked yet.</td></tr>')+
+    '</tbody></table>';
+}
+
+window.addRecipeInputRowOld=function(){
+  if(!isManager()){alert('Manager access required.');return;}
+  const rows=document.getElementById('recipeInputRows');
+  if(!rows)return;
+  const row=document.createElement('div');
+  row.className='order-head old-recipe-row';
+  row.style.margin='8px 0';
+  row.innerHTML='<select class="oldRecipeInput" style="min-width:280px">'+inputOptions()+'</select>'+
+    '<input class="oldRecipeQty" type="number" min="0.001" step="0.001" value="1" style="width:120px">'+
+    '<button type="button" onclick="this.parentElement.remove()">REMOVE</button>';
+  rows.appendChild(row);
+};
+
+window.renderSavedRecipeOld=renderSaved;
+
+window.saveOldLayoutRecipe=async function(){
+  if(!isManager()){alert('Manager access required.');return;}
+  const p=document.getElementById('recipeFinalProduct');
+  const product=p&&p.value;
+  if(!product){alert('Please select a final product first.');return;}
+  const links=[...document.querySelectorAll('.old-recipe-row')].map(row=>({
+    inputCode:row.querySelector('.oldRecipeInput')?.value||'',
+    qty:Number(row.querySelector('.oldRecipeQty')?.value||0)
+  })).filter(x=>x.inputCode&&x.qty>0);
+  if(!links.length){alert('Please add at least one production input.');return;}
+  try{
+    const state=await req('pos_state?key=eq.recipes&select=value');
+    let latest=(state&&state[0]&&state[0].value)||{};
+    if(typeof latest==='string'){try{latest=JSON.parse(latest)}catch(_){latest={}}}
+    latest[product]=links;
+    await req('pos_state?key=eq.recipes',{
+      method:'PATCH',
+      headers:{Prefer:'return=minimal'},
+      body:JSON.stringify({value:latest})
+    });
+    liveRecipes=latest;
+    try{localStorage.setItem('feastervilleRecipes',JSON.stringify(latest))}catch(_){}
+    renderSaved();
+    alert('Recipe saved to the live database successfully.');
+  }catch(e){
+    console.error('V43 recipe save',e);
+    alert('Recipe was NOT saved to the live database. '+e.message);
+  }
+};
+
+async function loadLiveRecipeBuilder(){
+  if(!isManager()||!token())return;
+  try{
+    const s=store();
+    const a=await Promise.all([
+      req('pos_store_products?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name&order=code.asc'),
+      req('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit&order=code.asc'),
+      req('pos_state?key=eq.recipes&select=value')
+    ]);
+    liveProducts=a[0]||[];
+    liveInputs=a[1]||[];
+    liveRecipes=(a[2]&&a[2][0]&&a[2][0].value)||{};
+    if(typeof liveRecipes==='string'){try{liveRecipes=JSON.parse(liveRecipes)}catch(_){liveRecipes={}}}
+    renderProducts();
+    document.querySelectorAll('.oldRecipeInput').forEach(sel=>{
+      const old=sel.value; sel.innerHTML=inputOptions(old);
+    });
+  }catch(e){
+    console.error('V43 recipe load',e);
+    const p=document.getElementById('recipeFinalProduct');
+    if(p && p.options.length<=1){
+      p.innerHTML='<option value="">-- Could not load final products --</option>';
+    }
+  }
+}
+window.refreshFinalProductProductionInputsV43=loadLiveRecipeBuilder;
+
+document.addEventListener('change',function(e){
+  if(e.target&&e.target.id==='recipeFinalProduct')ensureBuilder();
+  if(e.target&&e.target.classList&&e.target.classList.contains('production-section-store')){
+    setTimeout(()=>loadLiveRecipeBuilder(),250);
+  }
+},true);
+
+document.addEventListener('click',function(e){
+  const t=e.target;
+  if(t&&/Final Product.*Production Inputs/i.test(t.textContent||'')){
+    setTimeout(()=>loadLiveRecipeBuilder(),150);
+  }
+},true);
+
+document.addEventListener('DOMContentLoaded',()=>setTimeout(loadLiveRecipeBuilder,800));
+window.addEventListener('load',()=>setTimeout(loadLiveRecipeBuilder,1200));
+setTimeout(loadLiveRecipeBuilder,1800);
+})();
+</script>
+<!-- BUILD: FINAL_PRODUCT_PRODUCTION_INPUTS_LIVE_STORE_FIX_V43_SAFE -->
 </body>
 </html>
