@@ -4506,5 +4506,130 @@ document.addEventListener('change',function(e){
 </script>
 <!-- BUILD: SALES_SELECTION_REPAIR_V41 -->
 
+
+<script>
+/* RECEIVE STOCK NULL-INNERHTML FIX V42 */
+(function(){
+'use strict';
+if(window.__fvReceiveStockV42)return;window.__fvReceiveStockV42=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const store=()=>{
+  const u=window.currentUser||{};
+  return u.role==='manager'
+    ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+    : (u.store_code||'NDAYENI');
+};
+const saDate=()=>new Intl.DateTimeFormat('en-CA',{
+  timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'
+}).format(new Date());
+
+function headers(prefer){
+  const h={
+    apikey:KEY,
+    Authorization:'Bearer '+token(),
+    'Content-Type':'application/json'
+  };
+  if(prefer) h.Prefer=prefer;
+  return h;
+}
+async function api(path,opt={}){
+  const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:Object.assign(headers(),opt.headers||{})}));
+  const txt=await r.text();
+  if(!r.ok) throw new Error(txt||('HTTP '+r.status));
+  return txt?JSON.parse(txt):null;
+}
+async function meta(code){
+  const rows=await api(
+    'pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store())+
+    '&code=eq.'+encodeURIComponent(code)+'&select=code,name,unit'
+  );
+  return rows?.[0]||{code:code,name:code,unit:'EA'};
+}
+function getField(ids){
+  for(const id of ids){
+    const el=document.getElementById(id);
+    if(el) return el;
+  }
+  return null;
+}
+async function safeRefreshLedger(){
+  try{
+    if(typeof window.refreshLiveProductionLedger==='function'){
+      await window.refreshLiveProductionLedger();
+    }
+  }catch(e){
+    console.warn('V42 ledger refresh skipped:',e);
+  }
+}
+async function receiveStockV42(){
+  try{
+    if(!window.currentUser || window.currentUser.role!=='manager'){
+      alert('Manager access required.');
+      return;
+    }
+
+    const input=getField(['piStockInput','movementInput','productionReceiptInput']);
+    const qtyEl=getField(['piStockQty','movementQty','productionReceiptQty']);
+    const supplierEl=getField(['piStockSupplier','movementSupplier','productionReceiptSupplier']);
+    const refEl=getField(['piStockReference','movementReference','productionReceiptReference']);
+
+    if(!input){
+      alert('Production input selector is not available. Please reopen Production Inputs.');
+      return;
+    }
+    const code=String(input.value||'').trim();
+    const qty=Number(qtyEl?.value||0);
+    if(!code){alert('Select a production input.');return}
+    if(!(qty>0)){alert('Enter a quantity greater than zero.');return}
+
+    const item=await meta(code);
+
+    // Insert receipt only. The database trigger is the authoritative
+    // synchronisation into pos_store_input_counts.
+    await api('pos_stock_receipts',{
+      method:'POST',
+      headers:headers('return=representation'),
+      body:JSON.stringify({
+        receipt_date:saDate(),
+        supplier:String(supplierEl?.value||'').trim()||null,
+        reference:String(refEl?.value||'').trim()||null,
+        input_code:code,
+        input_name:item.name||code,
+        unit:item.unit||'EA',
+        qty:qty,
+        unit_cost:0,
+        received_by:window.currentUser.display_name||window.currentUser.email||'Manager',
+        created_by:window.currentUser.id||window.currentUser.user_id||null,
+        store_code:store()
+      })
+    });
+
+    if(qtyEl) qtyEl.value='';
+    if(supplierEl) supplierEl.value='';
+    if(refEl) refEl.value='';
+
+    // Do NOT call old showProductionInputs()/refreshStoreProductionData here:
+    // those legacy functions contain DOM writes to elements that may not exist.
+    await safeRefreshLedger();
+
+    alert('Stock received successfully for '+(store()==='SIVANA'?'Sivana':'Ndayini')+'. The live stock ledger has been updated.');
+  }catch(e){
+    console.error('V42 receive stock',e);
+    alert('Could not receive stock: '+(e.message||e));
+  }
+}
+
+// Route BOTH old and newer receive-stock buttons to the same stable handler.
+window.recordProductionReceipt=receiveStockV42;
+window.receiveProductionStock=receiveStockV42;
+window.receiveStockV42=receiveStockV42;
+})();
+</script>
+<!-- BUILD: RECEIVE_STOCK_NULL_FIX_V42 -->
+
 </body>
 </html>
