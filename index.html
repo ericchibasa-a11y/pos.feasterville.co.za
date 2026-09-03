@@ -5031,5 +5031,189 @@ setTimeout(initDates,800);
 </script>
 <!-- BUILD: V45_DIRECT_DATE_SALES_NONZERO_PRINT -->
 
+
+<script>
+/* V46 — INVENTORY CONTROL ROLE: ONLY 3 FUNCTIONS */
+(function(){
+'use strict';
+if(window.__fvInventoryControlV46)return;window.__fvInventoryControlV46=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+const user=()=>window.currentUser||window.salesSessionUser||{};
+const isIC=()=>user().role==='inventory_control';
+const isMgr=()=>user().role==='manager';
+const store=()=>isMgr()?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(user().store_code||'NDAYENI');
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const n=x=>Number(x||0),fmt=x=>n(x).toFixed(2);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path,opt={}){
+ const h=Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},opt.headers||{});
+ const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h})),t=await r.text();
+ if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):null;
+}
+
+let inputs=[],counts={};
+
+async function loadData(){
+ const s=store(),d=today();
+ const [ii,cc]=await Promise.all([
+  api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
+  api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&count_date=eq.'+d+'&select=input_code,opening_qty,received_qty,used_qty,physical_count')
+ ]);
+ inputs=ii||[];counts={};(cc||[]).forEach(x=>counts[x.input_code]=x);
+}
+
+function rows(){
+ return inputs.map(p=>{
+  const c=counts[p.code]||{},opening=n(c.opening_qty),received=n(c.received_qty),used=n(c.used_qty);
+  const expected=opening+received-used,physical=n(c.physical_count),variance=physical-expected;
+  return {...p,opening,received,used,expected,physical,variance};
+ });
+}
+
+async function renderAllowed(){
+ await loadData();
+ const sel=document.getElementById('piStockInput');
+ if(sel)sel.innerHTML=inputs.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.code)+' — '+esc(p.name)+' ('+esc(p.unit)+')</option>').join('');
+
+ const body=document.getElementById('productionCountBody');
+ if(body)body.innerHTML=rows().map(r=>'<tr>'+
+  '<td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td><td>'+fmt(r.expected)+'</td>'+
+  '<td><input type="number" min="0" step="0.01" value="'+r.physical+'" onchange="inventoryControlCountV46(\''+String(r.code).replace(/'/g,"\\'")+'\',this.value)"></td>'+
+  '<td>'+fmt(r.variance)+'</td><td>'+(r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK')+'</td></tr>').join('');
+
+ const recon=document.getElementById('reconContent');
+ if(recon)recon.innerHTML='<div id="fvICReconPrintV46"><h3>Production Inputs Reconciliation — '+today()+'</h3>'+
+  '<p class="small"><b>Store:</b> '+esc(store()==='SIVANA'?'Sivana':'Ndayini')+'</p>'+
+  '<table class="inv-table"><thead><tr><th>Code</th><th>Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used</th><th>Expected</th><th>Physical</th><th>Variance</th><th>Action</th></tr></thead><tbody>'+
+  rows().map(r=>'<tr><td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td><td>'+fmt(r.opening)+'</td><td>'+fmt(r.received)+'</td><td>'+fmt(r.used)+'</td><td>'+fmt(r.expected)+'</td><td>'+fmt(r.physical)+'</td><td>'+fmt(r.variance)+'</td><td>'+(r.variance<0?'SHORTAGE':r.variance>0?'SURPLUS':'OK')+'</td></tr>').join('')+
+  '</tbody></table></div>';
+}
+
+window.inventoryControlCountV46=async function(code,value){
+ if(!(isIC()||isMgr()))return alert('Inventory Control or Manager access required.');
+ const c=counts[code]||{};
+ await api('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{
+  method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
+  body:JSON.stringify({store_code:store(),input_code:code,count_date:today(),opening_qty:n(c.opening_qty),received_qty:n(c.received_qty),used_qty:n(c.used_qty),physical_count:n(value)})
+ });
+ await renderAllowed();
+};
+
+async function receive(){
+ if(!(isIC()||isMgr()))return alert('Inventory Control or Manager access required.');
+ const input=document.getElementById('piStockInput'),qtyEl=document.getElementById('piStockQty');
+ const code=input?.value||'',qty=n(qtyEl?.value);
+ if(!code)return alert('Select a production input.');
+ if(!(qty>0))return alert('Enter a quantity greater than zero.');
+ const p=inputs.find(x=>x.code===code);if(!p)return alert('Production input not found.');
+ await api('pos_stock_receipts',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({
+  receipt_date:today(),supplier:null,reference:null,input_code:code,input_name:p.name,unit:p.unit||'EA',
+  qty:qty,unit_cost:0,received_by:user().name||user().display_name||user().username||'Inventory Control',
+  created_by:user().id||user().user_id||null,store_code:store()
+ })});
+ if(qtyEl)qtyEl.value='';
+ await renderAllowed();
+ alert('Production input stock received successfully.');
+}
+window.receiveProductionStock=receive;
+window.recordProductionReceipt=receive;
+
+function printRecon(){
+ if(!(isIC()||isMgr()))return alert('Inventory Control or Manager access required.');
+ const node=document.getElementById('fvICReconPrintV46')||document.getElementById('reconContent');
+ if(!node||!node.innerHTML.trim())return alert('Open Production Inputs reconciliation first.');
+ const w=window.open('','_blank','width=1200,height=800');
+ if(!w)return alert('Please allow pop-ups to print the reconciliation.');
+ w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'</body></html>');
+ w.document.close();w.focus();setTimeout(()=>w.print(),300);
+}
+window.printRecon=printRecon;try{printRecon=window.printRecon}catch(e){}
+
+function inventoryMode(){
+ if(!isIC())return;
+ // Store is fixed to the user's assigned store.
+ try{localStorage.setItem('feastervilleStoreCode',store())}catch(e){}
+ const ss=document.getElementById('storeLocationSelect');if(ss){ss.value=store();ss.disabled=true}
+ const badge=document.getElementById('storeLocationBadge');if(badge)badge.textContent=(store()==='SIVANA'?'Sivana':'Ndayini')+' Inventory Control';
+ const ub=document.getElementById('userBadge');if(ub)ub.textContent='Inventory Control: '+(user().name||user().username||'User');
+ const lu=document.getElementById('liveUser');if(lu)lu.textContent='Inventory Control: '+(user().name||user().username||'User');
+
+ // Hide every application section first.
+ document.querySelectorAll('.app > section,.app > div.panel').forEach(x=>x.style.display='none');
+
+ // Show only the two panels that contain the 3 approved functions.
+ const pp=document.getElementById('productionInputsPanel'),rp=document.getElementById('reconPanel');
+ if(pp)pp.style.display='block';if(rp)rp.style.display='block';
+
+ // Production panel: retain Receive Stock and Count Sheet only.
+ if(pp){
+   Array.from(pp.children).forEach(ch=>ch.style.display='none');
+   const hs=Array.from(pp.querySelectorAll(':scope > h3'));
+   hs.forEach(h=>{
+     const text=(h.textContent||'');
+     if(/^1\./.test(text)||/^3\./.test(text)){
+       h.style.display='';
+       let x=h.nextElementSibling;
+       while(x && x.tagName!=='H3'){x.style.display='';x=x.nextElementSibling}
+     }
+   });
+   const h2=pp.querySelector(':scope > h2');if(h2){h2.textContent='Inventory Control — Production Inputs';h2.style.display=''}
+ }
+
+ // Reconciliation: Production Inputs + PDF only. No Finished Products.
+ if(rp){
+   const buttons=rp.querySelectorAll('.inventory-actions button');
+   buttons.forEach(b=>{
+     if(/Finished Products/i.test(b.textContent||''))b.style.display='none';
+     if(/Production Inputs/i.test(b.textContent||'')){b.style.display='';b.classList.add('active')}
+     if(/SAVE RECONCILIATION AS PDF/i.test(b.textContent||''))b.style.display='';
+   });
+ }
+ renderAllowed().catch(e=>{console.error(e);alert('Inventory Control could not load: '+e.message)});
+}
+
+window.setInventoryControlRoleV46=async function(uid){
+ if(!isMgr())return alert('Manager access required.');
+ try{
+  await api('rpc/manager_set_pos_user_role',{method:'POST',body:JSON.stringify({p_user_id:uid,p_role:'inventory_control'})});
+  alert('User changed to Inventory Control. Their access is limited to Production Input Reconciliation, Count Sheet and Receive Stock.');
+  if(typeof window.loadLiveStaffUsers==='function')window.loadLiveStaffUsers();
+ }catch(e){alert('Could not change role: '+e.message)}
+};
+
+// Add SET INVENTORY CONTROL button to existing manager user rows.
+function addRoleButtons(){
+ if(!isMgr())return;
+ document.querySelectorAll('#staffRows tr').forEach(tr=>{
+  if(tr.querySelector('.fvICRoleBtn'))return;
+  const action=tr.lastElementChild;if(!action)return;
+  const old=action.querySelector('button[onclick*="ftStaffActive"]');
+  if(!old)return;
+  const m=(old.getAttribute('onclick')||'').match(/ftStaffActive\('([^']+)'/);if(!m)return;
+  const role=(tr.children[2]?.textContent||'').trim();
+  if(role==='manager'||role==='inventory_control')return;
+  const b=document.createElement('button');b.type='button';b.className='fvICRoleBtn';b.textContent='SET INVENTORY CONTROL';
+  b.onclick=()=>window.setInventoryControlRoleV46(m[1]);action.appendChild(document.createTextNode(' '));action.appendChild(b);
+ });
+}
+
+let ticks=0;
+const timer=setInterval(()=>{
+ ticks++;
+ if(isIC()){inventoryMode();clearInterval(timer)}
+ else if(isMgr())addRoleButtons();
+ if(ticks>120)clearInterval(timer);
+},500);
+
+const staff=document.getElementById('staffRows');
+if(staff)new MutationObserver(addRoleButtons).observe(staff,{childList:true,subtree:true});
+})();
+</script>
+<!-- BUILD: INVENTORY_CONTROL_LIMITED_ACCESS_V46 -->
+
 </body>
 </html>
