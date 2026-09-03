@@ -5094,7 +5094,7 @@ async function renderAllowed(){
 }
 
 window.inventoryControlCountV46=async function(code,value){
- if(!(isIC()||isMgr()))return alert('Inventory Control or Manager access required.');
+ if(!(isIC()||isMgr()))return alert('Inventory Controller or Manager access required.');
  const c=counts[code]||{};
  await api('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{
   method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
@@ -5104,7 +5104,7 @@ window.inventoryControlCountV46=async function(code,value){
 };
 
 async function receive(){
- if(!(isIC()||isMgr()))return alert('Inventory Control or Manager access required.');
+ if(!(isIC()||isMgr()))return alert('Inventory Controller or Manager access required.');
  const input=document.getElementById('piStockInput'),qtyEl=document.getElementById('piStockQty');
  const code=input?.value||'',qty=n(qtyEl?.value);
  if(!code)return alert('Select a production input.');
@@ -5112,7 +5112,7 @@ async function receive(){
  const p=inputs.find(x=>x.code===code);if(!p)return alert('Production input not found.');
  await api('pos_stock_receipts',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({
   receipt_date:today(),supplier:null,reference:null,input_code:code,input_name:p.name,unit:p.unit||'EA',
-  qty:qty,unit_cost:0,received_by:user().name||user().display_name||user().username||'Inventory Control',
+  qty:qty,unit_cost:0,received_by:user().name||user().display_name||user().username||'Inventory Controller',
   created_by:user().id||user().user_id||null,store_code:store()
  })});
  if(qtyEl)qtyEl.value='';
@@ -5123,7 +5123,7 @@ window.receiveProductionStock=receive;
 window.recordProductionReceipt=receive;
 
 function printRecon(){
- if(!(isIC()||isMgr()))return alert('Inventory Control or Manager access required.');
+ if(!(isIC()||isMgr()))return alert('Inventory Controller or Manager access required.');
  const node=document.getElementById('fvICReconPrintV46')||document.getElementById('reconContent');
  if(!node||!node.innerHTML.trim())return alert('Open Production Inputs reconciliation first.');
  const w=window.open('','_blank','width=1200,height=800');
@@ -5139,8 +5139,8 @@ function inventoryMode(){
  try{localStorage.setItem('feastervilleStoreCode',store())}catch(e){}
  const ss=document.getElementById('storeLocationSelect');if(ss){ss.value=store();ss.disabled=true}
  const badge=document.getElementById('storeLocationBadge');if(badge)badge.textContent=(store()==='SIVANA'?'Sivana':'Ndayini')+' Inventory Control';
- const ub=document.getElementById('userBadge');if(ub)ub.textContent='Inventory Control: '+(user().name||user().username||'User');
- const lu=document.getElementById('liveUser');if(lu)lu.textContent='Inventory Control: '+(user().name||user().username||'User');
+ const ub=document.getElementById('userBadge');if(ub)ub.textContent='Inventory Controller: '+(user().name||user().username||'User');
+ const lu=document.getElementById('liveUser');if(lu)lu.textContent='Inventory Controller: '+(user().name||user().username||'User');
 
  // Hide every application section first.
  document.querySelectorAll('.app > section,.app > div.panel').forEach(x=>x.style.display='none');
@@ -5161,7 +5161,7 @@ function inventoryMode(){
        while(x && x.tagName!=='H3'){x.style.display='';x=x.nextElementSibling}
      }
    });
-   const h2=pp.querySelector(':scope > h2');if(h2){h2.textContent='Inventory Control — Production Inputs';h2.style.display=''}
+   const h2=pp.querySelector(':scope > h2');if(h2){h2.textContent='Inventory Controller — Production Inputs';h2.style.display=''}
  }
 
  // Reconciliation: Production Inputs + PDF only. No Finished Products.
@@ -5173,19 +5173,19 @@ function inventoryMode(){
      if(/SAVE RECONCILIATION AS PDF/i.test(b.textContent||''))b.style.display='';
    });
  }
- renderAllowed().catch(e=>{console.error(e);alert('Inventory Control could not load: '+e.message)});
+ renderAllowed().catch(e=>{console.error(e);alert('Inventory Controller could not load: '+e.message)});
 }
 
 window.setInventoryControlRoleV46=async function(uid){
  if(!isMgr())return alert('Manager access required.');
  try{
   await api('rpc/manager_set_pos_user_role',{method:'POST',body:JSON.stringify({p_user_id:uid,p_role:'inventory_control'})});
-  alert('User changed to Inventory Control. Their access is limited to Production Input Reconciliation, Count Sheet and Receive Stock.');
+  alert('User changed to Inventory Controller. Their access is limited to Production Input Reconciliation, Count Sheet and Receive Stock.');
   if(typeof window.loadLiveStaffUsers==='function')window.loadLiveStaffUsers();
  }catch(e){alert('Could not change role: '+e.message)}
 };
 
-// Add SET INVENTORY CONTROL button to existing manager user rows.
+// Add SET INVENTORY CONTROLLER button to existing manager user rows.
 function addRoleButtons(){
  if(!isMgr())return;
  document.querySelectorAll('#staffRows tr').forEach(tr=>{
@@ -5196,7 +5196,7 @@ function addRoleButtons(){
   const m=(old.getAttribute('onclick')||'').match(/ftStaffActive\('([^']+)'/);if(!m)return;
   const role=(tr.children[2]?.textContent||'').trim();
   if(role==='manager'||role==='inventory_control')return;
-  const b=document.createElement('button');b.type='button';b.className='fvICRoleBtn';b.textContent='SET INVENTORY CONTROL';
+  const b=document.createElement('button');b.type='button';b.className='fvICRoleBtn';b.textContent='SET INVENTORY CONTROLLER';
   b.onclick=()=>window.setInventoryControlRoleV46(m[1]);action.appendChild(document.createTextNode(' '));action.appendChild(b);
  });
 }
@@ -5213,7 +5213,7 @@ const staff=document.getElementById('staffRows');
 if(staff)new MutationObserver(addRoleButtons).observe(staff,{childList:true,subtree:true});
 })();
 </script>
-<!-- BUILD: INVENTORY_CONTROL_LIMITED_ACCESS_V46 -->
+<!-- BUILD: INVENTORY_CONTROLLER_LIMITED_ACCESS_V47 -->
 
 </body>
 </html>
