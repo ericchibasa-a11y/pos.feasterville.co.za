@@ -4631,5 +4631,32 @@ window.receiveStockV42=receiveStockV42;
 </script>
 <!-- BUILD: RECEIVE_STOCK_NULL_FIX_V42 -->
 
+<script>
+(function(){'use strict';if(window.__fvDateSalesV43)return;window.__fvDateSalesV43=true;
+const B='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',K='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM',old=window.showReport;
+const tok=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const st=()=>{let u=window.currentUser||window.salesSessionUser||{};return u.role==='manager'?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(u.store_code||'NDAYENI')};
+const td=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const m=n=>'R'+Number(n||0).toFixed(2),x=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function filters(){let c=document.getElementById('reportContent');if(!c)return;let b=document.getElementById('fvDateFilters43');if(b)return;
+b=document.createElement('div');b.id='fvDateFilters43';b.className='order-head';b.style='margin:12px 0;gap:10px;align-items:end;flex-wrap:wrap';
+b.innerHTML='<label>From Date<br><input id="fvFrom43" type="date"></label><label>To Date<br><input id="fvTo43" type="date"></label><button class="primary" id="fvView43">VIEW REPORT</button><button class="secondary" id="fvToday43">TODAY</button><button class="secondary" id="fvPrint43">PRINT / SAVE PDF</button>';
+c.parentNode.insertBefore(b,c);document.getElementById('fvFrom43').value=td();document.getElementById('fvTo43').value=td();
+document.getElementById('fvView43').onclick=render;document.getElementById('fvToday43').onclick=()=>{document.getElementById('fvFrom43').value=td();document.getElementById('fvTo43').value=td();render()};document.getElementById('fvPrint43').onclick=()=>window.print();}
+async function render(){filters();let c=document.getElementById('reportContent'),f=document.getElementById('fvFrom43').value||td(),t=document.getElementById('fvTo43').value||f;if(f>t){alert('From Date cannot be after To Date.');return}
+c.innerHTML='<h3>Sales Report</h3><div class="small">Loading live sales...</div>';
+try{let q='pos_sales?store_code=eq.'+encodeURIComponent(st())+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&select=id,order_no,sale_date,sale_time,cashier,payment,total,pos_sale_items(code,name,qty,price)&order=sale_date.desc,sale_time.desc&limit=10000';
+let r=await fetch(B+'/'+q,{headers:{apikey:K,Authorization:'Bearer '+tok()}}),z=await r.text();if(!r.ok)throw Error(z);let a=z?JSON.parse(z):[],tot=a.reduce((s,v)=>s+Number(v.total||0),0),units=0,pay={},prod={};
+a.forEach(s=>{let p=s.payment||'Other';pay[p]=(pay[p]||0)+Number(s.total||0);(s.pos_sale_items||[]).forEach(i=>{let q=Number(i.qty||0),v=q*Number(i.price||0),k=i.code||i.name;units+=q;if(!prod[k])prod[k]={n:i.name||k,q:0,v:0};prod[k].q+=q;prod[k].v+=v})});
+let label=f===t?f:f+' to '+t;c.innerHTML='<h3>Daily Sales Report — '+x(label)+'</h3><div class="small">Store: <b>'+x(st()==='SIVANA'?'Sivana':'Ndayini')+'</b></div>'+
+'<div class="inv-grid"><div class="inv-card">Orders<br><b>'+a.length+'</b></div><div class="inv-card">Total Sales<br><b>'+m(tot)+'</b></div><div class="inv-card">Units Sold<br><b>'+units+'</b></div><div class="inv-card">Average Order<br><b>'+m(a.length?tot/a.length:0)+'</b></div></div>'+
+'<h3>Payment Breakdown</h3><table class="inv-table"><tr><th>Payment</th><th>Sales</th></tr>'+Object.entries(pay).map(([p,v])=>'<tr><td>'+x(p)+'</td><td>'+m(v)+'</td></tr>').join('')+'</table>'+
+'<h3>Product Sales</h3><table class="inv-table"><tr><th>Code</th><th>Product</th><th>Qty</th><th>Sales Value</th></tr>'+Object.entries(prod).sort((a,b)=>b[1].v-a[1].v).map(([k,v])=>'<tr><td>'+x(k)+'</td><td>'+x(v.n)+'</td><td>'+v.q+'</td><td>'+m(v.v)+'</td></tr>').join('')+'</table>'+
+'<h3>Daily Sales Transactions</h3><div style="overflow:auto"><table class="inv-table"><tr><th>Order No.</th><th>Date</th><th>Time Completed</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+(a.length?a.map(s=>'<tr><td>'+x(s.order_no)+'</td><td>'+x(s.sale_date)+'</td><td><b>'+x(String(s.sale_time||'').slice(0,8))+'</b></td><td>'+x(s.cashier)+'</td><td>'+x(s.payment)+'</td><td>'+m(s.total)+'</td></tr>').join(''):'<tr><td colspan="6">No sales for selected period.</td></tr>')+'</table></div>';
+}catch(e){console.error(e);c.innerHTML='<h3>Sales Report</h3><div class="small">Could not load live sales.</div>'}}
+window.showReport=function(type,btn){if(type==='sales'){if(btn){document.querySelectorAll('#reportsPanel .cat').forEach(b=>b.classList.remove('active'));btn.classList.add('active')}filters();render();return}return typeof old==='function'?old.apply(this,arguments):undefined};
+window.applySelectedDateSalesReportV43=render;
+})();</script>
+<!-- BUILD: SELECTED_DATE_DAILY_SALES_V43 -->
 </body>
 </html>
