@@ -1996,6 +1996,62 @@ document.addEventListener('DOMContentLoaded',function(){
       return;
     }
 
+    // INVENTORY CONTROLLER: isolated startup.
+    // Do not run the manager pullState/pullSales startup because this role
+    // intentionally has no access to sales, recipes or manager configuration.
+    if (profile.role === 'inventory_control') {
+      const iu = {
+        id:authData.user.id,
+        user_id:authData.user.id,
+        username:authData.user.email,
+        email:authData.user.email,
+        name:profile.display_name || authData.user.email,
+        display_name:profile.display_name || authData.user.email,
+        role:'inventory_control',
+        store_code:profile.store_code || 'NDAYENI',
+        label:'Inventory Controller: '+(profile.display_name || authData.user.email)
+      };
+
+      window.salesSessionUser = null;
+      currentUser = window.currentUser = iu;
+      currentLiveUser = authData.user;
+      currentProfile = profile;
+
+      try { localStorage.setItem('feastervilleStoreCode', iu.store_code); } catch (_) {}
+
+      const badge=document.getElementById('userBadge');
+      if(badge) badge.textContent=iu.label;
+      const cloudUser=el('liveUser');
+      if(cloudUser) cloudUser.textContent=iu.label;
+
+      const overlay=el('liveLoginOverlay');
+      if(overlay) overlay.style.setProperty('display','none','important');
+      const logout=el('liveLogout');
+      if(logout) logout.style.display='';
+
+      setStatus('ONLINE - '+(iu.store_code==='SIVANA'?'Sivana':'Ndayeni')+' Inventory Controller');
+      setMessage('');
+
+      // Hide sales/manager areas immediately. V46/V47 inventory-controller
+      // access code will show only reconciliation, count sheet and receive stock.
+      document.querySelectorAll('.manager-only').forEach(n=>n.style.display='none');
+      ['accessPanel','recipePanel','reportsPanel','userPanel','stockMovementPanel',
+       'usagePanel','easyLinkPanel','masterProductionEditorPanel','managerInventoryNav',
+       'inventoryListingPanel','sellableItemsPanel'].forEach(function(id){
+        const n=document.getElementById(id); if(n)n.style.display='none';
+      });
+
+      // Explicitly trigger the Inventory Controller loader if present.
+      setTimeout(function(){
+        try {
+          if (typeof window.refreshActualRecipeBuilderV40==='function') { /* intentionally not called */ }
+          if (typeof window.refreshLiveProductionLedger==='function') { /* manager-only, intentionally not called */ }
+        } catch (_) {}
+      },100);
+
+      return;
+    }
+
     // Manager keeps the existing full live initialization.
     applyProfile(authData.user, profile);
     el('liveLoginOverlay').style.display = 'none';
@@ -5303,6 +5359,51 @@ if(rows)new MutationObserver(labelRoles).observe(rows,{childList:true,subtree:tr
 })();
 </script>
 <!-- BUILD: CREATE_USER_ROLE_SELECTOR_V48 -->
+
+
+<script>
+/* V49 INVENTORY CONTROLLER LOGIN STARTUP FIX */
+(function(){
+'use strict';
+if(window.__fvICLoginV49)return;window.__fvICLoginV49=true;
+
+function showInventoryControllerOnly(){
+ const u=window.currentUser;
+ if(!u||u.role!=='inventory_control')return;
+
+ try{localStorage.setItem('feastervilleStoreCode',u.store_code||'NDAYENI')}catch(e){}
+
+ document.querySelectorAll('.app > section,.app > div.panel').forEach(x=>x.style.display='none');
+
+ const pp=document.getElementById('productionInputsPanel');
+ const rp=document.getElementById('reconPanel');
+ if(pp)pp.style.display='block';
+ if(rp)rp.style.display='block';
+
+ // Let the V46/V47 role-specific renderer do the detailed child filtering.
+ if(typeof window.refreshSelectedDateSalesV44==='function'){ /* deliberately skipped */ }
+
+ const badge=document.getElementById('userBadge');
+ if(badge)badge.textContent='Inventory Controller: '+(u.name||u.email||'User');
+
+ const ov=document.getElementById('liveLoginOverlay');
+ if(ov)ov.style.setProperty('display','none','important');
+}
+
+let checks=0;
+const timer=setInterval(()=>{
+ checks++;
+ if(window.currentUser&&window.currentUser.role==='inventory_control'){
+   showInventoryControllerOnly();
+   if(checks>8)clearInterval(timer);
+ }
+ if(checks>60)clearInterval(timer);
+},250);
+
+window.showInventoryControllerOnlyV49=showInventoryControllerOnly;
+})();
+</script>
+<!-- BUILD: INVENTORY_CONTROLLER_LOGIN_FIX_V49 -->
 
 </body>
 </html>
