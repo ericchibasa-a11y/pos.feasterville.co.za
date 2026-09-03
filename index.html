@@ -474,6 +474,13 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 <button class="primary" onclick="printCurrentReport()">SAVE REPORT AS PDF</button>
 <button class="secondary" onclick="printCurrentReport()">PRINT REPORT</button>
 </div>
+<div id="fvSalesDateBarV45" class="order-head" style="margin:12px 0;gap:10px;align-items:end;flex-wrap:wrap">
+  <label><b>From Date</b><br><input id="fvSalesFromV45" type="date"></label>
+  <label><b>To Date</b><br><input id="fvSalesToV45" type="date"></label>
+  <button type="button" class="primary" onclick="loadSelectedSalesV45()">VIEW DAILY SALES</button>
+  <button type="button" class="secondary" onclick="todaySelectedSalesV45()">TODAY</button>
+  <button type="button" class="secondary" onclick="printSelectedSalesV45()">PRINT / SAVE PDF</button>
+</div>
 <div id="reportContent"></div>
 </section>
 
@@ -4658,5 +4665,371 @@ window.showReport=function(type,btn){if(type==='sales'){if(btn){document.querySe
 window.applySelectedDateSalesReportV43=render;
 })();</script>
 <!-- BUILD: SELECTED_DATE_DAILY_SALES_V43 -->
+
+<script>
+/* V44 — ACTIVATE SELECTED-DATE SALES + CLEAN RECON PDF */
+(function(){
+'use strict';
+if(window.__fvV44)return; window.__fvV44=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const previousReport = window.showReport;
+
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const currentStore=()=>{
+  const u=window.currentUser||window.salesSessionUser||{};
+  return u.role==='manager'
+    ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+    : (u.store_code||'NDAYENI');
+};
+const saToday=()=>new Intl.DateTimeFormat('en-CA',{
+  timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'
+}).format(new Date());
+const money44=n=>'R'+Number(n||0).toFixed(2);
+const esc44=s=>String(s??'').replace(/[&<>"']/g,c=>({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+
+function installDateControls(){
+  const content=document.getElementById('reportContent');
+  if(!content) return false;
+  let bar=document.getElementById('fvSalesDateBarV44');
+  if(bar) return true;
+
+  bar=document.createElement('div');
+  bar.id='fvSalesDateBarV44';
+  bar.className='order-head';
+  bar.style.cssText='margin:12px 0;gap:10px;align-items:end;flex-wrap:wrap';
+  bar.innerHTML=
+    '<label><b>From Date</b><br><input id="fvSalesFromV44" type="date"></label>'+
+    '<label><b>To Date</b><br><input id="fvSalesToV44" type="date"></label>'+
+    '<button type="button" class="primary" id="fvSalesViewV44">VIEW REPORT</button>'+
+    '<button type="button" class="secondary" id="fvSalesTodayV44">TODAY</button>'+
+    '<button type="button" class="secondary" id="fvSalesPrintV44">PRINT / SAVE PDF</button>';
+
+  content.parentNode.insertBefore(bar,content);
+  const d=saToday();
+  document.getElementById('fvSalesFromV44').value=d;
+  document.getElementById('fvSalesToV44').value=d;
+  document.getElementById('fvSalesViewV44').onclick=()=>renderSelectedSalesV44(true);
+  document.getElementById('fvSalesTodayV44').onclick=()=>{
+    document.getElementById('fvSalesFromV44').value=d;
+    document.getElementById('fvSalesToV44').value=d;
+    renderSelectedSalesV44(true);
+  };
+  document.getElementById('fvSalesPrintV44').onclick=()=>printOnlyV44(
+    'Daily Sales Report',
+    document.getElementById('reportContent')
+  );
+  return true;
+}
+
+async function getSelectedSalesV44(from,to){
+  const q='pos_sales?store_code=eq.'+encodeURIComponent(currentStore())+
+    '&sale_date=gte.'+encodeURIComponent(from)+
+    '&sale_date=lte.'+encodeURIComponent(to)+
+    '&select=id,order_no,sale_date,sale_time,cashier,payment,total,pos_sale_items(code,name,category,qty,price)'+
+    '&order=sale_date.desc,sale_time.desc&limit=10000';
+  const r=await fetch(BASE+'/'+q,{
+    headers:{apikey:KEY,Authorization:'Bearer '+token()}
+  });
+  const text=await r.text();
+  if(!r.ok) throw new Error(text||('HTTP '+r.status));
+  return text?JSON.parse(text):[];
+}
+
+async function renderSelectedSalesV44(force){
+  installDateControls();
+  const box=document.getElementById('reportContent');
+  if(!box || !token()) return;
+
+  const fromEl=document.getElementById('fvSalesFromV44');
+  const toEl=document.getElementById('fvSalesToV44');
+  const from=(fromEl&&fromEl.value)||saToday();
+  const to=(toEl&&toEl.value)||from;
+
+  if(from>to){ alert('From Date cannot be after To Date.'); return; }
+
+  box.innerHTML='<h3>Daily Sales Report</h3><div class="small">Loading live sales...</div>';
+
+  try{
+    const rows=await getSelectedSalesV44(from,to);
+    const total=rows.reduce((a,s)=>a+Number(s.total||0),0);
+    let units=0;
+    const payment={};
+    const products={};
+
+    rows.forEach(s=>{
+      const p=String(s.payment||'Other');
+      payment[p]=(payment[p]||0)+Number(s.total||0);
+      (s.pos_sale_items||[]).forEach(i=>{
+        const qty=Number(i.qty||0), val=qty*Number(i.price||0);
+        units+=qty;
+        const k=i.code||i.name||'';
+        if(!products[k]) products[k]={name:i.name||k,qty:0,value:0};
+        products[k].qty+=qty;
+        products[k].value+=val;
+      });
+    });
+
+    const period=from===to?from:(from+' to '+to);
+    box.innerHTML=
+      '<div id="fvPrintableSalesV44">'+
+      '<h3>Daily Sales Report — '+esc44(period)+'</h3>'+
+      '<div class="small" style="margin-bottom:10px">Store: <b>'+
+        esc44(currentStore()==='SIVANA'?'Sivana':'Ndayini')+'</b></div>'+
+      '<div class="inv-grid">'+
+        '<div class="inv-card">Orders<br><b>'+rows.length+'</b></div>'+
+        '<div class="inv-card">Total Sales<br><b>'+money44(total)+'</b></div>'+
+        '<div class="inv-card">Units Sold<br><b>'+units+'</b></div>'+
+        '<div class="inv-card">Average Order<br><b>'+money44(rows.length?total/rows.length:0)+'</b></div>'+
+      '</div>'+
+      '<h3>Payment Breakdown</h3>'+
+      '<table class="inv-table"><thead><tr><th>Payment</th><th>Sales</th></tr></thead><tbody>'+
+        (Object.keys(payment).length
+          ? Object.entries(payment).map(([p,v])=>'<tr><td>'+esc44(p)+'</td><td>'+money44(v)+'</td></tr>').join('')
+          : '<tr><td colspan="2">No sales.</td></tr>')+
+      '</tbody></table>'+
+      '<h3>Product Sales</h3>'+
+      '<table class="inv-table"><thead><tr><th>Code</th><th>Product</th><th>Qty</th><th>Sales Value</th></tr></thead><tbody>'+
+        (Object.keys(products).length
+          ? Object.entries(products).sort((a,b)=>b[1].value-a[1].value).map(([c,v])=>
+              '<tr><td>'+esc44(c)+'</td><td>'+esc44(v.name)+'</td><td>'+v.qty+'</td><td>'+money44(v.value)+'</td></tr>'
+            ).join('')
+          : '<tr><td colspan="4">No product sales.</td></tr>')+
+      '</tbody></table>'+
+      '<h3>Daily Sales Transactions</h3>'+
+      '<div style="overflow:auto"><table class="inv-table">'+
+      '<thead><tr><th>Order No.</th><th>Date</th><th>Time Completed</th><th>Cashier</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+
+        (rows.length
+          ? rows.map(s=>'<tr>'+
+              '<td>'+esc44(s.order_no)+'</td>'+
+              '<td>'+esc44(s.sale_date)+'</td>'+
+              '<td><b>'+esc44(String(s.sale_time||'').slice(0,8))+'</b></td>'+
+              '<td>'+esc44(s.cashier)+'</td>'+
+              '<td>'+esc44(s.payment)+'</td>'+
+              '<td>'+money44(s.total)+'</td>'+
+            '</tr>').join('')
+          : '<tr><td colspan="6">No sales for selected period.</td></tr>')+
+      '</tbody></table></div></div>';
+  }catch(e){
+    console.error('V44 selected sales',e);
+    box.innerHTML='<h3>Daily Sales Report</h3><div class="small">Could not load live sales for the selected date.</div>';
+  }
+}
+
+function salesShowReportV44(type,btn){
+  if(type==='sales'){
+    if(btn){
+      document.querySelectorAll('#reportsPanel .cat').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    installDateControls();
+    renderSelectedSalesV44(false);
+    return;
+  }
+  return typeof previousReport==='function'?previousReport.apply(this,arguments):undefined;
+}
+window.showReport=salesShowReportV44;
+// Critical: old inline onclick and earlier refresh code call the global function binding directly.
+try{ showReport=salesShowReportV44; }catch(e){ console.warn('V44 showReport binding',e); }
+
+function printOnlyV44(title,node){
+  if(!node){ alert('Nothing to print.'); return; }
+  const frame=document.createElement('iframe');
+  frame.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(frame);
+  const doc=frame.contentDocument||frame.contentWindow.document;
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc44(title)+'</title>'+
+    '<style>'+
+      '@page{size:A4 landscape;margin:8mm}'+
+      'html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#111;background:#fff;font-size:9px}'+
+      'h1,h2,h3{margin:5px 0 7px;page-break-after:avoid}'+
+      '.small{font-size:8px}.inv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:6px 0}'+
+      '.inv-card{border:1px solid #bbb;padding:5px}'+
+      'table{width:100%;border-collapse:collapse;table-layout:auto}'+
+      'th,td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
+      'th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}'+
+      'button,input,select{display:none!important}'+
+    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'</body></html>');
+  doc.close();
+  setTimeout(()=>{
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(()=>frame.remove(),1000);
+  },250);
+}
+
+function printReconV44(){
+  const u=window.currentUser||{};
+  if(u.role!=='manager'){alert('Manager access required.');return;}
+  const content=document.getElementById('reconContent');
+  if(!content || !content.innerHTML.trim()){alert('Open a reconciliation report first.');return;}
+  const active=document.querySelector('#reconPanel .cat.active');
+  const title=active && /Production Inputs/i.test(active.textContent||'')
+    ? 'Production Input Reconciliation'
+    : 'Finished Product Reconciliation';
+  printOnlyV44(title,content);
+}
+window.printRecon=printReconV44;
+try{ printRecon=printReconV44; }catch(e){ console.warn('V44 printRecon binding',e); }
+
+// Make filters visible as soon as reports are opened, rather than waiting for a report refresh.
+document.addEventListener('click',function(e){
+  const t=e.target;
+  if(!t)return;
+  if(/SALES\s*&\s*INVENTORY REPORTS/i.test(t.textContent||'') ||
+     /Sales Report/i.test(t.textContent||'')){
+    setTimeout(()=>{
+      installDateControls();
+      const b=document.querySelector('#reportsPanel .cat');
+      salesShowReportV44('sales',b);
+    },100);
+  }
+},true);
+
+window.refreshSelectedDateSalesV44=()=>renderSelectedSalesV44(true);
+})();
+</script>
+<!-- BUILD: V44_SELECTED_DATE_ACTIVE_AND_RECON_PRINT_FIX -->
+
+
+<script>
+/* V45 — DIRECT DATE SALES + NONZERO OFFSCREEN PRINT FRAME */
+(function(){
+'use strict';
+if(window.__fvV45)return;window.__fvV45=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const tok=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const st=()=>{
+  const u=window.currentUser||window.salesSessionUser||{};
+  return u.role==='manager'
+    ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI')
+    : (u.store_code||'NDAYENI');
+};
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const money=n=>'R'+Number(n||0).toFixed(2);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function initDates(){
+  const f=document.getElementById('fvSalesFromV45'),t=document.getElementById('fvSalesToV45');
+  if(f&&!f.value)f.value=today();
+  if(t&&!t.value)t.value=today();
+}
+async function apiSales(from,to){
+  const q='pos_sales?store_code=eq.'+encodeURIComponent(st())+
+    '&sale_date=gte.'+encodeURIComponent(from)+'&sale_date=lte.'+encodeURIComponent(to)+
+    '&select=id,order_no,sale_date,sale_time,cashier,payment,total,pos_sale_items(code,name,category,qty,price)'+
+    '&order=sale_date.desc,sale_time.desc&limit=10000';
+  const r=await fetch(BASE+'/'+q,{headers:{apikey:KEY,Authorization:'Bearer '+tok()}});
+  const text=await r.text();
+  if(!r.ok)throw Error(text||('HTTP '+r.status));
+  return text?JSON.parse(text):[];
+}
+async function load(){
+  initDates();
+  const box=document.getElementById('reportContent');
+  const from=document.getElementById('fvSalesFromV45')?.value||today();
+  const to=document.getElementById('fvSalesToV45')?.value||from;
+  if(!box)return;
+  if(from>to){alert('From Date cannot be after To Date.');return;}
+  box.innerHTML='<h3>Daily Sales Report</h3><div class="small">Loading live sales...</div>';
+  try{
+    const rows=await apiSales(from,to);
+    const total=rows.reduce((a,s)=>a+Number(s.total||0),0);
+    let units=0; const pays={},products={};
+    rows.forEach(s=>{
+      const p=String(s.payment||'Other'); pays[p]=(pays[p]||0)+Number(s.total||0);
+      (s.pos_sale_items||[]).forEach(i=>{
+        const q=Number(i.qty||0),v=q*Number(i.price||0),k=i.code||i.name||'';
+        units+=q;
+        if(!products[k])products[k]={name:i.name||k,qty:0,value:0};
+        products[k].qty+=q;products[k].value+=v;
+      });
+    });
+    const period=from===to?from:from+' to '+to;
+    box.innerHTML='<div id="fvSelectedSalesPrintV45">'+
+      '<h2>Feasterville Food — Daily Sales Report</h2>'+
+      '<p><b>Store:</b> '+esc(st()==='SIVANA'?'Sivana':'Ndayini')+' &nbsp; <b>Period:</b> '+esc(period)+'</p>'+
+      '<div class="inv-grid">'+
+       '<div class="inv-card">Orders<br><b>'+rows.length+'</b></div>'+
+       '<div class="inv-card">Total Sales<br><b>'+money(total)+'</b></div>'+
+       '<div class="inv-card">Units Sold<br><b>'+units+'</b></div>'+
+       '<div class="inv-card">Average Order<br><b>'+money(rows.length?total/rows.length:0)+'</b></div>'+
+      '</div>'+
+      '<h3>Payment Breakdown</h3><table class="inv-table"><thead><tr><th>Payment</th><th>Sales</th></tr></thead><tbody>'+
+      (Object.keys(pays).length?Object.entries(pays).map(([p,v])=>'<tr><td>'+esc(p)+'</td><td>'+money(v)+'</td></tr>').join(''):'<tr><td colspan="2">No sales.</td></tr>')+
+      '</tbody></table>'+
+      '<h3>Product Sales</h3><table class="inv-table"><thead><tr><th>Code</th><th>Product</th><th>Qty</th><th>Sales Value</th></tr></thead><tbody>'+
+      (Object.keys(products).length?Object.entries(products).sort((a,b)=>b[1].value-a[1].value).map(([c,v])=>'<tr><td>'+esc(c)+'</td><td>'+esc(v.name)+'</td><td>'+v.qty+'</td><td>'+money(v.value)+'</td></tr>').join(''):'<tr><td colspan="4">No product sales.</td></tr>')+
+      '</tbody></table>'+
+      '<h3>Daily Sales Transactions</h3><table class="inv-table"><thead><tr><th>Order No.</th><th>Date</th><th>Time Completed</th><th>Cashier</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+
+      (rows.length?rows.map(s=>'<tr><td>'+esc(s.order_no)+'</td><td>'+esc(s.sale_date)+'</td><td>'+esc(String(s.sale_time||'').slice(0,8))+'</td><td>'+esc(s.cashier)+'</td><td>'+esc(s.payment)+'</td><td>'+money(s.total)+'</td></tr>').join(''):'<tr><td colspan="6">No sales for selected period.</td></tr>')+
+      '</tbody></table></div>';
+  }catch(e){
+    console.error('V45 selected sales',e);
+    box.innerHTML='<h3>Daily Sales Report</h3><div class="small">Could not load live sales: '+esc(e.message)+'</div>';
+  }
+}
+
+function printNode(title,node){
+  if(!node||!node.innerHTML.trim()){alert('There is no report to print.');return;}
+  // Important: non-zero dimensions + offscreen. V44 used width/height 0, causing blank/massive page output.
+  const frame=document.createElement('iframe');
+  frame.setAttribute('aria-hidden','true');
+  frame.style.cssText='position:fixed;left:-12000px;top:0;width:1200px;height:900px;border:0;background:#fff;';
+  document.body.appendChild(frame);
+  const d=frame.contentDocument||frame.contentWindow.document;
+  d.open();
+  d.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+
+   '@page{size:A4 landscape;margin:8mm}'+
+   'html,body{margin:0;padding:0;background:white;color:#111;font-family:Arial,sans-serif;font-size:9pt;width:auto;height:auto;overflow:visible}'+
+   'h1,h2,h3{margin:5px 0 7px;page-break-after:avoid}p{margin:4px 0 8px}'+
+   '.inv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:6px 0 10px}.inv-card{border:1px solid #bbb;padding:6px}'+
+   'table,.inv-table{width:100%;border-collapse:collapse;table-layout:auto}th,td,.inv-table th,.inv-table td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
+   'th,.inv-table th{background:#eee!important;color:#111!important}thead{display:table-header-group}tr{page-break-inside:avoid}'+
+   'button,input,select{display:none!important}'+
+   '</style></head><body>'+node.innerHTML+'</body></html>');
+  d.close();
+  setTimeout(()=>{
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(()=>frame.remove(),1500);
+  },500);
+}
+
+window.loadSelectedSalesV45=load;
+window.todaySelectedSalesV45=function(){
+  initDates();
+  document.getElementById('fvSalesFromV45').value=today();
+  document.getElementById('fvSalesToV45').value=today();
+  load();
+};
+window.printSelectedSalesV45=function(){
+  printNode('Feasterville Daily Sales Report',document.getElementById('fvSelectedSalesPrintV45')||document.getElementById('reportContent'));
+};
+window.printRecon=function(){
+  const u=window.currentUser||{};
+  if(u.role!=='manager'){alert('Manager access required.');return;}
+  const n=document.getElementById('reconContent');
+  printNode('Feasterville Inventory & Stock Count Reconciliation',n);
+};
+try{printRecon=window.printRecon}catch(e){}
+
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(t && (/SALES\s*&\s*INVENTORY REPORTS/i.test(t.textContent||'')||/^Sales Report$/i.test((t.textContent||'').trim()))){
+    setTimeout(()=>{initDates();load();},150);
+  }
+},true);
+setTimeout(initDates,800);
+})();
+</script>
+<!-- BUILD: V45_DIRECT_DATE_SALES_NONZERO_PRINT -->
+
 </body>
 </html>
