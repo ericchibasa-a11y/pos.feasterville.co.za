@@ -5215,5 +5215,94 @@ if(staff)new MutationObserver(addRoleButtons).observe(staff,{childList:true,subt
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_LIMITED_ACCESS_V47 -->
 
+
+<script>
+/* V48 — CREATE SALESPERSON OR INVENTORY CONTROLLER DIRECTLY */
+(function(){
+'use strict';
+if(window.__fvCreateRoleV48)return;window.__fvCreateRoleV48=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const manager=()=>window.currentUser&&window.currentUser.role==='manager';
+
+async function api(path,opt={}){
+ const h=Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},opt.headers||{});
+ const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h}));
+ const text=await r.text();
+ if(!r.ok)throw Error(text||('HTTP '+r.status));
+ return text?JSON.parse(text):null;
+}
+
+function installRoleSelector(){
+ if(!manager())return;
+ const createBtn=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').trim()==='CREATE SALESPERSON');
+ if(!createBtn||document.getElementById('fvCreateRoleV48'))return;
+
+ const storeSel=document.getElementById('ftStaffStore') ||
+   Array.from(createBtn.parentElement.querySelectorAll('select')).find(s=>/NDAYENI|SIVANA/i.test(s.innerHTML||''));
+
+ const wrap=document.createElement('label');
+ wrap.style.cssText='font-weight:700;display:inline-block';
+ wrap.innerHTML='User Role<br><select id="fvCreateRoleV48" style="min-width:185px;height:50px">'+
+   '<option value="salesperson">Salesperson</option>'+
+   '<option value="inventory_control">Inventory Controller</option>'+
+   '</select>';
+
+ if(storeSel&&storeSel.parentElement) storeSel.parentElement.insertAdjacentElement('afterend',wrap);
+ else createBtn.insertAdjacentElement('beforebegin',wrap);
+
+ createBtn.textContent='CREATE USER';
+
+ createBtn.addEventListener('click',async function(){
+   const role=document.getElementById('fvCreateRoleV48')?.value||'salesperson';
+   if(role!=='inventory_control')return; // existing salesperson creation remains unchanged
+
+   // Wait for the existing create-salesperson process to create/load the new account,
+   // then convert the matching new account to Inventory Controller.
+   const emailEl=document.getElementById('ftStaffEmail') ||
+     Array.from(document.querySelectorAll('input')).find(i=>/salesperson email/i.test(i.placeholder||''));
+   const email=(emailEl?.value||'').trim().toLowerCase();
+   if(!email)return;
+
+   setTimeout(async()=>{
+     try{
+       const profiles=await api('pos_profiles?email=eq.'+encodeURIComponent(email)+'&select=user_id,email,role');
+       const p=profiles&&profiles[0];
+       if(!p)return;
+       await api('rpc/manager_set_pos_user_role',{
+         method:'POST',
+         body:JSON.stringify({p_user_id:p.user_id,p_role:'inventory_control'})
+       });
+       if(typeof window.loadLiveStaffUsers==='function')await window.loadLiveStaffUsers();
+       alert('Inventory Controller account created successfully. Access is limited to Production Input Reconciliation, Production Input Count Sheet and Receive Production Input Stock.');
+     }catch(e){console.error('V48 role conversion',e)}
+   },1800);
+ },true);
+}
+
+function labelRoles(){
+ document.querySelectorAll('#staffRows tr').forEach(tr=>{
+   const cells=tr.children;
+   if(cells[2] && (cells[2].textContent||'').trim()==='inventory_control')
+     cells[2].textContent='Inventory Controller';
+ });
+}
+
+let tries=0;
+const timer=setInterval(()=>{
+ tries++;
+ installRoleSelector();
+ labelRoles();
+ if(tries>120)clearInterval(timer);
+},500);
+
+const rows=document.getElementById('staffRows');
+if(rows)new MutationObserver(labelRoles).observe(rows,{childList:true,subtree:true});
+})();
+</script>
+<!-- BUILD: CREATE_USER_ROLE_SELECTOR_V48 -->
+
 </body>
 </html>
