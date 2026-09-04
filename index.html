@@ -5456,5 +5456,137 @@ window.showInventoryControllerOnlyV49=showInventoryControllerOnly;
 <!-- BUILD: INVENTORY_CONTROLLER_ISOLATED_LOGIN_V50 -->
 <!-- BUILD: INVENTORY_CONTROLLER_LIVE_STOCK_ROLLFORWARD_V51 -->
 
+
+<script>
+/* V52 — LIVE RECONCILIATION RECEIVED + USED FROM DATABASE */
+(function(){
+'use strict';
+if(window.__fvReconLiveV52)return; window.__fvReconLiveV52=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const u=()=>window.inventorySessionUser||window.currentUser||window.salesSessionUser||{};
+const isMgr=()=>u().role==='manager';
+const isIC=()=>u().role==='inventory_control';
+const store=()=>{
+ if(isIC()) return u().store_code||'NDAYENI';
+ return document.getElementById('storeLocationSelect')?.value||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+};
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const n=x=>Number(x||0), fmt=x=>n(x).toFixed(2);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path){
+ const r=await fetch(BASE+'/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+token()}});
+ const t=await r.text();
+ if(!r.ok)throw Error(t||('HTTP '+r.status));
+ return t?JSON.parse(t):[];
+}
+
+function priorClosing(list,d){
+ const p=(list||[]).filter(x=>x.count_date<d).sort((a,b)=>String(b.count_date).localeCompare(String(a.count_date)))[0];
+ if(!p)return 0;
+ const physical=n(p.physical_count);
+ return physical!==0?physical:(n(p.opening_qty)+n(p.received_qty)-n(p.used_qty));
+}
+
+async function liveRows(){
+ const s=store(),d=today();
+ const [inputs,allCounts]=await Promise.all([
+   api('rest/v1/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
+   api('rest/v1/pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&order=count_date.desc')
+ ]);
+ const byCode={};
+ (allCounts||[]).forEach(x=>(byCode[x.input_code]||(byCode[x.input_code]=[])).push(x));
+ return (inputs||[]).map(p=>{
+   const list=byCode[p.code]||[];
+   const c=list.find(x=>x.count_date===d)||{};
+   const prior=priorClosing(list,d);
+   let opening=n(c.opening_qty);
+   if((!c.count_date||opening===0)&&prior!==0)opening=prior;
+   const received=n(c.received_qty);
+   const used=n(c.used_qty);
+   const expected=opening+received-used;
+   const physical=n(c.physical_count);
+   const variance=physical-expected;
+   return {...p,opening,received,used,expected,physical,variance};
+ });
+}
+
+async function renderLiveRecon(btn){
+ if(!(isMgr()||isIC()))return;
+ const box=document.getElementById('reconContent'); if(!box)return;
+ if(btn){
+   document.querySelectorAll('#reconPanel .cat').forEach(b=>b.classList.remove('active'));
+   btn.classList.add('active');
+ }
+ box.innerHTML='<p class="small"><b>Loading live reconciliation...</b></p>';
+ try{
+   const rr=await liveRows();
+   const shortages=rr.filter(r=>r.variance<0).length;
+   const surpluses=rr.filter(r=>r.variance>0).length;
+   const totalVariance=rr.reduce((a,r)=>a+r.variance,0);
+   box.innerHTML=
+     '<div id="fvLiveReconV52">'+
+     '<h3>Production Input Reconciliation — '+today()+'</h3>'+
+     '<p class="small"><b>Store:</b> '+esc(store()==='SIVANA'?'Sivana':'Ndayini')+
+     ' &nbsp; <b>Source:</b> LIVE DATABASE &nbsp; <b>Updated:</b> '+
+     new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</p>'+
+     '<div class="inv-grid"><div class="inv-card">Items Checked<br><b>'+rr.length+'</b></div>'+
+     '<div class="inv-card">Shortages<br><b>'+shortages+'</b></div>'+
+     '<div class="inv-card">Surpluses<br><b>'+surpluses+'</b></div>'+
+     '<div class="inv-card">Net Variance<br><b>'+fmt(totalVariance)+'</b></div></div>'+
+     '<table class="inv-table"><thead><tr><th>Code</th><th>Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used</th><th>Expected Closing</th><th>Physical Count</th><th>Variance</th><th>Action</th></tr></thead><tbody>'+
+     rr.map(r=>'<tr><td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td>'+
+       '<td>'+fmt(r.opening)+'</td><td>'+fmt(r.received)+'</td><td>'+fmt(r.used)+'</td>'+
+       '<td>'+fmt(r.expected)+'</td><td>'+fmt(r.physical)+'</td><td><b>'+fmt(r.variance)+'</b></td>'+
+       '<td>'+(r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK')+'</td></tr>').join('')+
+     '</tbody></table></div>';
+ }catch(e){
+   console.error('V52 live reconciliation',e);
+   box.innerHTML='<p class="small">Could not load live reconciliation: '+esc(e.message)+'</p>';
+ }
+}
+
+// Replace Production Inputs reconciliation with the direct live DB version.
+// Finished Products remains on the existing manager report.
+const oldShow=window.showRecon || (typeof showRecon==='function'?showRecon:null);
+window.showRecon=function(type,btn){
+ if(type==='raw' && (isMgr()||isIC())) return renderLiveRecon(btn);
+ return oldShow ? oldShow(type,btn) : undefined;
+};
+try{showRecon=window.showRecon}catch(_){}
+
+// Inventory Controller should always display this live reconciliation.
+setInterval(()=>{
+ if(isIC() && document.visibilityState==='visible')renderLiveRecon().catch(()=>{});
+},5000);
+
+// Refresh immediately after receive-stock or physical count operations.
+const oldReceive=window.receiveProductionStock;
+if(typeof oldReceive==='function'){
+ window.receiveProductionStock=async function(){
+   const r=await oldReceive.apply(this,arguments);
+   setTimeout(()=>renderLiveRecon().catch(()=>{}),150);
+   return r;
+ };
+ window.recordProductionReceipt=window.receiveProductionStock;
+}
+const oldCount=window.inventoryControlCountV46;
+if(typeof oldCount==='function'){
+ window.inventoryControlCountV46=async function(){
+   const r=await oldCount.apply(this,arguments);
+   setTimeout(()=>renderLiveRecon().catch(()=>{}),150);
+   return r;
+ };
+}
+
+// If IC is already logged in when this patch loads, show live reconciliation immediately.
+setTimeout(()=>{ if(isIC())renderLiveRecon().catch(()=>{}); },700);
+})();
+</script>
+<!-- BUILD: LIVE_RECON_RECEIVED_USED_V52 -->
+
 </body>
 </html>
