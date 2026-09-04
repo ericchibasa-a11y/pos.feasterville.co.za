@@ -5514,8 +5514,8 @@ function priorClosing(list,d){
 async function liveRows(){
  const s=store(),d=today();
  const [inputs,allCounts]=await Promise.all([
-   api('rest/v1/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
-   api('rest/v1/pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&order=count_date.desc')
+   api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
+   api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&order=count_date.desc')
  ]);
  const byCode={};
  (allCounts||[]).forEach(x=>(byCode[x.input_code]||(byCode[x.input_code]=[])).push(x));
@@ -5868,5 +5868,6 @@ setInterval(()=>stableRefresh(false),60000);
 </script>
 <!-- BUILD: TRANSACTION_SAFE_STOCK_V55 -->
 
+<!-- BUILD: FIX_IC_RECON_PGRST125_V56 -->
 </body>
 </html>
