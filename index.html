@@ -5171,20 +5171,41 @@ async function renderAllowed(){
    st.textContent='LIVE DATABASE — '+(store()==='SIVANA'?'Sivana':'Ndayini')+' — Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'});
  }
  const sel=document.getElementById('piStockInput');
- if(sel)sel.innerHTML=inputs.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.code)+' — '+esc(p.name)+' ('+esc(p.unit)+')</option>').join('');
+ if(sel){
+   const keep=sel.value;
+   const optionHtml=inputs.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.code)+' — '+esc(p.name)+' ('+esc(p.unit)+')</option>').join('');
+   if(sel.dataset.v54Options!==optionHtml){
+     sel.innerHTML=optionHtml;
+     sel.dataset.v54Options=optionHtml;
+     if(keep && inputs.some(p=>p.code===keep))sel.value=keep;
+   }
+ }
 
  const body=document.getElementById('productionCountBody');
- if(body)body.innerHTML=rows().map(r=>'<tr>'+
-  '<td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td><td>'+fmt(r.expected)+'</td>'+
-  '<td><input type="number" min="0" step="0.01" value="'+r.physical+'" onchange="inventoryControlCountV46(\''+String(r.code).replace(/'/g,"\\'")+'\',this.value)"></td>'+
-  '<td>'+fmt(r.variance)+'</td><td>'+(r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK')+'</td></tr>').join('');
+ if(body){
+   const nextHtml=rows().map(r=>'<tr>'+
+    '<td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td><td>'+fmt(r.expected)+'</td>'+
+    '<td><input type="number" min="0" step="0.01" value="'+r.physical+'" onchange="inventoryControlCountV46(\''+String(r.code).replace(/'/g,"\\'")+'\',this.value)"></td>'+
+    '<td>'+fmt(r.variance)+'</td><td>'+(r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK')+'</td></tr>').join('');
+   // Do not overwrite a number the Inventory Controller is currently typing.
+   if(!body.contains(document.activeElement) && body.dataset.v54Html!==nextHtml){
+     body.innerHTML=nextHtml;
+     body.dataset.v54Html=nextHtml;
+   }
+ }
 
- const recon=document.getElementById('reconContent');
- if(recon)recon.innerHTML='<div id="fvICReconPrintV46"><h3>Production Inputs Reconciliation — '+today()+'</h3>'+
-  '<p class="small"><b>Store:</b> '+esc(store()==='SIVANA'?'Sivana':'Ndayini')+'</p>'+
-  '<table class="inv-table"><thead><tr><th>Code</th><th>Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used</th><th>Expected</th><th>Physical</th><th>Variance</th><th>Action</th></tr></thead><tbody>'+
-  rows().map(r=>'<tr><td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td><td>'+fmt(r.opening)+'</td><td>'+fmt(r.received)+'</td><td>'+fmt(r.used)+'</td><td>'+fmt(r.expected)+'</td><td>'+fmt(r.physical)+'</td><td>'+fmt(r.variance)+'</td><td>'+(r.variance<0?'SHORTAGE':r.variance>0?'SURPLUS':'OK')+'</td></tr>').join('')+
-  '</tbody></table></div>';
+ // V52+ owns reconciliation. Do not let the older V46 renderer overwrite it every refresh.
+ if(!window.__fvReconLiveV52){
+   const recon=document.getElementById('reconContent');
+   if(recon){
+     const nextRecon='<div id="fvICReconPrintV46"><h3>Production Inputs Reconciliation — '+today()+'</h3>'+
+      '<p class="small"><b>Store:</b> '+esc(store()==='SIVANA'?'Sivana':'Ndayini')+'</p>'+
+      '<table class="inv-table"><thead><tr><th>Code</th><th>Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used</th><th>Expected</th><th>Physical</th><th>Variance</th><th>Action</th></tr></thead><tbody>'+
+      rows().map(r=>'<tr><td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.unit)+'</td><td>'+fmt(r.opening)+'</td><td>'+fmt(r.received)+'</td><td>'+fmt(r.used)+'</td><td>'+fmt(r.expected)+'</td><td>'+fmt(r.physical)+'</td><td>'+fmt(r.variance)+'</td><td>'+(r.variance<0?'SHORTAGE':r.variance>0?'SURPLUS':'OK')+'</td></tr>').join('')+
+      '</tbody></table></div>';
+     if(recon.innerHTML!==nextRecon)recon.innerHTML=nextRecon;
+   }
+ }
 }
 
 window.inventoryControlCountV46=async function(code,value){
@@ -5314,8 +5335,8 @@ if(staff)new MutationObserver(addRoleButtons).observe(staff,{childList:true,subt
 // V51: refresh Inventory Controller live database values every 5 seconds.
 // This reads pos_store_input_counts directly, so Manager/POS stock activity appears without re-login.
 setInterval(()=>{
- if(isIC())renderAllowed().catch(e=>console.error('Inventory Controller live refresh:',e));
-},5000);
+ if(isIC() && document.visibilityState==='visible')renderAllowed().catch(e=>console.error('Inventory Controller live refresh:',e));
+},15000);
 })();
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_LIMITED_ACCESS_V47 -->
@@ -5521,13 +5542,13 @@ async function renderLiveRecon(btn){
    document.querySelectorAll('#reconPanel .cat').forEach(b=>b.classList.remove('active'));
    btn.classList.add('active');
  }
- box.innerHTML='<p class="small"><b>Loading live reconciliation...</b></p>';
+ if(!box.innerHTML.trim())box.innerHTML='<p class="small"><b>Loading live reconciliation...</b></p>';
  try{
    const rr=await liveRows();
    const shortages=rr.filter(r=>r.variance<0).length;
    const surpluses=rr.filter(r=>r.variance>0).length;
    const totalVariance=rr.reduce((a,r)=>a+r.variance,0);
-   box.innerHTML=
+   const nextHtml=
      '<div id="fvLiveReconV52">'+
      '<h3>Production Input Reconciliation — '+today()+'</h3>'+
      '<p class="small"><b>Store:</b> '+esc(store()==='SIVANA'?'Sivana':'Ndayini')+
@@ -5543,6 +5564,10 @@ async function renderLiveRecon(btn){
        '<td>'+fmt(r.expected)+'</td><td>'+fmt(r.physical)+'</td><td><b>'+fmt(r.variance)+'</b></td>'+
        '<td>'+(r.variance<0?'INVESTIGATE SHORTAGE':r.variance>0?'CHECK SURPLUS':'OK')+'</td></tr>').join('')+
      '</tbody></table></div>';
+   if(box.dataset.v54Html!==nextHtml){
+     box.innerHTML=nextHtml;
+     box.dataset.v54Html=nextHtml;
+   }
  }catch(e){
    console.error('V52 live reconciliation',e);
    box.innerHTML='<p class="small">Could not load live reconciliation: '+esc(e.message)+'</p>';
@@ -5653,7 +5678,7 @@ async function render(){
   if(!body)return;
   try{
     const rr=await getRows();
-    body.innerHTML=rr.map(r=>'<tr>'+
+    const nextHtml=rr.map(r=>'<tr>'+
       '<td>'+esc(r.code)+'</td>'+
       '<td>'+esc(r.name)+'</td>'+
       '<td>'+esc(r.unit)+'</td>'+
@@ -5666,6 +5691,10 @@ async function render(){
       '<td>'+fmt(r.reorder)+'</td>'+
       '<td>'+(r.expected<=0?'OUT':r.expected<=r.reorder?'REORDER':'OK')+'</td>'+
       '</tr>').join('');
+    if(body.dataset.v54Html!==nextHtml){
+      body.innerHTML=nextHtml;
+      body.dataset.v54Html=nextHtml;
+    }
 
     let st=document.getElementById('fvLedgerStatusV53');
     const panel=document.getElementById('productionInputsPanel');
@@ -5693,6 +5722,36 @@ if(sel)sel.addEventListener('change',()=>setTimeout(render,100));
 })();
 </script>
 <!-- BUILD: LIVE_PRODUCTION_LEDGER_V53 -->
+
+
+<script>
+/* V54 — STOP RECEIVE STOCK BLINKING / PRESERVE USER ENTRY */
+(function(){
+'use strict';
+if(window.__fvStableReceiveV54)return;window.__fvStableReceiveV54=true;
+
+const qty=document.getElementById('piStockQty');
+const sel=document.getElementById('piStockInput');
+
+function remember(){
+ if(sel)sel.dataset.v54Selected=sel.value||'';
+ if(qty)qty.dataset.v54Typed=qty.value||'';
+}
+function restore(){
+ if(sel && sel.dataset.v54Selected && Array.from(sel.options).some(o=>o.value===sel.dataset.v54Selected))
+   sel.value=sel.dataset.v54Selected;
+ if(qty && document.activeElement===qty && qty.dataset.v54Typed!=null)
+   qty.value=qty.dataset.v54Typed;
+}
+if(sel)sel.addEventListener('change',remember);
+if(qty){
+ qty.addEventListener('input',remember);
+ qty.addEventListener('focus',remember);
+}
+new MutationObserver(()=>restore()).observe(document.getElementById('productionInputsPanel')||document.body,{childList:true,subtree:true});
+})();
+</script>
+<!-- BUILD: STABLE_RECEIVE_STOCK_V54 -->
 
 </body>
 </html>
