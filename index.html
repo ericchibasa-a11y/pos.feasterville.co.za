@@ -5869,5 +5869,91 @@ setInterval(()=>stableRefresh(false),60000);
 <!-- BUILD: TRANSACTION_SAFE_STOCK_V55 -->
 
 <!-- BUILD: FIX_IC_RECON_PGRST125_V56 -->
+
+<script>
+/* V57 — INVENTORY CONTROLLER RECONCILIATION HARD REFRESH */
+(function(){
+'use strict';
+if(window.__fvReconHardRefreshV57)return; window.__fvReconHardRefreshV57=true;
+
+function isIC(){
+  const u=window.inventorySessionUser||window.currentUser||window.salesSessionUser||{};
+  return u.role==='inventory_control';
+}
+function reconVisible(){
+  const p=document.getElementById('reconPanel');
+  return !!p && getComputedStyle(p).display!=='none';
+}
+let running=false;
+async function hardRefresh(){
+  if(!isIC() || !reconVisible() || running)return;
+  running=true;
+  try{
+    if(typeof window.refreshLiveReconV55==='function'){
+      await window.refreshLiveReconV55();
+    }else if(typeof window.showRecon==='function'){
+      await window.showRecon('raw',null);
+    }
+    const box=document.getElementById('reconContent');
+    if(box){
+      let s=document.getElementById('fvReconAutoStatusV57');
+      if(!s){
+        s=document.createElement('div');
+        s.id='fvReconAutoStatusV57';
+        s.className='small';
+        s.style.cssText='margin:8px 0;font-weight:700';
+        box.insertAdjacentElement('beforebegin',s);
+      }
+      s.textContent='LIVE RECONCILIATION — refreshed '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'});
+    }
+  }catch(e){ console.error('V57 reconciliation refresh',e); }
+  finally{ running=false; }
+}
+window.refreshInventoryReconciliationV57=hardRefresh;
+
+// Force the Production Inputs reconciliation to load whenever the IC panel is opened.
+setTimeout(hardRefresh,700);
+setInterval(hardRefresh,5000);
+
+// Refresh after any receive-stock or physical-count transaction has had time to commit.
+const receive=window.receiveProductionStock;
+if(typeof receive==='function'){
+  window.receiveProductionStock=async function(){
+    const r=await receive.apply(this,arguments);
+    await new Promise(x=>setTimeout(x,1200));
+    await hardRefresh();
+    return r;
+  };
+  window.recordProductionReceipt=window.receiveProductionStock;
+}
+const count=window.inventoryControlCountV46;
+if(typeof count==='function'){
+  window.inventoryControlCountV46=async function(){
+    const r=await count.apply(this,arguments);
+    await new Promise(x=>setTimeout(x,700));
+    await hardRefresh();
+    return r;
+  };
+}
+
+// Add a dedicated reconciliation refresh button.
+function addButton(){
+  if(!isIC())return;
+  const actions=document.querySelector('#reconPanel .inventory-actions');
+  if(!actions || document.getElementById('fvReconRefreshV57'))return;
+  const b=document.createElement('button');
+  b.type='button'; b.id='fvReconRefreshV57'; b.className='primary';
+  b.textContent='REFRESH RECONCILIATION';
+  b.onclick=hardRefresh;
+  actions.appendChild(b);
+}
+let tries=0, boot=setInterval(()=>{
+  tries++; addButton();
+  if(document.getElementById('fvReconRefreshV57')||tries>120)clearInterval(boot);
+},250);
+})();
+</script>
+<!-- BUILD: INVENTORY_RECON_AUTO_REFRESH_V57 -->
+
 </body>
 </html>
