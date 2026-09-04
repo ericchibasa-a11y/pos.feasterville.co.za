@@ -5588,5 +5588,111 @@ setTimeout(()=>{ if(isIC())renderLiveRecon().catch(()=>{}); },700);
 </script>
 <!-- BUILD: LIVE_RECON_RECEIVED_USED_V52 -->
 
+
+<script>
+/* V53 — LIVE PRODUCTION INPUT STOCK LEDGER */
+(function(){
+'use strict';
+if(window.__fvLedgerLiveV53)return; window.__fvLedgerLiveV53=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const usr=()=>window.inventorySessionUser||window.currentUser||window.salesSessionUser||{};
+const isAllowed=()=>['manager','inventory_control'].includes(usr().role);
+const store=()=>{
+  if(usr().role==='inventory_control')return usr().store_code||'NDAYENI';
+  return document.getElementById('storeLocationSelect')?.value||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+};
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const n=x=>Number(x||0),fmt=x=>n(x).toFixed(2);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path){
+  const r=await fetch(BASE+'/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+token()}});
+  const t=await r.text();
+  if(!r.ok)throw Error(t||('HTTP '+r.status));
+  return t?JSON.parse(t):[];
+}
+
+function previousClosing(list,d){
+  const p=(list||[]).filter(x=>x.count_date<d)
+    .sort((a,b)=>String(b.count_date).localeCompare(String(a.count_date)))[0];
+  if(!p)return 0;
+  const physical=n(p.physical_count);
+  return physical!==0 ? physical : (n(p.opening_qty)+n(p.received_qty)-n(p.used_qty));
+}
+
+async function getRows(){
+  const s=store(), d=today();
+  const [inputs,counts]=await Promise.all([
+    api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
+    api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&order=count_date.desc')
+  ]);
+  const by={};
+  (counts||[]).forEach(x=>(by[x.input_code]||(by[x.input_code]=[])).push(x));
+  return (inputs||[]).map(p=>{
+    const list=by[p.code]||[];
+    const c=list.find(x=>x.count_date===d)||{};
+    const prior=previousClosing(list,d);
+    let opening=n(c.opening_qty);
+    if((!c.count_date || opening===0) && prior!==0) opening=prior;
+    const received=n(c.received_qty);
+    const used=n(c.used_qty);
+    const expected=opening+received-used;
+    const physical=n(c.physical_count);
+    const variance=physical-expected;
+    const reorder=n(p.reorder_level);
+    return {...p,opening,received,used,expected,physical,variance,reorder};
+  });
+}
+
+async function render(){
+  if(!isAllowed()||!token())return;
+  const body=document.getElementById('productionLedgerBody');
+  if(!body)return;
+  try{
+    const rr=await getRows();
+    body.innerHTML=rr.map(r=>'<tr>'+
+      '<td>'+esc(r.code)+'</td>'+
+      '<td>'+esc(r.name)+'</td>'+
+      '<td>'+esc(r.unit)+'</td>'+
+      '<td>'+fmt(r.opening)+'</td>'+
+      '<td>'+fmt(r.received)+'</td>'+
+      '<td>'+fmt(r.used)+'</td>'+
+      '<td><b>'+fmt(r.expected)+'</b></td>'+
+      '<td>'+fmt(r.physical)+'</td>'+
+      '<td>'+fmt(r.variance)+'</td>'+
+      '<td>'+fmt(r.reorder)+'</td>'+
+      '<td>'+(r.expected<=0?'OUT':r.expected<=r.reorder?'REORDER':'OK')+'</td>'+
+      '</tr>').join('');
+
+    let st=document.getElementById('fvLedgerStatusV53');
+    const panel=document.getElementById('productionInputsPanel');
+    if(!st && panel){
+      st=document.createElement('div');
+      st.id='fvLedgerStatusV53';
+      st.className='small';
+      st.style.cssText='font-weight:700;margin:6px 0 10px';
+      const h3=Array.from(panel.querySelectorAll(':scope > h3')).find(h=>/^2\./.test(h.textContent||''));
+      if(h3)h3.insertAdjacentElement('afterend',st);
+    }
+    if(st)st.textContent='LIVE STOCK LEDGER — '+(store()==='SIVANA'?'Sivana':'Ndayini')+
+      ' — Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'});
+  }catch(e){
+    console.error('V53 ledger refresh',e);
+  }
+}
+
+window.refreshLiveProductionLedgerV53=render;
+setInterval(()=>{ if(document.visibilityState==='visible')render(); },5000);
+setTimeout(render,700);
+
+const sel=document.getElementById('storeLocationSelect');
+if(sel)sel.addEventListener('change',()=>setTimeout(render,100));
+})();
+</script>
+<!-- BUILD: LIVE_PRODUCTION_LEDGER_V53 -->
+
 </body>
 </html>
