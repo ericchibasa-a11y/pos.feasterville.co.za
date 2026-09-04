@@ -2013,7 +2013,9 @@ document.addEventListener('DOMContentLoaded',function(){
       };
 
       window.salesSessionUser = null;
-      currentUser = window.currentUser = iu;
+      window.currentUser = null;
+      currentUser = null;
+      window.inventorySessionUser = iu;
       currentLiveUser = authData.user;
       currentProfile = profile;
 
@@ -2263,6 +2265,7 @@ document.addEventListener('DOMContentLoaded',function(){
   el('liveClaimManager').addEventListener('click', claimManager);
   el('liveLogout').addEventListener('click', function() {
     window.salesSessionUser=null;
+    window.inventorySessionUser=null;
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_KEY);
     location.reload();
@@ -2270,6 +2273,8 @@ document.addEventListener('DOMContentLoaded',function(){
 
   setInterval(function() {
     if (!accessToken) return;
+    if (window.inventorySessionUser && window.inventorySessionUser.role === 'inventory_control') return;
+    if (window.salesSessionUser && window.salesSessionUser.role === 'salesperson') return;
     pullState().catch(function(err) { console.error(err); });
     pullSales().catch(function(err) { console.error(err); });
   }, 5000);
@@ -5097,7 +5102,7 @@ if(window.__fvInventoryControlV46)return;window.__fvInventoryControlV46=true;
 const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
 const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
 const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
-const user=()=>window.currentUser||window.salesSessionUser||{};
+const user=()=>window.inventorySessionUser||window.currentUser||window.salesSessionUser||{};
 const isIC=()=>user().role==='inventory_control';
 const isMgr=()=>user().role==='manager';
 const store=()=>isMgr()?(localStorage.getItem('feastervilleStoreCode')||'NDAYENI'):(user().store_code||'NDAYENI');
@@ -5368,7 +5373,7 @@ if(rows)new MutationObserver(labelRoles).observe(rows,{childList:true,subtree:tr
 if(window.__fvICLoginV49)return;window.__fvICLoginV49=true;
 
 function showInventoryControllerOnly(){
- const u=window.currentUser;
+ const u=window.inventorySessionUser||window.currentUser;
  if(!u||u.role!=='inventory_control')return;
 
  try{localStorage.setItem('feastervilleStoreCode',u.store_code||'NDAYENI')}catch(e){}
@@ -5393,7 +5398,7 @@ function showInventoryControllerOnly(){
 let checks=0;
 const timer=setInterval(()=>{
  checks++;
- if(window.currentUser&&window.currentUser.role==='inventory_control'){
+ if((window.inventorySessionUser&&window.inventorySessionUser.role==='inventory_control')||(window.currentUser&&window.currentUser.role==='inventory_control')){
    showInventoryControllerOnly();
    if(checks>8)clearInterval(timer);
  }
@@ -5404,6 +5409,7 @@ window.showInventoryControllerOnlyV49=showInventoryControllerOnly;
 })();
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_LOGIN_FIX_V49 -->
+<!-- BUILD: INVENTORY_CONTROLLER_ISOLATED_LOGIN_V50 -->
 
 </body>
 </html>
