@@ -5955,5 +5955,160 @@ let tries=0, boot=setInterval(()=>{
 </script>
 <!-- BUILD: INVENTORY_RECON_AUTO_REFRESH_V57 -->
 
+
+<script>
+/* V58 — ALL ROLE LIVE USER PRESENCE */
+(function(){
+'use strict';
+if(window.__fvAllRolePresenceV58)return; window.__fvAllRolePresenceV58=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+const user=()=>window.inventorySessionUser||window.salesSessionUser||window.currentUser||null;
+const uid=(u)=>u&&(u.id||u.user_id)||null;
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+
+function headers(extra){
+  return Object.assign({
+    apikey:KEY,
+    Authorization:'Bearer '+token(),
+    'Content-Type':'application/json'
+  },extra||{});
+}
+async function api(path,opt={}){
+  const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)}));
+  const t=await r.text();
+  if(!r.ok) throw Error(t||('HTTP '+r.status));
+  return t ? JSON.parse(t) : null;
+}
+function fmt(x){
+  if(!x)return '—';
+  return new Date(x).toLocaleString('en-ZA',{
+    timeZone:'Africa/Johannesburg',
+    year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit'
+  });
+}
+function storeOf(u){
+  if(!u)return null;
+  if(u.role==='manager') return localStorage.getItem('feastervilleStoreCode')||null;
+  return u.store_code||u.assigned_store||null;
+}
+async function heartbeat(first){
+  const u=user(), id=uid(u);
+  if(!u||!id||!token())return;
+  const now=new Date().toISOString();
+  const payload={
+    user_id:id,
+    display_name:u.name||u.display_name||u.full_name||u.email||'POS User',
+    role:u.role||'salesperson',
+    store_code:storeOf(u),
+    last_seen_at:now,
+    status:'ONLINE',
+    signed_off_at:null
+  };
+  if(first) payload.logged_in_at=now;
+  await api('pos_user_presence?on_conflict=user_id',{
+    method:'POST',
+    headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify(payload)
+  });
+}
+async function signoff(){
+  const u=user(), id=uid(u);
+  if(!u||!id||!token())return;
+  const now=new Date().toISOString();
+  await api('pos_user_presence?user_id=eq.'+encodeURIComponent(id),{
+    method:'PATCH',
+    headers:{Prefer:'return=minimal'},
+    body:JSON.stringify({status:'OFFLINE',last_seen_at:now,signed_off_at:now})
+  }).catch(()=>{});
+}
+function ensurePanel(){
+  const u=user();
+  if(!u||u.role!=='manager')return null;
+  let p=document.getElementById('fvPresencePanel');
+  if(!p){
+    const host=document.getElementById('accessPanel')||document.getElementById('userPanel')||document.body;
+    p=document.createElement('div');
+    p.id='fvPresencePanel';
+    host.appendChild(p);
+  }
+  p.style.display='block';
+  p.innerHTML=
+    '<h3>Currently Logged In Users</h3>'+
+    '<div class="small">Shows Manager, Salesperson and Inventory Controller sessions. ONLINE = heartbeat received within the last 2 minutes.</div>'+
+    '<div style="margin:8px 0"><button type="button" id="fvPresenceRefreshV58">REFRESH USERS</button></div>'+
+    '<div style="overflow:auto"><table><thead><tr>'+
+    '<th>User</th><th>Role</th><th>Store</th><th>Login Time</th><th>Last Seen</th><th>Sign-Off Time</th><th>Status</th>'+
+    '</tr></thead><tbody id="fvPresenceBody"></tbody></table></div>';
+  const b=document.getElementById('fvPresenceRefreshV58');
+  if(b)b.onclick=()=>render().catch(console.error);
+  return p;
+}
+async function render(){
+  const u=user();
+  if(!u||u.role!=='manager'||!token())return;
+  ensurePanel();
+  const rows=await api(
+    'pos_user_presence?select=user_id,display_name,role,store_code,logged_in_at,last_seen_at,signed_off_at,status&order=last_seen_at.desc'
+  );
+  const body=document.getElementById('fvPresenceBody');
+  if(!body)return;
+  const now=Date.now();
+  body.innerHTML=(rows||[]).map(r=>{
+    const last=r.last_seen_at?new Date(r.last_seen_at).getTime():0;
+    const online=r.status==='ONLINE' && last && (now-last)<120000;
+    const role=r.role==='inventory_control'?'Inventory Controller':
+               r.role==='salesperson'?'Salesperson':
+               r.role==='manager'?'Manager':(r.role||'—');
+    return '<tr class="'+(online?'on':'off')+'">'+
+      '<td>'+(r.display_name||'POS User')+'</td>'+
+      '<td>'+role+'</td>'+
+      '<td>'+(r.store_code||'Manager / All Stores')+'</td>'+
+      '<td>'+fmt(r.logged_in_at)+'</td>'+
+      '<td>'+fmt(r.last_seen_at)+'</td>'+
+      '<td>'+(online?'—':fmt(r.signed_off_at||r.last_seen_at))+'</td>'+
+      '<td><b>'+(online?'ONLINE':'OFFLINE')+'</b></td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="7">No login activity yet.</td></tr>';
+}
+window.refreshUserPresenceV58=render;
+window.refreshUserPresence=render;
+
+// Wait for any of the three isolated session objects, then start heartbeat.
+let started=false, tries=0;
+const boot=setInterval(async()=>{
+  tries++;
+  const u=user(), id=uid(u);
+  if(!started && u && id && token()){
+    started=true;
+    heartbeat(true).catch(console.error);
+    if(u.role==='manager'){
+      ensurePanel();
+      render().catch(console.error);
+    }
+  }
+  if(started||tries>240)clearInterval(boot);
+},250);
+
+setInterval(()=>{
+  if(user()&&uid(user())&&token()) heartbeat(false).catch(console.error);
+},20000);
+
+setInterval(()=>{
+  if(user()?.role==='manager'&&document.visibilityState==='visible') render().catch(console.error);
+},10000);
+
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(t && /logout|sign out|log out/i.test((t.textContent||'')+' '+(t.id||''))) signoff();
+},true);
+window.addEventListener('beforeunload',signoff);
+})();
+</script>
+<!-- BUILD: ALL_ROLE_USER_PRESENCE_V58 -->
+
 </body>
 </html>
