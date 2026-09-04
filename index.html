@@ -5116,20 +5116,42 @@ async function api(path,opt={}){
  if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):null;
 }
 
-let inputs=[],counts={};
+let inputs=[],counts={},history={};
+
+function priorClosing(code,d){
+ const hs=(history[code]||[]).filter(x=>x.count_date<d).sort((a,b)=>String(b.count_date).localeCompare(String(a.count_date)));
+ const p=hs[0];
+ if(!p)return 0;
+ const physical=n(p.physical_count);
+ // A non-zero physical count is the approved closing balance.
+ // If no physical count was recorded, roll forward the calculated expected closing.
+ return physical!==0 ? physical : (n(p.opening_qty)+n(p.received_qty)-n(p.used_qty));
+}
 
 async function loadData(){
  const s=store(),d=today();
- const [ii,cc]=await Promise.all([
+ const [ii,allCounts]=await Promise.all([
   api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit,reorder_level&order=code.asc'),
-  api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&count_date=eq.'+d+'&select=input_code,opening_qty,received_qty,used_qty,physical_count')
+  api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&order=count_date.desc')
  ]);
- inputs=ii||[];counts={};(cc||[]).forEach(x=>counts[x.input_code]=x);
+ inputs=ii||[];counts={};history={};
+ (allCounts||[]).forEach(x=>{
+   (history[x.input_code]||(history[x.input_code]=[])).push(x);
+   if(x.count_date===d)counts[x.input_code]=x;
+ });
 }
 
 function rows(){
+ const d=today();
  return inputs.map(p=>{
-  const c=counts[p.code]||{},opening=n(c.opening_qty),received=n(c.received_qty),used=n(c.used_qty);
+  const c=counts[p.code]||{};
+  const prior=priorClosing(p.code,d);
+  // If today's row is absent, carry yesterday's closing forward.
+  // If today's opening is zero but a valid prior balance exists, use the prior balance;
+  // this repairs earlier rows that were created with opening_qty=0 by the old frontend.
+  let opening=n(c.opening_qty);
+  if((!counts[p.code] || opening===0) && prior!==0) opening=prior;
+  const received=n(c.received_qty),used=n(c.used_qty);
   const expected=opening+received-used,physical=n(c.physical_count),variance=physical-expected;
   return {...p,opening,received,used,expected,physical,variance};
  });
@@ -5137,6 +5159,17 @@ function rows(){
 
 async function renderAllowed(){
  await loadData();
+ const pp=document.getElementById('productionInputsPanel');
+ if(pp){
+   let st=document.getElementById('fvICLiveStatusV51');
+   if(!st){
+     st=document.createElement('div');st.id='fvICLiveStatusV51';
+     st.className='small';st.style.cssText='margin:6px 0 12px;font-weight:700';
+     const h2=pp.querySelector(':scope > h2');
+     if(h2)h2.insertAdjacentElement('afterend',st);
+   }
+   st.textContent='LIVE DATABASE — '+(store()==='SIVANA'?'Sivana':'Ndayini')+' — Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'});
+ }
  const sel=document.getElementById('piStockInput');
  if(sel)sel.innerHTML=inputs.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.code)+' — '+esc(p.name)+' ('+esc(p.unit)+')</option>').join('');
 
@@ -5157,9 +5190,14 @@ async function renderAllowed(){
 window.inventoryControlCountV46=async function(code,value){
  if(!(isIC()||isMgr()))return alert('Inventory Controller or Manager access required.');
  const c=counts[code]||{};
+ const r=rows().find(x=>x.code===code);
  await api('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{
   method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
-  body:JSON.stringify({store_code:store(),input_code:code,count_date:today(),opening_qty:n(c.opening_qty),received_qty:n(c.received_qty),used_qty:n(c.used_qty),physical_count:n(value)})
+  body:JSON.stringify({
+    store_code:store(),input_code:code,count_date:today(),
+    opening_qty:r?n(r.opening):n(c.opening_qty),
+    received_qty:n(c.received_qty),used_qty:n(c.used_qty),physical_count:n(value)
+  })
  });
  await renderAllowed();
 };
@@ -5272,6 +5310,12 @@ const timer=setInterval(()=>{
 
 const staff=document.getElementById('staffRows');
 if(staff)new MutationObserver(addRoleButtons).observe(staff,{childList:true,subtree:true});
+
+// V51: refresh Inventory Controller live database values every 5 seconds.
+// This reads pos_store_input_counts directly, so Manager/POS stock activity appears without re-login.
+setInterval(()=>{
+ if(isIC())renderAllowed().catch(e=>console.error('Inventory Controller live refresh:',e));
+},5000);
 })();
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_LIMITED_ACCESS_V47 -->
@@ -5410,6 +5454,7 @@ window.showInventoryControllerOnlyV49=showInventoryControllerOnly;
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_LOGIN_FIX_V49 -->
 <!-- BUILD: INVENTORY_CONTROLLER_ISOLATED_LOGIN_V50 -->
+<!-- BUILD: INVENTORY_CONTROLLER_LIVE_STOCK_ROLLFORWARD_V51 -->
 
 </body>
 </html>
