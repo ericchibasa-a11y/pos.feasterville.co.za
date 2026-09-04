@@ -5334,9 +5334,8 @@ if(staff)new MutationObserver(addRoleButtons).observe(staff,{childList:true,subt
 
 // V51: refresh Inventory Controller live database values every 5 seconds.
 // This reads pos_store_input_counts directly, so Manager/POS stock activity appears without re-login.
-setInterval(()=>{
- if(isIC() && document.visibilityState==='visible')renderAllowed().catch(e=>console.error('Inventory Controller live refresh:',e));
-},15000);
+// V55: periodic renderAllowed disabled. It caused stale refreshes to overwrite newer stock values.
+window.refreshInventoryControllerV55=()=>renderAllowed();
 })();
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_LIMITED_ACCESS_V47 -->
@@ -5584,9 +5583,8 @@ window.showRecon=function(type,btn){
 try{showRecon=window.showRecon}catch(_){}
 
 // Inventory Controller should always display this live reconciliation.
-setInterval(()=>{
- if(isIC() && document.visibilityState==='visible')renderLiveRecon().catch(()=>{});
-},5000);
+// V55: no timed reconciliation redraw. Refresh only after a confirmed transaction or manual refresh.
+window.refreshLiveReconV55=renderLiveRecon;
 
 // Refresh immediately after receive-stock or physical count operations.
 const oldReceive=window.receiveProductionStock;
@@ -5714,7 +5712,8 @@ async function render(){
 }
 
 window.refreshLiveProductionLedgerV53=render;
-setInterval(()=>{ if(document.visibilityState==='visible')render(); },5000);
+// V55: no timed ledger redraw. This prevents older fetches from replacing newer values.
+window.refreshLiveLedgerV55=render;
 setTimeout(render,700);
 
 const sel=document.getElementById('storeLocationSelect');
@@ -5752,6 +5751,122 @@ new MutationObserver(()=>restore()).observe(document.getElementById('productionI
 })();
 </script>
 <!-- BUILD: STABLE_RECEIVE_STOCK_V54 -->
+
+
+<script>
+/* V55 — TRANSACTION-SAFE INVENTORY CONTROLLER REFRESH */
+(function(){
+'use strict';
+if(window.__fvStableStockV55)return; window.__fvStableStockV55=true;
+
+let refreshSeq=0;
+let busy=false;
+
+function isIC(){
+ const u=window.inventorySessionUser||window.currentUser||{};
+ return u.role==='inventory_control';
+}
+function panel(){
+ return document.getElementById('productionInputsPanel');
+}
+function setStatus(text){
+ let el=document.getElementById('fvStableStatusV55');
+ const p=panel();
+ if(!el && p){
+   el=document.createElement('div');
+   el.id='fvStableStatusV55';
+   el.className='small';
+   el.style.cssText='font-weight:700;margin:8px 0 12px;padding:8px 10px;background:#f3f7ef;border:1px solid #cfdcc4;border-radius:6px';
+   const h2=p.querySelector(':scope > h2');
+   if(h2)h2.insertAdjacentElement('afterend',el);
+ }
+ if(el)el.textContent=text;
+}
+function editing(){
+ const a=document.activeElement;
+ return !!(a && panel() && panel().contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName));
+}
+async function stableRefresh(force=false){
+ if(!isIC() || busy || (!force && editing()))return;
+ const seq=++refreshSeq;
+ busy=true;
+ try{
+   if(typeof window.refreshInventoryControllerV55==='function') await window.refreshInventoryControllerV55();
+   if(seq!==refreshSeq)return;
+   if(typeof window.refreshLiveLedgerV55==='function') await window.refreshLiveLedgerV55();
+   if(seq!==refreshSeq)return;
+   if(typeof window.refreshLiveReconV55==='function') await window.refreshLiveReconV55();
+   if(seq!==refreshSeq)return;
+   setStatus('LIVE DATABASE — values confirmed');
+ }catch(e){
+   console.error('V55 stable refresh',e);
+   setStatus('Could not refresh live stock: '+e.message);
+ }finally{
+   if(seq===refreshSeq)busy=false;
+ }
+}
+window.stableInventoryRefreshV55=stableRefresh;
+
+function addRefreshButton(){
+ const p=panel();
+ if(!p || document.getElementById('fvRefreshStockV55'))return;
+ const h=document.createElement('button');
+ h.type='button';
+ h.id='fvRefreshStockV55';
+ h.textContent='REFRESH LIVE STOCK';
+ h.style.cssText='margin:0 0 12px 0';
+ h.onclick=()=>stableRefresh(true);
+ const h3=Array.from(p.querySelectorAll(':scope > h3')).find(x=>/^1\./.test(x.textContent||''));
+ if(h3)h3.insertAdjacentElement('beforebegin',h);
+}
+
+// Wrap the final receive function. Do not immediately redraw with a possibly stale response.
+// Give the DB receipt trigger time to commit, then perform one ordered refresh.
+const receive=window.receiveProductionStock;
+if(typeof receive==='function'){
+ window.receiveProductionStock=async function(){
+   if(busy)return;
+   const qty=document.getElementById('piStockQty');
+   const selected=document.getElementById('piStockInput')?.value||'';
+   setStatus('Saving stock receipt...');
+   try{
+     const result=await receive.apply(this,arguments);
+     if(qty)qty.value='';
+     setStatus('Stock receipt saved — confirming database...');
+     await new Promise(r=>setTimeout(r,900));
+     await stableRefresh(true);
+     const sel=document.getElementById('piStockInput');
+     if(sel && selected && Array.from(sel.options).some(o=>o.value===selected))sel.value=selected;
+     return result;
+   }catch(e){
+     setStatus('Stock receipt was not saved: '+e.message);
+     throw e;
+   }
+ };
+ window.recordProductionReceipt=window.receiveProductionStock;
+}
+
+// Physical count: one ordered refresh after database save.
+const count=window.inventoryControlCountV46;
+if(typeof count==='function'){
+ window.inventoryControlCountV46=async function(){
+   setStatus('Saving physical count...');
+   const r=await count.apply(this,arguments);
+   await new Promise(x=>setTimeout(x,500));
+   await stableRefresh(true);
+   return r;
+ };
+}
+
+addRefreshButton();
+setTimeout(()=>stableRefresh(true),900);
+
+// Slow background check only when the user is not editing.
+// This does not redraw continuously and cannot overlap another refresh.
+setInterval(()=>stableRefresh(false),60000);
+})();
+</script>
+<!-- BUILD: TRANSACTION_SAFE_STOCK_V55 -->
 
 </body>
 </html>
