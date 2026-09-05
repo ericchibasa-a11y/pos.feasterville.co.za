@@ -6110,5 +6110,216 @@ window.addEventListener('beforeunload',signoff);
 </script>
 <!-- BUILD: ALL_ROLE_USER_PRESENCE_V58 -->
 
+
+<script>
+/* V59 — SHOW ALL REGISTERED USERS + LIVE LOGIN STATUS */
+(function(){
+'use strict';
+if(window.__fvAllRegisteredUsersV59)return; window.__fvAllRegisteredUsersV59=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const me=()=>window.currentUser||window.inventorySessionUser||window.salesSessionUser||null;
+
+function hdr(){return {apikey:KEY,Authorization:'Bearer '+token()};}
+async function get(path){
+  const r=await fetch(BASE+'/'+path,{headers:hdr()});
+  const t=await r.text();
+  if(!r.ok) throw Error(t||('HTTP '+r.status));
+  return t?JSON.parse(t):[];
+}
+function fmt(x){
+  if(!x)return '—';
+  try{
+    return new Date(x).toLocaleString('en-ZA',{
+      timeZone:'Africa/Johannesburg',
+      year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',minute:'2-digit'
+    });
+  }catch(_){return x;}
+}
+function roleName(r){
+  return r==='inventory_control'?'Inventory Controller':
+         r==='salesperson'?'Salesperson':
+         r==='manager'?'Manager':(r||'—');
+}
+function ensure(){
+  if(me()?.role!=='manager')return null;
+  let p=document.getElementById('fvAllUsersV59');
+  if(!p){
+    p=document.createElement('section');
+    p.id='fvAllUsersV59';
+    p.style.cssText='margin-top:18px';
+    const host=document.getElementById('accessPanel')||document.getElementById('userPanel')||document.body;
+    host.appendChild(p);
+  }
+  return p;
+}
+async function render(){
+  if(me()?.role!=='manager'||!token())return;
+  const p=ensure(); if(!p)return;
+  p.innerHTML='<h3>All POS Users & Login Status</h3><div class="small">Loading all registered users…</div>';
+
+  const [profiles,presence]=await Promise.all([
+    get('pos_profiles?select=user_id,display_name,role,store_code,active&order=role.asc,display_name.asc'),
+    get('pos_user_presence?select=user_id,logged_in_at,last_seen_at,signed_off_at,status&order=last_seen_at.desc')
+  ]);
+
+  const pm={}; (presence||[]).forEach(x=>{ if(!pm[x.user_id]) pm[x.user_id]=x; });
+  const now=Date.now();
+
+  const rows=(profiles||[]).map(u=>{
+    const pr=pm[u.user_id]||{};
+    const last=pr.last_seen_at?new Date(pr.last_seen_at).getTime():0;
+    const online=!!(u.active && pr.status==='ONLINE' && last && (now-last)<120000);
+    return {u,pr,online};
+  });
+
+  p.innerHTML=
+    '<h3>All POS Users & Login Status</h3>'+
+    '<div class="small">This list shows every registered Manager, Salesperson and Inventory Controller. ONLINE means a live heartbeat was received in the last 2 minutes.</div>'+
+    '<div style="margin:8px 0"><button type="button" id="fvAllUsersRefreshV59">REFRESH ALL USERS</button></div>'+
+    '<div style="overflow:auto"><table><thead><tr>'+
+      '<th>User</th><th>Role</th><th>Store</th><th>Account</th><th>Login Time</th><th>Last Seen</th><th>Status</th>'+
+    '</tr></thead><tbody>'+
+    (rows.length?rows.map(({u,pr,online})=>
+      '<tr>'+
+        '<td>'+(u.display_name||'POS User')+'</td>'+
+        '<td>'+roleName(u.role)+'</td>'+
+        '<td>'+(u.store_code||'All Stores')+'</td>'+
+        '<td>'+(u.active?'ACTIVE':'INACTIVE')+'</td>'+
+        '<td>'+fmt(pr.logged_in_at)+'</td>'+
+        '<td>'+fmt(pr.last_seen_at)+'</td>'+
+        '<td><b>'+(online?'ONLINE':'OFFLINE')+'</b></td>'+
+      '</tr>'
+    ).join(''):'<tr><td colspan="7">No POS users found.</td></tr>')+
+    '</tbody></table></div>';
+
+  const b=document.getElementById('fvAllUsersRefreshV59');
+  if(b)b.onclick=render;
+}
+window.refreshAllUsersV59=render;
+
+let tries=0;
+const boot=setInterval(()=>{
+  tries++;
+  if(me()?.role==='manager'&&token()){
+    clearInterval(boot);
+    render().catch(e=>{
+      const p=ensure();
+      if(p)p.innerHTML='<h3>All POS Users & Login Status</h3><div>Could not load all users: '+String(e.message||e)+'</div>';
+    });
+  }
+  if(tries>240)clearInterval(boot);
+},250);
+
+setInterval(()=>{
+  if(me()?.role==='manager'&&document.visibilityState==='visible') render().catch(()=>{});
+},10000);
+})();
+</script>
+<!-- BUILD: ALL_REGISTERED_USERS_WITH_STATUS_V59 -->
+
+
+<script>
+/* V60 — RELIABLE LIVE SALES + SALESPERSON PRESENCE */
+(function(){
+'use strict';
+if(window.__fvV60)return; window.__fvV60=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+function user(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null;}
+function uid(u){return u&&(u.user_id||u.id)||null;}
+function token(){
+  let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');
+  if(v)return v;
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.includes('auth-token'))continue;
+    try{const j=JSON.parse(localStorage.getItem(k)); if(j&&j.access_token)return j.access_token;}catch(e){}
+  }
+  return '';
+}
+function headers(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},extra||{});}
+async function api(path,opt={}){
+  const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)}));
+  const txt=await r.text();
+  if(!r.ok)throw new Error(txt||('HTTP '+r.status));
+  return txt?JSON.parse(txt):null;
+}
+function store(u){
+  if(!u)return null;
+  if(u.role==='manager') return (window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase();
+  return (u.store_code||u.assigned_store||'').toUpperCase()||null;
+}
+async function heartbeat(first){
+  const u=user(), id=uid(u), tk=token();
+  if(!u||!id||!tk)return;
+  const now=new Date().toISOString();
+  const row={
+    user_id:id,
+    display_name:u.display_name||u.name||u.full_name||u.email||'POS User',
+    role:u.role||'salesperson',
+    store_code:store(u),
+    last_seen_at:now,status:'ONLINE',signed_off_at:null
+  };
+  if(first)row.logged_in_at=now;
+  await api('pos_user_presence?on_conflict=user_id',{
+    method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify(row)
+  });
+}
+window.fvHeartbeatV60=heartbeat;
+
+function zar(n){return 'R'+Number(n||0).toFixed(2);}
+async function managerLiveSales(){
+  const u=user(); if(!u||u.role!=='manager'||!token())return;
+  const sc=store(u)||'NDAYENI';
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'});
+  const rows=await api('pos_sales?select=id,store_code,sale_date,sale_time,total,payment,cashier,created_at&store_code=eq.'+
+    encodeURIComponent(sc)+'&sale_date=eq.'+today+'&order=created_at.desc');
+  window.fvManagerLiveSalesV60=rows||[];
+
+  let box=document.getElementById('fvManagerLiveSalesV60');
+  if(!box){
+    box=document.createElement('section'); box.id='fvManagerLiveSalesV60'; box.style.marginTop='16px';
+    (document.getElementById('reportsPanel')||document.getElementById('reportPanel')||document.body).appendChild(box);
+  }
+  const total=(rows||[]).reduce((a,r)=>a+Number(r.total||0),0);
+  box.innerHTML='<h3>Live Sales — '+sc+'</h3>'+
+    '<div style="margin-bottom:8px"><b>Today:</b> '+(rows||[]).length+' sales &nbsp; <b>Total:</b> '+zar(total)+
+    ' &nbsp; <span class="small">Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</span></div>'+
+    '<div style="overflow:auto"><table><thead><tr><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+
+    ((rows||[]).map(r=>'<tr><td>'+String(r.sale_time||'').slice(0,8)+'</td><td>'+(r.cashier||'—')+
+    '</td><td>'+(r.payment||'—')+'</td><td>'+zar(r.total)+'</td></tr>').join('')||
+    '<tr><td colspan="4">No sales today.</td></tr>')+'</tbody></table></div>';
+}
+window.refreshManagerLiveSalesV60=managerLiveSales;
+
+let first=true, attempts=0;
+const boot=setInterval(()=>{
+  attempts++;
+  if(user()&&uid(user())&&token()){
+    heartbeat(first).catch(e=>console.error('V60 heartbeat',e)); first=false;
+    if(user().role==='manager')managerLiveSales().catch(e=>console.error('V60 sales refresh',e));
+    if(attempts>10)clearInterval(boot);
+  }
+  if(attempts>240)clearInterval(boot);
+},500);
+
+setInterval(()=>{if(user()&&uid(user())&&token())heartbeat(false).catch(()=>{});},15000);
+setInterval(()=>{if(user()?.role==='manager'&&document.visibilityState==='visible')managerLiveSales().catch(()=>{});},5000);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    heartbeat(false).catch(()=>{});
+    if(user()?.role==='manager')managerLiveSales().catch(()=>{});
+  }
+});
+})();
+</script>
+<!-- BUILD: RELIABLE_LIVE_SALES_PRESENCE_V60 -->
+
 </body>
 </html>
