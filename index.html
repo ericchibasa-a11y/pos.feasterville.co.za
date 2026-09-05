@@ -6441,5 +6441,59 @@ if(typeof old==='function')window.receiveProductionStock=async function(){let r=
 </script>
 <!-- BUILD: LIVE_COUNT_SHEET_V62 -->
 
+
+<script>
+/* V63 — AUTHORITATIVE ORIGINAL COUNT SHEET REFRESH */
+(function(){
+'use strict';
+if(window.__fvCountSheetV63)return; window.__fvCountSheetV63=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1', KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function usr(){return window.inventorySessionUser||window.currentUser||null}
+function token(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j&&j.access_token)return j.access_token}catch(_){}}return''}
+function store(){
+ let s=document.getElementById('inventoryStoreSelect')?.value||document.getElementById('piStoreSelect')?.value;
+ let u=usr()||{};
+ return String(s||u.store_code||u.assigned_store||window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase();
+}
+function date(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+async function get(p){let r=await fetch(BASE+'/'+p,{headers:{apikey:KEY,Authorization:'Bearer '+token()}}),t=await r.text();if(!r.ok)throw Error(t);return t?JSON.parse(t):[]}
+async function patchCount(code,physical){
+ const sc=store(),d=date();
+ let r=await fetch(BASE+'/pos_store_input_counts?store_code=eq.'+encodeURIComponent(sc)+'&input_code=eq.'+encodeURIComponent(code)+'&count_date=eq.'+d,{
+  method:'PATCH',headers:{apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json',Prefer:'return=minimal'},
+  body:JSON.stringify({physical_count:Number(physical)||0})
+ }); if(!r.ok)throw Error(await r.text());
+}
+async function render(){
+ const body=document.getElementById('productionCountBody'); if(!body||!token())return;
+ const sc=store(),d=date();
+ const [inputs,counts]=await Promise.all([
+  get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
+  get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)
+ ]);
+ const cm={}; counts.forEach(x=>cm[x.input_code]=x);
+ body.innerHTML=inputs.map(i=>{
+  const c=cm[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,v=p-e;
+  const act=Math.abs(v)<0.0005?'OK':(v<0?'INVESTIGATE SHORTAGE':'INVESTIGATE SURPLUS');
+  return '<tr><td>'+i.code+'</td><td>'+i.name+'</td><td>'+(i.unit||'')+'</td><td><b>'+e.toFixed(2)+'</b></td>'+
+   '<td><input type="number" step="0.001" class="stock-input fv63physical" data-code="'+i.code+'" value="'+p+'" style="max-width:165px"></td>'+
+   '<td>'+v.toFixed(2)+'</td><td>'+act+'</td></tr>';
+ }).join('');
+ body.querySelectorAll('.fv63physical').forEach(el=>el.addEventListener('change',async function(){
+  try{await patchCount(this.dataset.code,this.value);await render(); if(window.refreshLiveReconV55)window.refreshLiveReconV55()}catch(e){alert('Could not save physical count: '+e.message)}
+ }));
+ let btn=document.getElementById('fv63RefreshCount');
+ if(!btn){btn=document.createElement('button');btn.id='fv63RefreshCount';btn.className='primary';btn.textContent='REFRESH COUNT SHEET';btn.style.margin='8px 0';body.closest('table').before(btn);btn.onclick=()=>render().catch(console.error)}
+}
+window.refreshProductionInputCountSheetV63=render;
+// neutralize stale renderers by restoring our rows after they run
+setInterval(()=>{if(document.visibilityState==='visible'&&document.getElementById('productionCountBody'))render().catch(()=>{})},3000);
+document.addEventListener('click',e=>{if(/production input count sheet|inventory/i.test(e.target?.textContent||''))setTimeout(()=>render().catch(console.error),250)},true);
+const oldReceive=window.receiveProductionStock;
+if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>render().catch(console.error),1000);return x};
+})();
+</script>
+<!-- BUILD: ORIGINAL_COUNT_SHEET_LIVE_V63 -->
+
 </body>
 </html>
