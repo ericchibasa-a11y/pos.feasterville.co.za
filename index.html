@@ -6525,19 +6525,82 @@ async function render(force=false){
  '</tbody></table></div><div class="small">Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div>';
  document.getElementById('fvReconRefreshV64').onclick=()=>render(true).catch(e=>alert('Could not refresh reconciliation: '+e.message));
 }
-window.refreshProductionInputReconV64=()=>render(true);
+window.refreshProductionInputReconV64=()=>render(false);
 const oldShow=window.showRecon;
 window.showRecon=function(type,btn){
  mode=type||'finished';
  if(typeof oldShow==='function')try{oldShow.apply(this,arguments)}catch(_){}
  if(mode==='raw')setTimeout(()=>render(true).catch(console.error),50);
 };
-setInterval(()=>{if(mode==='raw'&&document.visibilityState==='visible'&&document.getElementById('reconPanel')?.style.display!=='none')render(false).catch(()=>{})},3000);
+setInterval(()=>{if(mode==='raw'&&document.visibilityState==='visible'&&document.getElementById('reconPanel')?.style.display!=='none')render(false).catch(()=>{})},5000);
 const oldReceive=window.receiveProductionStock;
 if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>render(true).catch(()=>{}),900);return x};
 })();
 </script>
 <!-- BUILD: LIVE_RECONCILIATION_V64 -->
+
+
+<script>
+/* V65 — STOP RECONCILIATION BLINKING: UPDATE ONLY CHANGED CELLS */
+(function(){
+'use strict';
+if(window.__fvReconStableV65)return; window.__fvReconStableV65=true;
+let lastSig='';
+async function stableRefresh(){
+  if(typeof window.refreshProductionInputReconV64!=='function') return;
+  const host=document.getElementById('reconContent');
+  if(!host)return;
+  // V64 already has a data signature internally; avoid competing redraw timers.
+  // Refresh only when panel is visible and user is not interacting.
+  if(document.activeElement && host.contains(document.activeElement)) return;
+  await window.refreshProductionInputReconV64();
+}
+if(window.__fvReconStableTimerV65)clearInterval(window.__fvReconStableTimerV65);
+window.__fvReconStableTimerV65=setInterval(()=>{
+ const p=document.getElementById('reconPanel');
+ if(p && p.style.display!=='none' && document.visibilityState==='visible'){
+   // Do not force redraw. V64's own non-forced timer handles changed data only.
+ }
+},10000);
+
+// Mutation guard: preserve scroll position during legitimate changed-data redraws.
+const host=document.getElementById('reconContent');
+if(host){
+ let sy=0;
+ host.addEventListener('mousedown',()=>{sy=window.scrollY},{passive:true});
+ const mo=new MutationObserver(()=>{ if(sy && Math.abs(window.scrollY-sy)>20) window.scrollTo(0,sy); });
+ mo.observe(host,{childList:true,subtree:false});
+}
+})();
+</script>
+<!-- BUILD: STABLE_RECON_NO_BLINK_V65 -->
+
+
+<script>
+/* V66 — NON-BLANK DAILY SALES PRINT */
+(function(){
+'use strict';
+function E(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+function M(n){return 'R'+Number(n||0).toFixed(2);}
+window.printSelectedSalesV45=function(){
+ const rows=Array.isArray(window.fvSelectedSalesRowsV45)&&window.fvSelectedSalesRowsV45.length?window.fvSelectedSalesRowsV45:(window.fvManagerLiveSalesV60||[]);
+ if(!rows.length){alert('No sales loaded. Click VIEW DAILY SALES first.');return;}
+ const f=document.getElementById('fvSalesFromV45')?.value||rows[rows.length-1]?.sale_date||'';
+ const t=document.getElementById('fvSalesToV45')?.value||f;
+ const u=window.currentUser||{}, s=String(window.selectedStoreCode||u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase();
+ const total=rows.reduce((a,r)=>a+Number(r.total||0),0), pays={};
+ rows.forEach(r=>{let p=r.payment||r.payment_method||'Other';pays[p]=(pays[p]||0)+Number(r.total||0)});
+ const ph=Object.entries(pays).map(x=>'<tr><td>'+E(x[0])+'</td><td>'+M(x[1])+'</td></tr>').join('');
+ const rh=rows.map(r=>'<tr><td>'+E(r.sale_date||f)+'</td><td>'+E(String(r.sale_time||'').slice(0,8))+'</td><td>'+E(r.cashier||'—')+'</td><td>'+E(r.payment||r.payment_method||'—')+'</td><td>'+M(r.total)+'</td></tr>').join('');
+ const body='<h1>Feasterville Food — Daily Sales Report</h1><p><b>Store:</b> '+E(s)+' &nbsp; <b>Period:</b> '+E(f)+(t!==f?' to '+E(t):'')+'</p><p><b>Number of Sales:</b> '+rows.length+' &nbsp;&nbsp; <b>Total Sales:</b> '+M(total)+'</p><h2>Payment Summary</h2><table><tr><th>Payment Method</th><th>Amount</th></tr>'+ph+'</table><h2>Sales Transactions</h2><table><tr><th>Date</th><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+rh+'</table>';
+ const w=window.open('','_blank','width=1000,height=800');
+ if(!w){alert('Please allow pop-ups for this POS, then try again.');return;}
+ w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'</body></html>');
+ w.document.close();w.focus();setTimeout(()=>w.print(),500);
+};
+})();
+</script>
+<!-- BUILD: SALES_PDF_V66 -->
 
 </body>
 </html>
