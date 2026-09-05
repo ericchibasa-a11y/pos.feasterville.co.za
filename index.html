@@ -6321,5 +6321,88 @@ document.addEventListener('visibilitychange',()=>{
 </script>
 <!-- BUILD: RELIABLE_LIVE_SALES_PRESENCE_V60 -->
 
+
+<script>
+/* V61 — RECEIVE PRODUCTION INPUT: STORE-SAFE LOOKUP */
+(function(){
+'use strict';
+if(window.__fvReceiveV61)return; window.__fvReceiveV61=true;
+
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function u(){return window.inventorySessionUser||window.currentUser||window.salesSessionUser||null;}
+function token(){
+ let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken'); if(v)return v;
+ for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token')){try{let j=JSON.parse(localStorage.getItem(k));if(j.access_token)return j.access_token}catch(_){}}}
+ return '';
+}
+function store(){
+ const x=u()||{};
+ return String(x.store_code||x.assigned_store||window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'').toUpperCase();
+}
+function h(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},extra||{});}
+async function api(path,opt={}){
+ const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h(opt.headers)})),t=await r.text();
+ if(!r.ok)throw Error(t||('HTTP '+r.status)); return t?JSON.parse(t):null;
+}
+function findEl(ids){for(const id of ids){const e=document.getElementById(id);if(e)return e}return null;}
+async function loadInputs(){
+ const sc=store(); if(!sc)return [];
+ const rows=await api('pos_store_production_inputs?select=code,name,unit,category,active&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc');
+ const sel=findEl(['piStockInput','stockReceiptInput','receiveInputCode','productionReceiptInput']);
+ if(sel){
+   const keep=sel.value;
+   sel.innerHTML='<option value="">-- Select Production Input --</option>'+(rows||[]).map(x=>'<option value="'+x.code+'">'+x.name+' ('+x.code+')</option>').join('');
+   if((rows||[]).some(x=>x.code===keep))sel.value=keep;
+ }
+ window.fvReceiveInputsV61=rows||[];
+ return rows||[];
+}
+async function receive(){
+ try{
+   const sc=store(); if(!sc)throw Error('Store not found for this login.');
+   const sel=findEl(['piStockInput','stockReceiptInput','receiveInputCode','productionReceiptInput']);
+   const qtyEl=findEl(['piStockQty','stockReceiptQty','receiveQty','productionReceiptQty']);
+   const costEl=findEl(['piStockCost','stockReceiptCost','receiveUnitCost','productionReceiptCost']);
+   const supplierEl=findEl(['piStockSupplier','stockReceiptSupplier','receiveSupplier']);
+   const refEl=findEl(['piStockRef','stockReceiptRef','receiveReference']);
+   if(!sel||!sel.value)throw Error('Please select a Production Input.');
+   const code=sel.value;
+   const rows=await api('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&code=eq.'+encodeURIComponent(code)+'&active=eq.true&limit=1');
+   const input=rows&&rows[0];
+   if(!input)throw Error('Production input '+code+' was not found for '+sc+'. Refresh the input list and select it again.');
+   const qty=Number(qtyEl&&qtyEl.value||0); if(!(qty>0))throw Error('Enter a quantity greater than zero.');
+   const unitCost=Number(costEl&&costEl.value||0);
+   const x=u()||{};
+   const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'});
+   await api('pos_stock_receipts',{
+     method:'POST',headers:{Prefer:'return=minimal'},
+     body:JSON.stringify({
+       receipt_date:today,supplier:supplierEl?.value||null,reference:refEl?.value||null,
+       input_code:input.code,input_name:input.name,unit:input.unit||null,qty:qty,unit_cost:unitCost,
+       received_by:x.display_name||x.name||x.email||'POS User',created_by:x.user_id||x.id||null,store_code:sc
+     })
+   });
+   if(qtyEl)qtyEl.value=''; if(costEl)costEl.value='';
+   alert('Production input stock received successfully: '+input.name+' — '+qty+' '+(input.unit||''));
+   await new Promise(r=>setTimeout(r,700));
+   if(typeof window.refreshInventoryReconciliationV57==='function')await window.refreshInventoryReconciliationV57();
+   if(typeof window.refreshLiveReconV55==='function')await window.refreshLiveReconV55();
+   return true;
+ }catch(e){alert('Receive Production Input Stock: '+(e.message||e));console.error(e);return false;}
+}
+window.loadReceiveProductionInputsV61=loadInputs;
+window.receiveProductionStock=receive;
+window.recordProductionReceipt=receive;
+
+let n=0,t=setInterval(()=>{n++;if(u()&&token()){loadInputs().catch(console.error);if(n>8)clearInterval(t)}if(n>120)clearInterval(t)},500);
+document.addEventListener('click',e=>{
+ const txt=(e.target?.textContent||'').trim();
+ if(/receive production input stock/i.test(txt))setTimeout(()=>loadInputs().catch(console.error),150);
+},true);
+})();
+</script>
+<!-- BUILD: STORE_SAFE_RECEIVE_INPUT_V61 -->
+
 </body>
 </html>
