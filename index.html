@@ -6495,5 +6495,49 @@ if(typeof oldReceive==='function')window.receiveProductionStock=async function()
 </script>
 <!-- BUILD: ORIGINAL_COUNT_SHEET_LIVE_V63 -->
 
+
+<script>
+/* V64 — AUTHORITATIVE LIVE PRODUCTION INPUT RECONCILIATION */
+(function(){
+'use strict';
+if(window.__fvReconV64)return;window.__fvReconV64=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+let mode='raw',sig='';
+function U(){return window.inventorySessionUser||window.currentUser||null}
+function tok(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return''}
+function store(){let u=U()||{};return String(u.store_code||u.assigned_store||window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase()}
+function day(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+async function get(p){let r=await fetch(BASE+'/'+p,{headers:{apikey:KEY,Authorization:'Bearer '+tok()}}),t=await r.text();if(!r.ok)throw Error(t);return t?JSON.parse(t):[]}
+async function render(force=false){
+ if(mode!=='raw'||!tok())return;
+ const host=document.getElementById('reconContent');if(!host)return;
+ const sc=store(),d=day();
+ const [inputs,counts]=await Promise.all([
+  get('pos_store_production_inputs?select=code,name,unit,reorder_level&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
+  get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)
+ ]);
+ const cm={};counts.forEach(x=>cm[x.input_code]=x);
+ const ns=JSON.stringify([sc,d,counts.map(x=>[x.input_code,x.opening_qty,x.received_qty,x.used_qty,x.physical_count])]);
+ if(!force&&ns===sig)return;sig=ns;
+ host.innerHTML='<div style="display:flex;gap:10px;align-items:center;margin:10px 0"><b>'+sc+' — '+d+'</b><button class="primary" id="fvReconRefreshV64">REFRESH RECONCILIATION</button><span class="small">Live database</span></div>'+
+ '<div style="overflow:auto"><table class="inv-table"><thead><tr><th>Code</th><th>Production Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used via Sales</th><th>Expected</th><th>Physical Count</th><th>Variance</th><th>Status</th></tr></thead><tbody>'+
+ inputs.map(i=>{let c=cm[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,v=p-e,st=Math.abs(v)<.0005?'OK':(v<0?'SHORTAGE':'SURPLUS');return '<tr><td>'+i.code+'</td><td>'+i.name+'</td><td>'+(i.unit||'')+'</td><td>'+o.toFixed(3)+'</td><td>'+r.toFixed(3)+'</td><td>'+u.toFixed(3)+'</td><td><b>'+e.toFixed(3)+'</b></td><td>'+p.toFixed(3)+'</td><td>'+v.toFixed(3)+'</td><td>'+st+'</td></tr>'}).join('')+
+ '</tbody></table></div><div class="small">Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div>';
+ document.getElementById('fvReconRefreshV64').onclick=()=>render(true).catch(e=>alert('Could not refresh reconciliation: '+e.message));
+}
+window.refreshProductionInputReconV64=()=>render(true);
+const oldShow=window.showRecon;
+window.showRecon=function(type,btn){
+ mode=type||'finished';
+ if(typeof oldShow==='function')try{oldShow.apply(this,arguments)}catch(_){}
+ if(mode==='raw')setTimeout(()=>render(true).catch(console.error),50);
+};
+setInterval(()=>{if(mode==='raw'&&document.visibilityState==='visible'&&document.getElementById('reconPanel')?.style.display!=='none')render(false).catch(()=>{})},3000);
+const oldReceive=window.receiveProductionStock;
+if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>render(true).catch(()=>{}),900);return x};
+})();
+</script>
+<!-- BUILD: LIVE_RECONCILIATION_V64 -->
+
 </body>
 </html>
