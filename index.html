@@ -6404,5 +6404,42 @@ document.addEventListener('click',e=>{
 </script>
 <!-- BUILD: STORE_SAFE_RECEIVE_INPUT_V61 -->
 
+
+<script>
+/* V62 — COUNT SHEET DIRECT LIVE DB */
+(function(){
+'use strict';
+if(window.__fvCountSheetV62)return;window.__fvCountSheetV62=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const U=()=>window.inventorySessionUser||window.currentUser||null;
+function tok(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j.access_token)return j.access_token}catch(_){}}return''}
+function sc(){let u=U()||{};return String(u.store_code||u.assigned_store||window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase()}
+async function get(p){let r=await fetch(BASE+'/'+p,{headers:{apikey:KEY,Authorization:'Bearer '+tok()}}),t=await r.text();if(!r.ok)throw Error(t);return t?JSON.parse(t):[]}
+function today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+async function render(){
+ if(!U()||!tok())return;
+ let store=sc(),d=today();
+ let [inputs,counts]=await Promise.all([
+  get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&order=name.asc'),
+  get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty&store_code=eq.'+encodeURIComponent(store)+'&count_date=eq.'+d)
+ ]);
+ let cm={};counts.forEach(x=>cm[x.input_code]=x);
+ let host=document.getElementById('piCountSheet')||document.getElementById('productionInputCountSheet')||document.getElementById('countSheetContent');
+ if(!host)return;
+ host.innerHTML='<div style="margin-bottom:8px"><b>'+store+' — '+d+'</b> &nbsp; <button type="button" id="fvCountRefreshV62">REFRESH COUNT SHEET</button></div>'+
+ '<div style="overflow:auto"><table><thead><tr><th>Code</th><th>Production Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used</th><th>Expected</th><th>Physical</th><th>Variance</th></tr></thead><tbody>'+
+ inputs.map(i=>{let c=cm[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,v=p-e;return '<tr><td>'+i.code+'</td><td>'+i.name+'</td><td>'+(i.unit||'')+'</td><td>'+o.toFixed(3)+'</td><td>'+r.toFixed(3)+'</td><td>'+u.toFixed(3)+'</td><td>'+e.toFixed(3)+'</td><td>'+p.toFixed(3)+'</td><td>'+v.toFixed(3)+'</td></tr>'}).join('')+
+ '</tbody></table></div><div class="small">Live from Production Input Stock Ledger / input counts. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div>';
+ document.getElementById('fvCountRefreshV62').onclick=()=>render().catch(console.error);
+}
+window.refreshProductionInputCountSheetV62=render;
+setInterval(()=>{if(document.visibilityState==='visible')render().catch(()=>{})},5000);
+document.addEventListener('click',e=>{if(/production input count sheet/i.test(e.target?.textContent||''))setTimeout(()=>render().catch(console.error),200)},true);
+const old=window.receiveProductionStock;
+if(typeof old==='function')window.receiveProductionStock=async function(){let r=await old.apply(this,arguments);setTimeout(()=>render().catch(console.error),900);return r};
+})();
+</script>
+<!-- BUILD: LIVE_COUNT_SHEET_V62 -->
+
 </body>
 </html>
