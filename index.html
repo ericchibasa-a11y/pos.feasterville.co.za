@@ -3933,6 +3933,7 @@ document.addEventListener('DOMContentLoaded',function(){
  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
  let totals=null;
  const money=n=>'R'+Number(n||0).toFixed(2);
+ const safe=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
  function u(){return window.salesSessionUser||window.currentUser||null}
  function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||''}
  function day(){let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -3942,21 +3943,22 @@ document.addEventListener('DOMContentLoaded',function(){
  function payBucket(p){p=String(p||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(p==='cash')return'cash';if(p==='card')return'card';if(p==='mrd')return'mrd';if(p==='ubereats')return'uber';return'other'}
  async function calc(){
    const me=u();if(!me)throw Error('Please sign in.');
-   const q='pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&cashier=eq.'+encodeURIComponent(me.name||me.display_name||me.email||'')+'&select=id,total,payment,cashier';
+   const manager=me.role==='manager';
+   const q='pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+(manager?'':'&cashier=eq.'+encodeURIComponent(me.name||me.display_name||me.email||''))+'&select=id,total,payment,cashier';
    let rows=await api(q);
    // Some historic cashier values may differ from display name. For salesperson, use current user's email/name variants if exact name has no rows.
    if(!rows.length && me.email){rows=await api('pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&select=id,total,payment,cashier');rows=rows.filter(x=>[me.name,me.display_name,me.email].filter(Boolean).map(String).map(v=>v.toLowerCase()).includes(String(x.cashier||'').toLowerCase()));}
-   let x={cash:0,card:0,mrd:0,uber:0,other:0,total:0,count:rows.length};
-   rows.forEach(r=>{let v=Number(r.total||0),b=payBucket(r.payment);x[b]+=v;x.total+=v});return x;
+   let x={cash:0,card:0,mrd:0,uber:0,other:0,total:0,count:rows.length,byCashier:{}};
+   rows.forEach(r=>{let v=Number(r.total||0),b=payBucket(r.payment),name=r.cashier||'Unknown';x[b]+=v;x.total+=v;if(!x.byCashier[name])x.byCashier[name]={count:0,total:0};x.byCashier[name].count++;x.byCashier[name].total+=v});return x;
  }
  async function existing(){const me=u();if(!me||!me.id)return[];return api('pos_daily_cashups?store_code=eq.'+encodeURIComponent(store())+'&cashup_date=eq.'+day()+'&user_id=eq.'+encodeURIComponent(me.id)+'&select=*')}
  function variance(){if(!totals)return;let f=Number(document.getElementById('fvOpeningFloat').value||0),a=Number(document.getElementById('fvActualCash').value||0),expected=totals.cash+f,v=a-expected;document.getElementById('fvCashupVariance').textContent='Expected cash: '+money(expected)+' | Difference: '+money(v)}
  window.openFvCashup=async function(){
    try{
-    const me=u();if(!me||me.role!=='salesperson'){alert('Cash-up is for salesperson accounts.');return}
+    const me=u();if(!me||!['salesperson','manager'].includes(me.role)){alert('Cash-up access is restricted.');return}
     let ex=await existing();if(ex.length){alert('Your sales for '+day()+' have already been closed. Manager can review the saved cash-up.');return}
     document.getElementById('fvCashupModal').style.display='flex';document.getElementById('fvCashupIdentity').textContent=(me.name||me.display_name||me.email)+' — '+(store()==='SIVANA'?'Sivana':'Ndayini')+' — '+day();
-    totals=await calc();document.getElementById('fvCashupSummary').innerHTML='<table><tr><td>Number of sales</td><td>'+totals.count+'</td></tr><tr><td>Cash Sales</td><td>'+money(totals.cash)+'</td></tr><tr><td>Card Sales</td><td>'+money(totals.card)+'</td></tr><tr><td>Mr D</td><td>'+money(totals.mrd)+'</td></tr><tr><td>Uber Eats</td><td>'+money(totals.uber)+'</td></tr><tr><td>Other</td><td>'+money(totals.other)+'</td></tr><tr><td><b>Total Sales</b></td><td><b>'+money(totals.total)+'</b></td></tr></table>';variance();
+    totals=await calc();let breakdown=me.role==='manager'?'<h3>Salesperson Breakdown</h3><table>'+Object.keys(totals.byCashier).sort().map(n=>'<tr><td>'+safe(n)+' ('+totals.byCashier[n].count+' sales)</td><td>'+money(totals.byCashier[n].total)+'</td></tr>').join('')+'</table>':'';document.getElementById('fvCashupSummary').innerHTML='<table><tr><td>Number of sales</td><td>'+totals.count+'</td></tr><tr><td>Cash Sales</td><td>'+money(totals.cash)+'</td></tr><tr><td>Card Sales</td><td>'+money(totals.card)+'</td></tr><tr><td>Mr D</td><td>'+money(totals.mrd)+'</td></tr><tr><td>Uber Eats</td><td>'+money(totals.uber)+'</td></tr><tr><td>Other</td><td>'+money(totals.other)+'</td></tr><tr><td><b>Total Sales</b></td><td><b>'+money(totals.total)+'</b></td></tr></table>'+breakdown;variance();
    }catch(e){console.error(e);alert('Could not prepare cash-up: '+e.message)}
  }
  window.closeFvCashupModal=function(){document.getElementById('fvCashupModal').style.display='none'};
@@ -3966,20 +3968,21 @@ document.addEventListener('DOMContentLoaded',function(){
     const me=u();if(!me||!totals)return;let actualRaw=document.getElementById('fvActualCash').value;if(actualRaw===''){alert('Enter the actual cash counted.');return}
     let ex=await existing();if(ex.length){alert('This day is already closed.');return}
     let f=Number(document.getElementById('fvOpeningFloat').value||0),a=Number(actualRaw),expected=totals.cash+f;
-    let payload={store_code:store(),cashup_date:day(),user_id:me.id,salesperson_name:me.name||me.display_name||me.email||'Salesperson',opening_float:f,cash_sales:totals.cash,card_sales:totals.card,mr_d_sales:totals.mrd,uber_eats_sales:totals.uber,other_sales:totals.other,total_sales:totals.total,expected_cash:expected,actual_cash:a,sale_count:totals.count,notes:document.getElementById('fvCashupNotes').value||null,status:'CLOSED'};
+    let closer=me.name||me.display_name||me.email||(me.role==='manager'?'Manager':'Salesperson');
+    let payload={store_code:store(),cashup_date:day(),user_id:me.id,salesperson_name:me.role==='manager'?'Manager: '+closer+' (Store Total)':closer,opening_float:f,cash_sales:totals.cash,card_sales:totals.card,mr_d_sales:totals.mrd,uber_eats_sales:totals.uber,other_sales:totals.other,total_sales:totals.total,expected_cash:expected,actual_cash:a,sale_count:totals.count,notes:document.getElementById('fvCashupNotes').value||null,status:'CLOSED'};
     await api('pos_daily_cashups',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify(payload)});closeFvCashupModal();alert('Day closed successfully. Expected cash '+money(expected)+' | Actual cash '+money(a)+' | Difference '+money(a-expected));
    }catch(e){console.error(e);alert('Cash-up could not be saved: '+e.message)}
  };
  function syncButton(){
    let me=u(),button=document.getElementById('fvCashupBtn');
-   if(!me||me.role!=='salesperson'){
+   if(!me||!['salesperson','manager'].includes(me.role)){
      if(button)button.remove();
      return;
    }
    if(button)return;
    let target=document.querySelector('header .actions')||document.querySelector('header')||document.body;
    let b=document.createElement('button');
-   b.id='fvCashupBtn';b.type='button';b.textContent='CLOSE DAY / CASH-UP';b.onclick=openFvCashup;
+   b.id='fvCashupBtn';b.type='button';b.textContent=me.role==='manager'?'STORE CASH-UP':'CLOSE DAY / CASH-UP';b.onclick=openFvCashup;
    target.appendChild(b);
  }
  // Keep checking because staff may sign in well after the page first opens.
@@ -3988,7 +3991,7 @@ document.addEventListener('DOMContentLoaded',function(){
  setInterval(syncButton,500);
 })();
 </script>
-<!-- BUILD: SALESPERSON_DAILY_CASHUP_V73_20260906 -->
+<!-- BUILD: MANAGER_STORE_CASHUP_V74_20260906 -->
 
 
 <script>
