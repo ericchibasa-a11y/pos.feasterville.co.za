@@ -6308,11 +6308,20 @@ async function heartbeat(first){
 window.fvHeartbeatV60=heartbeat;
 
 function zar(n){return 'R'+Number(n||0).toFixed(2);}
+function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
+function itemLines(r){return (r.pos_sale_items||[]).map(i=>Number(i.qty||0)+' × '+(i.name||i.code||'Item'));}
+window.printManagerLiveSalesV76=function(){
+  const rows=window.fvManagerLiveSalesV60||[],u=user(),sc=store(u)||'NDAYENI';
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'}),total=rows.reduce((a,r)=>a+Number(r.total||0),0);
+  const body=rows.map(r=>'<tr><td>#'+esc(r.order_no??r.id)+'</td><td>'+esc(String(r.sale_time||'').slice(0,8))+'</td><td>'+esc(r.cashier||'—')+'</td><td>'+itemLines(r).map(esc).join('<br>')+'</td><td>'+esc(r.payment||'—')+'</td><td>'+zar(r.total)+'</td></tr>').join('')||'<tr><td colspan="6">No sales for this day.</td></tr>';
+  const w=window.open('','_blank','width=1100,height=750');if(!w){alert('Please allow pop-ups to print the report.');return}
+  w.document.write('<!doctype html><html><head><title>Daily Sales — '+esc(sc)+'</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{margin-bottom:4px}.meta{margin-bottom:18px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #bbb;padding:7px;text-align:left;vertical-align:top}th{background:#111;color:#fff}td:last-child,th:last-child{text-align:right}.total{font-size:18px;font-weight:700;margin-top:14px}@media print{body{padding:0}}</style></head><body><h1>FEASTERVILLE — DAILY SALES REPORT</h1><div class="meta"><b>Store:</b> '+esc(sc)+' &nbsp; <b>Date:</b> '+today+' &nbsp; <b>Sales:</b> '+rows.length+'</div><table><thead><tr><th>Order No.</th><th>Time</th><th>Cashier</th><th>Item Description</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+body+'</tbody></table><div class="total">Daily Total: '+zar(total)+'</div><script>window.onload=function(){window.print()}<\/script></body></html>');w.document.close();
+};
 async function managerLiveSales(){
   const u=user(); if(!u||u.role!=='manager'||!token())return;
   const sc=store(u)||'NDAYENI';
   const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'});
-  const rows=await api('pos_sales?select=id,store_code,sale_date,sale_time,total,payment,cashier,created_at&store_code=eq.'+
+  const rows=await api('pos_sales?select=id,order_no,store_code,sale_date,sale_time,total,payment,cashier,created_at,pos_sale_items(code,name,qty)&store_code=eq.'+
     encodeURIComponent(sc)+'&sale_date=eq.'+today+'&order=created_at.desc');
   window.fvManagerLiveSalesV60=rows||[];
 
@@ -6325,10 +6334,11 @@ async function managerLiveSales(){
   box.innerHTML='<h3>Live Sales — '+sc+'</h3>'+
     '<div style="margin-bottom:8px"><b>Today:</b> '+(rows||[]).length+' sales &nbsp; <b>Total:</b> '+zar(total)+
     ' &nbsp; <span class="small">Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</span></div>'+
-    '<div style="overflow:auto"><table><thead><tr><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+
-    ((rows||[]).map(r=>'<tr><td>'+String(r.sale_time||'').slice(0,8)+'</td><td>'+(r.cashier||'—')+
-    '</td><td>'+(r.payment||'—')+'</td><td>'+zar(r.total)+'</td></tr>').join('')||
-    '<tr><td colspan="4">No sales today.</td></tr>')+'</tbody></table></div>';
+    '<button type="button" class="primary" onclick="window.printManagerLiveSalesV76()" style="margin-bottom:10px">PRINT DAILY SALES REPORT</button>'+
+    '<div style="overflow:auto"><table><thead><tr><th>Order No.</th><th>Time</th><th>Cashier</th><th>Item Description</th><th>Payment</th><th>Total</th></tr></thead><tbody>'+
+    ((rows||[]).map(r=>'<tr><td>#'+esc(r.order_no??r.id)+'</td><td>'+esc(String(r.sale_time||'').slice(0,8))+'</td><td>'+esc(r.cashier||'—')+
+    '</td><td>'+itemLines(r).map(esc).join('<br>')+'</td><td>'+esc(r.payment||'—')+'</td><td>'+zar(r.total)+'</td></tr>').join('')||
+    '<tr><td colspan="6">No sales today.</td></tr>')+'</tbody></table></div>';
 }
 window.refreshManagerLiveSalesV60=managerLiveSales;
 
