@@ -6466,36 +6466,47 @@ async function patchCount(code,physical){
   body:JSON.stringify({physical_count:Number(physical)||0})
  }); if(!r.ok)throw Error(await r.text());
 }
-async function render(){
+async function render(force=false){
  const body=document.getElementById('productionCountBody'); if(!body||!token())return;
+ // Never replace the table while the controller is entering a physical count.
+ if(!force && body.contains(document.activeElement))return;
  const sc=store(),d=date();
  const [inputs,counts]=await Promise.all([
   get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
   get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)
  ]);
  const cm={}; counts.forEach(x=>cm[x.input_code]=x);
- body.innerHTML=inputs.map(i=>{
+ const signature=JSON.stringify([sc,d,inputs.map(i=>i.code),counts.map(x=>[x.input_code,x.opening_qty,x.received_qty,x.used_qty,x.physical_count])]);
+ // Do not redraw unchanged rows. Replacing innerHTML was the cause of the blinking.
+ if(!force && body.dataset.fv70Signature===signature)return;
+ const html=inputs.map(i=>{
   const c=cm[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,v=p-e;
   const act=Math.abs(v)<0.0005?'OK':(v<0?'INVESTIGATE SHORTAGE':'INVESTIGATE SURPLUS');
   return '<tr><td>'+i.code+'</td><td>'+i.name+'</td><td>'+(i.unit||'')+'</td><td><b>'+e.toFixed(2)+'</b></td>'+
    '<td><input type="number" step="0.001" class="stock-input fv63physical" data-code="'+i.code+'" value="'+p+'" style="max-width:165px"></td>'+
    '<td>'+v.toFixed(2)+'</td><td>'+act+'</td></tr>';
  }).join('');
+ if(body.contains(document.activeElement))return;
+ body.innerHTML=html;
+ body.dataset.fv70Signature=signature;
  body.querySelectorAll('.fv63physical').forEach(el=>el.addEventListener('change',async function(){
-  try{await patchCount(this.dataset.code,this.value);await render(); if(window.refreshLiveReconV55)window.refreshLiveReconV55()}catch(e){alert('Could not save physical count: '+e.message)}
+  const field=this,code=field.dataset.code,value=field.value;
+  field.disabled=true;
+  try{await patchCount(code,value);body.dataset.fv70Signature='';await render(false);if(window.refreshLiveReconV55)window.refreshLiveReconV55()}catch(e){field.disabled=false;alert('Could not save physical count: '+e.message)}
  }));
  let btn=document.getElementById('fv63RefreshCount');
- if(!btn){btn=document.createElement('button');btn.id='fv63RefreshCount';btn.className='primary';btn.textContent='REFRESH COUNT SHEET';btn.style.margin='8px 0';body.closest('table').before(btn);btn.onclick=()=>render().catch(console.error)}
+ if(!btn){btn=document.createElement('button');btn.id='fv63RefreshCount';btn.className='primary';btn.textContent='REFRESH COUNT SHEET';btn.style.margin='8px 0';body.closest('table').before(btn);btn.onclick=()=>{body.dataset.fv70Signature='';render(false).catch(console.error)}}
 }
 window.refreshProductionInputCountSheetV63=render;
-// neutralize stale renderers by restoring our rows after they run
-setInterval(()=>{if(document.visibilityState==='visible'&&document.getElementById('productionCountBody'))render().catch(()=>{})},3000);
+// A slow change-aware check preserves live data without interrupting typing.
+setInterval(()=>{if(document.visibilityState==='visible'&&document.getElementById('productionCountBody'))render(false).catch(()=>{})},15000);
 document.addEventListener('click',e=>{if(/production input count sheet|inventory/i.test(e.target?.textContent||''))setTimeout(()=>render().catch(console.error),250)},true);
 const oldReceive=window.receiveProductionStock;
-if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>render().catch(console.error),1000);return x};
+if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>{const b=document.getElementById('productionCountBody');if(b)b.dataset.fv70Signature='';render(false).catch(console.error)},1000);return x};
 })();
 </script>
 <!-- BUILD: ORIGINAL_COUNT_SHEET_LIVE_V63 -->
+<!-- BUILD: COUNT_SHEET_NO_BLINK_V70 -->
 
 
 <script>
