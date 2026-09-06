@@ -3970,11 +3970,25 @@ document.addEventListener('DOMContentLoaded',function(){
     await api('pos_daily_cashups',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify(payload)});closeFvCashupModal();alert('Day closed successfully. Expected cash '+money(expected)+' | Actual cash '+money(a)+' | Difference '+money(a-expected));
    }catch(e){console.error(e);alert('Cash-up could not be saved: '+e.message)}
  };
- function addButton(){let me=u();if(!me||me.role!=='salesperson'||document.getElementById('fvCashupBtn'))return;let target=document.querySelector('header .actions')||document.querySelector('header')||document.body;let b=document.createElement('button');b.id='fvCashupBtn';b.type='button';b.textContent='CLOSE DAY / CASH-UP';b.onclick=openFvCashup;target.appendChild(b)}
- let n=0,t=setInterval(()=>{n++;addButton();if(document.getElementById('fvCashupBtn')||n>120)clearInterval(t)},250);
+ function syncButton(){
+   let me=u(),button=document.getElementById('fvCashupBtn');
+   if(!me||me.role!=='salesperson'){
+     if(button)button.remove();
+     return;
+   }
+   if(button)return;
+   let target=document.querySelector('header .actions')||document.querySelector('header')||document.body;
+   let b=document.createElement('button');
+   b.id='fvCashupBtn';b.type='button';b.textContent='CLOSE DAY / CASH-UP';b.onclick=openFvCashup;
+   target.appendChild(b);
+ }
+ // Keep checking because staff may sign in well after the page first opens.
+ // This also restores the button after a UI re-render and removes it on logout.
+ syncButton();
+ setInterval(syncButton,500);
 })();
 </script>
-<!-- BUILD: SALESPERSON_DAILY_CASHUP_20260831 -->
+<!-- BUILD: SALESPERSON_DAILY_CASHUP_V73_20260906 -->
 
 
 <script>
