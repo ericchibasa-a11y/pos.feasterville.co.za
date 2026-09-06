@@ -5266,8 +5266,8 @@ function inventoryMode(){
  document.querySelectorAll('.app > section,.app > div.panel').forEach(x=>x.style.display='none');
 
  // Show only the two panels that contain the 3 approved functions.
- const pp=document.getElementById('productionInputsPanel'),rp=document.getElementById('reconPanel');
- if(pp)pp.style.display='block';if(rp)rp.style.display='block';
+ const pp=document.getElementById('productionInputsPanel'),rp=document.getElementById('reconPanel'),ep=document.getElementById('fvICExpensePanelV69');
+ if(pp)pp.style.display='block';if(rp)rp.style.display='block';if(ep)ep.style.display='block';
 
  // Production panel: retain Receive Stock and Count Sheet only.
  if(pp){
@@ -5300,7 +5300,7 @@ window.setInventoryControlRoleV46=async function(uid){
  if(!isMgr())return alert('Manager access required.');
  try{
   await api('rpc/manager_set_pos_user_role',{method:'POST',body:JSON.stringify({p_user_id:uid,p_role:'inventory_control'})});
-  alert('User changed to Inventory Controller. Their access is limited to Production Input Reconciliation, Count Sheet and Receive Stock.');
+  alert('User changed to Inventory Controller. Their access is limited to production input control and capturing expenses for their assigned store.');
   if(typeof window.loadLiveStaffUsers==='function')window.loadLiveStaffUsers();
  }catch(e){alert('Could not change role: '+e.message)}
 };
@@ -5446,8 +5446,10 @@ function showInventoryControllerOnly(){
 
  const pp=document.getElementById('productionInputsPanel');
  const rp=document.getElementById('reconPanel');
+ const ep=document.getElementById('fvICExpensePanelV69');
  if(pp)pp.style.display='block';
  if(rp)rp.style.display='block';
+ if(ep)ep.style.display='block';
 
  // Let the V46/V47 role-specific renderer do the detailed child filtering.
  if(typeof window.refreshSelectedDateSalesV44==='function'){ /* deliberately skipped */ }
@@ -6722,6 +6724,66 @@ function makePanel(){
 })();
 </script>
 <!-- BUILD: STORE_FINANCE_PROFIT_LOSS_V68 -->
+
+<style>
+/* V69 — INVENTORY CONTROLLER EXPENSE CAPTURE ONLY */
+#fvICExpensePanelV69 .fv-ic-expense-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+#fvICExpensePanelV69 label{font-weight:700;font-size:14px}
+#fvICExpensePanelV69 input,#fvICExpensePanelV69 select{min-height:40px;padding:8px;border:1px solid #bbb;border-radius:6px;background:#fff}
+#fvICExpensePanelV69 .fv-ic-status{min-height:22px;margin-top:10px;font-weight:700}
+@media(max-width:720px){#fvICExpensePanelV69 input,#fvICExpensePanelV69 select{width:100%;max-width:100%}#fvICExpensePanelV69 label{flex:1 1 145px}}
+</style>
+<script>
+/* V69 — Inventory Controller may INSERT one expense for assigned store only.
+   No finance reads are performed, so income, reports and profit/loss remain hidden. */
+(function(){
+'use strict';
+if(window.__fvICExpenseV69)return;window.__fvICExpenseV69=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const $=id=>document.getElementById(id);
+const user=()=>window.inventorySessionUser||null;
+const isIC=()=>user()?.role==='inventory_control';
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const store=()=>String(user()?.store_code||'NDAYENI').toUpperCase();
+function status(message,bad){const e=$('fvICExpenseStatusV69');if(e){e.textContent=message||'';e.style.color=bad?'#b42318':'#08752f'}}
+async function api(path,opt={}){const h=Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},opt.headers||{});const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h})),t=await r.text();if(!r.ok){let m=t;try{m=JSON.parse(t).message||t}catch(_){}throw Error(m)}return t?JSON.parse(t):null}
+function make(){
+ if($('fvICExpensePanelV69'))return;
+ const p=document.createElement('section');p.id='fvICExpensePanelV69';p.className='panel';p.style.cssText='grid-column:1/-1;display:none';
+ p.innerHTML='<h2>Capture Store Expense</h2><p class="small">Expense entry only. Income, sales reports and profit or loss information are restricted to managers.</p><p><b>Assigned store:</b> <span id="fvICExpenseStoreV69"></span></p><div class="fv-ic-expense-form">'+
+ '<label>Date<br><input id="fvICExpenseDateV69" type="date"></label>'+
+ '<label>Category<br><select id="fvICExpenseCategoryV69"><option>Stock &amp; Ingredients</option><option>Staff Wages</option><option>Electricity</option><option>Rent</option><option>Transport</option><option>Repairs &amp; Maintenance</option><option>Packaging</option><option>Cleaning</option><option>Bank Charges</option><option>Internet &amp; Airtime</option><option>Security</option><option>Other Expense</option></select></label>'+
+ '<label>Supplier<br><input id="fvICExpenseSupplierV69" placeholder="Supplier or payee"></label>'+
+ '<label>Description<br><input id="fvICExpenseDescriptionV69" placeholder="What was paid for?"></label>'+
+ '<label>Payment<br><select id="fvICExpensePaymentV69"><option>Cash</option><option>Card</option><option>EFT</option><option>Other</option></select></label>'+
+ '<label>Amount<br><input id="fvICExpenseAmountV69" type="number" min="0.01" step="0.01" placeholder="0.00"></label>'+
+ '<label>Reference<br><input id="fvICExpenseReferenceV69" placeholder="Invoice / receipt no."></label>'+
+ '<button type="button" class="primary" id="fvICSaveExpenseV69">SAVE EXPENSE</button></div><div id="fvICExpenseStatusV69" class="fv-ic-status"></div>';
+ const anchor=$('productionInputsPanel')||document.querySelector('.app > section');
+ if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(p,anchor);
+ $('fvICExpenseDateV69').value=today();$('fvICSaveExpenseV69').onclick=save;
+}
+async function save(){
+ if(!isIC())return status('Inventory Controller access required.',true);
+ const amount=Number($('fvICExpenseAmountV69').value),description=$('fvICExpenseDescriptionV69').value.trim();
+ if(!$('fvICExpenseDateV69').value)return status('Choose the expense date.',true);
+ if(!description||!(amount>0))return status('Enter the expense description and an amount above zero.',true);
+ try{
+  status('Saving expense...');
+  await api('pos_store_expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:store(),expense_date:$('fvICExpenseDateV69').value,category:$('fvICExpenseCategoryV69').value,supplier:$('fvICExpenseSupplierV69').value.trim()||null,description,payment_method:$('fvICExpensePaymentV69').value,amount,reference:$('fvICExpenseReferenceV69').value.trim()||null,created_by:user().id||user().user_id})});
+  ['fvICExpenseSupplierV69','fvICExpenseDescriptionV69','fvICExpenseAmountV69','fvICExpenseReferenceV69'].forEach(id=>$(id).value='');
+  status('Expense saved successfully. A manager can review it in the finance report.');
+ }catch(e){status('Expense could not be saved: '+String(e?.message||e),true)}
+}
+function reveal(){if(!isIC())return;make();const p=$('fvICExpensePanelV69');if(p)p.style.display='block';const s=$('fvICExpenseStoreV69');if(s)s.textContent=store()==='SIVANA'?'Sivana':'Ndayeni'}
+document.addEventListener('DOMContentLoaded',make);
+let checks=0;const timer=setInterval(()=>{checks++;reveal();if(isIC()||checks>120)clearInterval(timer)},250);
+window.showInventoryControllerExpenseV69=reveal;
+})();
+</script>
+<!-- BUILD: INVENTORY_CONTROLLER_EXPENSE_ONLY_V69 -->
 
 </body>
 </html>
