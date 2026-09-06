@@ -6350,7 +6350,7 @@ async function api(path,opt={}){
 function findEl(ids){for(const id of ids){const e=document.getElementById(id);if(e)return e}return null;}
 async function loadInputs(){
  const sc=store(); if(!sc)return [];
- const rows=await api('pos_store_production_inputs?select=code,name,unit,category,active&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc');
+ const rows=await api('pos_store_production_inputs?select=code,name,unit,category,active&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=code.asc');
  const sel=findEl(['piStockInput','stockReceiptInput','receiveInputCode','productionReceiptInput']);
  if(sel){
    const keep=sel.value;
@@ -6422,7 +6422,7 @@ async function render(){
  if(!U()||!tok())return;
  let store=sc(),d=today();
  let [inputs,counts]=await Promise.all([
-  get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&order=name.asc'),
+  get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&order=code.asc'),
   get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty&store_code=eq.'+encodeURIComponent(store)+'&count_date=eq.'+d)
  ]);
  let cm={};counts.forEach(x=>cm[x.input_code]=x);
@@ -6472,7 +6472,7 @@ async function render(force=false){
  if(!force && body.contains(document.activeElement))return;
  const sc=store(),d=date();
  const [inputs,counts]=await Promise.all([
-  get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
+  get('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=code.asc'),
   get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)
  ]);
  const cm={}; counts.forEach(x=>cm[x.input_code]=x);
@@ -6526,7 +6526,7 @@ async function render(force=false){
  const host=document.getElementById('reconContent');if(!host)return;
  const sc=store(),d=day();
  const [inputs,counts]=await Promise.all([
-  get('pos_store_production_inputs?select=code,name,unit,reorder_level&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
+  get('pos_store_production_inputs?select=code,name,unit,reorder_level&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=code.asc'),
   get('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count,variance_qty&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)
  ]);
  const cm={};counts.forEach(x=>cm[x.input_code]=x);
@@ -6842,7 +6842,7 @@ async function load(announce=false){
   if(announce)status('Refreshing count sheet...');
   const sc=store(),d=day();
   const data=await Promise.all([
-   api('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
+   api('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=code.asc'),
    api('pos_store_input_counts?select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&order=count_date.desc')
   ]);
   inputs=data[0]||[];const history=data[1]||[];current={};history.filter(x=>x.count_date===d).forEach(x=>current[x.input_code]=x);
@@ -6871,6 +6871,7 @@ window.refreshStableCountSheetV71=()=>load(true);
 })();
 </script>
 <!-- BUILD: ISOLATED_STABLE_COUNT_SHEET_V71 -->
+<!-- BUILD: COUNT_SHEET_CODE_SORT_V72 -->
 
 </body>
 </html>
