@@ -3915,6 +3915,13 @@ document.addEventListener('DOMContentLoaded',function(){
 <div id="fvCashupModal">
  <div id="fvCashupCard">
   <h2>Close Day / Cash-Up</h2>
+  <div id="fvCashupStoreWrap" style="display:none;margin:8px 0 14px">
+   <label for="fvCashupStore"><b>Select Store to Cash-Up</b></label>
+   <select id="fvCashupStore" style="width:100%;padding:10px;margin-top:5px;border:1px solid #bbb;border-radius:7px;font-weight:700">
+    <option value="NDAYENI">Ndayini</option>
+    <option value="SIVANA">Sivana</option>
+   </select>
+  </div>
   <div id="fvCashupIdentity" class="small"></div>
   <div id="fvCashupSummary">Loading today's sales...</div>
   <label><b>Opening Cash Float (R)</b></label><input id="fvOpeningFloat" type="number" min="0" step="0.01" value="0">
@@ -3937,7 +3944,7 @@ document.addEventListener('DOMContentLoaded',function(){
  function u(){return window.salesSessionUser||window.currentUser||null}
  function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||''}
  function day(){let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
- function store(){return (u()&&u().store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI'}
+ function store(){let me=u();if(me&&me.role==='manager')return document.getElementById('fvCashupStore')?.value||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';return (me&&me.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI'}
  function headers(extra){return Object.assign({'apikey':KEY,'Authorization':'Bearer '+tok(),'Content-Type':'application/json'},extra||{})}
  async function api(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)}));let t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):null}
  function payBucket(p){p=String(p||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(p==='cash')return'cash';if(p==='card')return'card';if(p==='mrd')return'mrd';if(p==='ubereats')return'uber';return'other'}
@@ -3953,16 +3960,24 @@ document.addEventListener('DOMContentLoaded',function(){
  }
  async function existing(){const me=u();if(!me||!me.id)return[];return api('pos_daily_cashups?store_code=eq.'+encodeURIComponent(store())+'&cashup_date=eq.'+day()+'&user_id=eq.'+encodeURIComponent(me.id)+'&select=*')}
  function variance(){if(!totals)return;let f=Number(document.getElementById('fvOpeningFloat').value||0),a=Number(document.getElementById('fvActualCash').value||0),expected=totals.cash+f,v=a-expected;document.getElementById('fvCashupVariance').textContent='Expected cash: '+money(expected)+' | Difference: '+money(v)}
+ async function prepareCashup(){
+   const me=u(),submit=document.getElementById('fvSubmitCashup');
+   document.getElementById('fvCashupIdentity').textContent=(me.name||me.display_name||me.email)+' — '+(store()==='SIVANA'?'Sivana':'Ndayini')+' — '+day();
+   document.getElementById('fvCashupSummary').textContent="Loading today's sales...";submit.disabled=true;
+   let ex=await existing();
+   if(ex.length){totals=null;document.getElementById('fvCashupSummary').innerHTML='<p style="color:#b00020;font-weight:700">'+(store()==='SIVANA'?'Sivana':'Ndayini')+' has already been closed for '+day()+'.</p>';return}
+   totals=await calc();let breakdown=me.role==='manager'?'<h3>Salesperson Breakdown</h3><table>'+Object.keys(totals.byCashier).sort().map(n=>'<tr><td>'+safe(n)+' ('+totals.byCashier[n].count+' sales)</td><td>'+money(totals.byCashier[n].total)+'</td></tr>').join('')+'</table>':'';document.getElementById('fvCashupSummary').innerHTML='<table><tr><td>Number of sales</td><td>'+totals.count+'</td></tr><tr><td>Cash Sales</td><td>'+money(totals.cash)+'</td></tr><tr><td>Card Sales</td><td>'+money(totals.card)+'</td></tr><tr><td>Mr D</td><td>'+money(totals.mrd)+'</td></tr><tr><td>Uber Eats</td><td>'+money(totals.uber)+'</td></tr><tr><td>Other</td><td>'+money(totals.other)+'</td></tr><tr><td><b>Total Sales</b></td><td><b>'+money(totals.total)+'</b></td></tr></table>'+breakdown;submit.disabled=false;variance();
+ }
  window.openFvCashup=async function(){
    try{
     const me=u();if(!me||!['salesperson','manager'].includes(me.role)){alert('Cash-up access is restricted.');return}
-    let ex=await existing();if(ex.length){alert('Your sales for '+day()+' have already been closed. Manager can review the saved cash-up.');return}
-    document.getElementById('fvCashupModal').style.display='flex';document.getElementById('fvCashupIdentity').textContent=(me.name||me.display_name||me.email)+' — '+(store()==='SIVANA'?'Sivana':'Ndayini')+' — '+day();
-    totals=await calc();let breakdown=me.role==='manager'?'<h3>Salesperson Breakdown</h3><table>'+Object.keys(totals.byCashier).sort().map(n=>'<tr><td>'+safe(n)+' ('+totals.byCashier[n].count+' sales)</td><td>'+money(totals.byCashier[n].total)+'</td></tr>').join('')+'</table>':'';document.getElementById('fvCashupSummary').innerHTML='<table><tr><td>Number of sales</td><td>'+totals.count+'</td></tr><tr><td>Cash Sales</td><td>'+money(totals.cash)+'</td></tr><tr><td>Card Sales</td><td>'+money(totals.card)+'</td></tr><tr><td>Mr D</td><td>'+money(totals.mrd)+'</td></tr><tr><td>Uber Eats</td><td>'+money(totals.uber)+'</td></tr><tr><td>Other</td><td>'+money(totals.other)+'</td></tr><tr><td><b>Total Sales</b></td><td><b>'+money(totals.total)+'</b></td></tr></table>'+breakdown;variance();
+    const wrap=document.getElementById('fvCashupStoreWrap'),select=document.getElementById('fvCashupStore');wrap.style.display=me.role==='manager'?'block':'none';if(me.role==='manager')select.value=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+    document.getElementById('fvCashupModal').style.display='flex';await prepareCashup();
    }catch(e){console.error(e);alert('Could not prepare cash-up: '+e.message)}
  }
  window.closeFvCashupModal=function(){document.getElementById('fvCashupModal').style.display='none'};
  document.getElementById('fvOpeningFloat').addEventListener('input',variance);document.getElementById('fvActualCash').addEventListener('input',variance);
+ document.getElementById('fvCashupStore').addEventListener('change',async function(){try{localStorage.setItem('feastervilleStoreCode',this.value);document.getElementById('fvOpeningFloat').value='0';document.getElementById('fvActualCash').value='';document.getElementById('fvCashupNotes').value='';await prepareCashup()}catch(e){console.error(e);alert('Could not load this store cash-up: '+e.message)}});
  document.getElementById('fvSubmitCashup').onclick=async function(){
    try{
     const me=u();if(!me||!totals)return;let actualRaw=document.getElementById('fvActualCash').value;if(actualRaw===''){alert('Enter the actual cash counted.');return}
@@ -3991,7 +4006,7 @@ document.addEventListener('DOMContentLoaded',function(){
  setInterval(syncButton,500);
 })();
 </script>
-<!-- BUILD: MANAGER_STORE_CASHUP_V74_20260906 -->
+<!-- BUILD: MANAGER_SELECT_STORE_CASHUP_V75_20260906 -->
 
 
 <script>
