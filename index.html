@@ -3576,7 +3576,7 @@ document.addEventListener('DOMContentLoaded',function(){
           '<td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td>'+
           '<td>'+fmt(expected)+'</td>'+
           '<td><input type="number" min="0" step="0.01" value="'+physical+
-            '" onchange="setProductionCount(\\''+p.code+'\\',this.value)"></td>'+
+            '" onchange="setProductionCount(\''+p.code+'\',this.value)"></td>'+
           '<td>'+fmt(variance)+'</td><td>'+action+'</td>'+
         '</tr>';
       }).join('');
@@ -6487,7 +6487,7 @@ async function render(){
 }
 window.refreshProductionInputCountSheetV63=render;
 // neutralize stale renderers by restoring our rows after they run
-setInterval(()=>{const b=document.getElementById('productionCountBody');const a=document.activeElement;if(document.visibilityState==='visible'&&b&&!(a&&b.contains(a)))render().catch(()=>{})},5000);
+setInterval(()=>{if(document.visibilityState==='visible'&&document.getElementById('productionCountBody'))render().catch(()=>{})},3000);
 document.addEventListener('click',e=>{if(/production input count sheet|inventory/i.test(e.target?.textContent||''))setTimeout(()=>render().catch(console.error),250)},true);
 const oldReceive=window.receiveProductionStock;
 if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>render().catch(console.error),1000);return x};
@@ -6602,32 +6602,126 @@ window.printSelectedSalesV45=function(){
 </script>
 <!-- BUILD: SALES_PDF_V66 -->
 
+<style>
+/* V68 — STORE INCOME, EXPENSES & PROFIT/LOSS */
+#fvFinancePanel .fv-finance-filters,#fvFinancePanel .fv-finance-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+#fvFinancePanel label{font-weight:700;font-size:14px}
+#fvFinancePanel input,#fvFinancePanel select{min-height:40px;padding:8px;border:1px solid #bbb;border-radius:6px;background:#fff}
+#fvFinancePanel .fv-finance-cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin:14px 0}
+#fvFinancePanel .fv-finance-card{border:1px solid #ddd;border-radius:8px;padding:14px;background:#fafafa}
+#fvFinancePanel .fv-finance-card span{display:block;font-size:13px;color:#555;margin-bottom:5px}
+#fvFinancePanel .fv-finance-card strong{font-size:22px}
+#fvFinancePanel .fv-positive{color:#08752f}#fvFinancePanel .fv-negative{color:#b42318}
+#fvFinancePanel .fv-finance-box{border:1px solid #ddd;border-radius:8px;padding:14px;margin:14px 0}
+#fvFinancePanel .fv-finance-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+#fvFinancePanel .fv-finance-status{min-height:20px;margin:8px 0;font-weight:700}
+#fvFinancePanel .fv-period-buttons{display:flex;gap:6px;flex-wrap:wrap}
+#fvFinancePanel .fv-pnl-title{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+#fvFinancePanel .fv-pnl-table td:not(:first-child),#fvFinancePanel .fv-pnl-table th:not(:first-child){text-align:right}
+#fvFinancePanel .fv-pnl-total td{font-weight:700;border-top:2px solid #111}
+#fvFinancePanel .fv-pnl-result td{font-weight:800;font-size:16px;background:#f3f8ea}
+@media(max-width:720px){#fvFinancePanel .fv-finance-cards{grid-template-columns:1fr 1fr}#fvFinancePanel input,#fvFinancePanel select{max-width:100%;width:100%}#fvFinancePanel label{flex:1 1 145px}}
+@media print{body.fv-finance-print>*.app~*{display:none!important}body.fv-finance-print .app>*:not(#fvFinancePanel){display:none!important}body.fv-finance-print #fvFinancePanel,body.fv-finance-print #fvFinancePanel *{visibility:visible!important}body.fv-finance-print #fvFinancePanel{display:block!important;position:absolute;left:0;top:0;width:100%;box-shadow:none;border:0}body.fv-finance-print #receiptPrint{display:none!important;visibility:hidden!important}body.fv-finance-print .fv-no-print{display:none!important}}
+</style>
+
 <script>
+/* V68 — STORE INCOME, EXPENSES & PROFIT/LOSS (isolated manager module) */
 (function(){
 'use strict';
-if(window.__fvLiveOpsV67)return;window.__fvLiveOpsV67=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-let salesSig='',countSig='',reconSig='';
-const U=()=>window.inventorySessionUser||window.salesSessionUser||window.currentUser||null;
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j&&j.access_token)return j.access_token}catch(_){}}return''}
-function S(){let u=U()||{};return String((u.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):null)||u.store_code||u.assigned_store||'NDAYENI').toUpperCase()}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function E(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
-function M(n){return 'R'+Number(n||0).toFixed(2)}
-async function A(p,o={}){let r=await fetch(BASE+'/'+p,Object.assign({},o,{headers:Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},o.headers||{})})),t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):null}
-async function loadSales(force=false){if(!T())return;let f=document.getElementById('fvSalesFromV45')?.value||D(),to=document.getElementById('fvSalesToV45')?.value||f,sc=S();let rows=await A('pos_sales?select=id,store_code,sale_date,sale_time,total,payment,cashier,created_at&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+to+'&order=created_at.desc')||[];window.fvSelectedSalesRowsV45=rows;window.fvSelectedSalesRowsV67=rows;let sig=JSON.stringify(rows.map(r=>[r.id,r.sale_date,r.sale_time,r.total,r.payment,r.cashier]));if(!force&&sig===salesSig)return;salesSig=sig;let h=document.getElementById('reportContent');if(!h)return;let total=rows.reduce((a,r)=>a+Number(r.total||0),0),pay={};rows.forEach(r=>{let p=r.payment||'Other';pay[p]=(pay[p]||0)+Number(r.total||0)});h.innerHTML='<h3>Sales Report — '+E(sc)+'</h3><p><b>Period:</b> '+f+(to!==f?' to '+to:'')+'<br><b>Number of Sales:</b> '+rows.length+' &nbsp; <b>Total:</b> '+M(total)+'</p><h4>Payment Summary</h4><table class="inv-table"><tr><th>Payment</th><th>Amount</th></tr>'+Object.entries(pay).map(x=>'<tr><td>'+E(x[0])+'</td><td>'+M(x[1])+'</td></tr>').join('')+'</table><h4>Transactions</h4><table class="inv-table"><tr><th>Date</th><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+(rows.map(r=>'<tr><td>'+r.sale_date+'</td><td>'+String(r.sale_time||'').slice(0,8)+'</td><td>'+E(r.cashier||'—')+'</td><td>'+E(r.payment||'—')+'</td><td>'+M(r.total)+'</td></tr>').join('')||'<tr><td colspan="5">No sales found.</td></tr>')+'</table><div class="small">Live database — updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div>'}
-window.loadSelectedSalesV45=()=>loadSales(true);window.todaySelectedSalesV45=function(){let d=D(),f=document.getElementById('fvSalesFromV45'),t=document.getElementById('fvSalesToV45');if(f)f.value=d;if(t)t.value=d;loadSales(true).catch(e=>alert(e.message))};
-async function receive(){try{let sc=S(),sel=document.getElementById('piStockInput'),q=document.getElementById('piStockQty');if(!sel?.value)throw Error('Please select a Production Input.');let qty=Number(q?.value||0);if(!(qty>0))throw Error('Enter a quantity greater than zero.');let x=await A('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&code=eq.'+encodeURIComponent(sel.value)+'&active=eq.true&limit=1');if(!x?.[0])throw Error('Production input not found for '+sc+'.');let u=U()||{},i=x[0];await A('pos_stock_receipts',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({receipt_date:D(),supplier:null,reference:null,input_code:i.code,input_name:i.name,unit:i.unit||null,qty,unit_cost:0,received_by:u.display_name||u.name||u.email||'POS User',created_by:u.user_id||u.id||null,store_code:sc})});if(q)q.value='1';countSig='';reconSig='';setTimeout(()=>{renderCount(true).catch(()=>{});renderRecon(true).catch(()=>{})},800);alert('Stock received successfully: '+i.name+' — '+qty+' '+(i.unit||''));return true}catch(e){alert('Receive Production Input Stock: '+e.message);return false}}
-window.receiveProductionStock=receive;window.recordProductionReceipt=receive;
-async function savePhysical(code,val){let sc=S(),d=D(),n=Number(val||0),ex=await A('pos_store_input_counts?select=input_code&store_code=eq.'+encodeURIComponent(sc)+'&input_code=eq.'+encodeURIComponent(code)+'&count_date=eq.'+d+'&limit=1');if(ex?.length)await A('pos_store_input_counts?store_code=eq.'+encodeURIComponent(sc)+'&input_code=eq.'+encodeURIComponent(code)+'&count_date=eq.'+d,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({physical_count:n})});else await A('pos_store_input_counts',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:sc,input_code:code,count_date:d,opening_qty:0,received_qty:0,used_qty:0,physical_count:n})})}
-async function renderCount(force=false){let b=document.getElementById('productionCountBody');if(!b||!T())return;let a=document.activeElement;if(a&&b.contains(a))return;let sc=S(),d=D(),[ins,cts]=await Promise.all([A('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),A('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)]),cm={};(cts||[]).forEach(x=>cm[x.input_code]=x);let sig=JSON.stringify(cts||[]);if(!force&&sig===countSig)return;countSig=sig;b.innerHTML=(ins||[]).map(i=>{let c=cm[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,v=p-e;return '<tr><td>'+i.code+'</td><td>'+E(i.name)+'</td><td>'+E(i.unit||'')+'</td><td><b>'+e.toFixed(2)+'</b></td><td><input class="stock-input fv67physical" data-code="'+i.code+'" type="number" step="0.001" value="'+p+'" style="max-width:165px"></td><td>'+v.toFixed(2)+'</td><td>'+(Math.abs(v)<.0005?'OK':v<0?'INVESTIGATE SHORTAGE':'INVESTIGATE SURPLUS')+'</td></tr>'}).join('');b.querySelectorAll('.fv67physical').forEach(el=>el.addEventListener('blur',async()=>{try{await savePhysical(el.dataset.code,el.value);countSig='';reconSig='';await renderCount(true);await renderRecon(true)}catch(e){alert('Could not save physical count: '+e.message)}}))}
-window.refreshProductionInputCountSheetV67=()=>renderCount(true);
-async function renderRecon(force=false){let h=document.getElementById('reconContent');if(!h||!T())return;let sc=S(),d=D(),[ins,cts]=await Promise.all([A('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),A('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)]),cm={};(cts||[]).forEach(x=>cm[x.input_code]=x);let sig=JSON.stringify(cts||[]);if(!force&&sig===reconSig)return;reconSig=sig;h.innerHTML='<div><b>'+sc+' — '+d+'</b> <button class="primary" onclick="refreshProductionInputReconV67()">REFRESH RECONCILIATION</button></div><table class="inv-table"><tr><th>Code</th><th>Production Input</th><th>Unit</th><th>Opening</th><th>Received</th><th>Used</th><th>Expected</th><th>Physical</th><th>Variance</th><th>Status</th></tr>'+(ins||[]).map(i=>{let c=cm[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,v=p-e;return '<tr><td>'+i.code+'</td><td>'+E(i.name)+'</td><td>'+E(i.unit||'')+'</td><td>'+o.toFixed(3)+'</td><td>'+r.toFixed(3)+'</td><td>'+u.toFixed(3)+'</td><td><b>'+e.toFixed(3)+'</b></td><td>'+p.toFixed(3)+'</td><td>'+v.toFixed(3)+'</td><td>'+(Math.abs(v)<.0005?'OK':v<0?'SHORTAGE':'SURPLUS')+'</td></tr>'}).join('')+'</table><div class="small">Live database — updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div>'}
-window.refreshProductionInputReconV67=()=>renderRecon(true);let oldShow=window.showRecon;window.showRecon=function(type,btn){if(typeof oldShow==='function')try{oldShow.apply(this,arguments)}catch(_){};if(type==='raw')setTimeout(()=>renderRecon(true).catch(()=>{}),100)};
-setInterval(()=>{if(document.visibilityState!=='visible'||!T())return;let rp=document.getElementById('reportsPanel');if(rp&&rp.style.display!=='none')loadSales(false).catch(()=>{});let b=document.getElementById('productionCountBody'),a=document.activeElement;if(b&&!(a&&b.contains(a)))renderCount(false).catch(()=>{});let r=document.getElementById('reconPanel');if(r&&r.style.display!=='none')renderRecon(false).catch(()=>{})},5000);
+if(window.__fvFinanceV68)return;window.__fvFinanceV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+let state={sales:[],income:[],expenses:[]};
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>'R'+Number(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+function token(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return''}
+function today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function monthStart(){let d=today();return d.slice(0,8)+'01'}
+function selectedStore(){return $('fvFinanceStore')?.value||'NDAYENI'}
+function activeStore(){return String(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase()}
+function headers(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},extra||{})}
+async function api(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)})),txt=await r.text();if(!r.ok){let m=txt;try{m=JSON.parse(txt).message||txt}catch(_){}throw Error(m)}return txt?JSON.parse(txt):[]}
+function setStatus(message,bad){let e=$('fvFinanceStatus');if(e){e.textContent=message||'';e.style.color=bad?'#b42318':'#08752f'}}
+function makePanel(){
+ if($('fvFinancePanel'))return;
+ let panel=document.createElement('section');panel.id='fvFinancePanel';panel.className='panel manager-only';panel.style.cssText='grid-column:1/-1;display:none';
+ panel.innerHTML=`<h2>Store Income & Expenses</h2>
+ <p class="small">POS sales are pulled automatically. Capture only other income and operating expenses here.</p>
+ <div class="fv-finance-filters fv-no-print">
+  <label>Store<br><select id="fvFinanceStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="ALL">Both Stores — Combined</option></select></label>
+  <label>From<br><input id="fvFinanceFrom" type="date"></label><label>To<br><input id="fvFinanceTo" type="date"></label>
+  <button type="button" class="primary" id="fvFinanceLoad">VIEW REPORT</button>
+  <div class="fv-period-buttons"><button type="button" class="secondary" id="fvFinanceToday">TODAY</button><button type="button" class="secondary" id="fvFinanceWeek">THIS WEEK</button><button type="button" class="secondary" id="fvFinanceMonth">THIS MONTH</button></div>
+ </div><div id="fvFinanceStatus" class="fv-finance-status"></div>
+ <div class="fv-finance-cards"><div class="fv-finance-card"><span>POS Sales</span><strong id="fvPosIncome">R0.00</strong></div><div class="fv-finance-card"><span>Other Income</span><strong id="fvOtherIncome">R0.00</strong></div><div class="fv-finance-card"><span>Total Expenses</span><strong id="fvTotalExpenses">R0.00</strong></div><div class="fv-finance-card"><span>Profit / (Loss)</span><strong id="fvNetProfit">R0.00</strong></div></div>
+ <div class="fv-finance-box"><div class="fv-pnl-title"><h3>Profit or Loss Statement</h3><b id="fvPnlPeriod"></b></div><div style="overflow:auto"><table class="inv-table fv-pnl-table"><thead><tr><th>Income / Expense</th><th>Ndayeni</th><th>Sivana</th><th>Combined</th></tr></thead><tbody id="fvPnlRows"></tbody></table></div><p class="small">This is a cash-management profit or loss statement: stock and ingredients are recognised when captured as expenses.</p></div>
+ <div class="fv-finance-actions fv-no-print"><button type="button" class="secondary" id="fvFinancePrint">PRINT / SAVE PDF</button><button type="button" class="secondary" id="fvFinanceCsv">DOWNLOAD CSV</button></div>
+ <div class="fv-finance-box fv-no-print"><h3>Add Other Income</h3><div class="fv-finance-form">
+  <label>Date<br><input id="fvIncomeDate" type="date"></label><label>Category<br><select id="fvIncomeCategory"><option>Delivery Income</option><option>Catering</option><option>Refund Received</option><option>Other Income</option></select></label>
+  <label>Description<br><input id="fvIncomeDescription" placeholder="What was the income for?"></label><label>Payment<br><select id="fvIncomePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Mr D</option><option>Uber Eats</option><option>Other</option></select></label>
+  <label>Amount<br><input id="fvIncomeAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reference<br><input id="fvIncomeReference" placeholder="Optional"></label><button type="button" class="primary" id="fvSaveIncome">SAVE INCOME</button>
+ </div></div>
+ <div class="fv-finance-box fv-no-print"><h3>Add Expense</h3><div class="fv-finance-form">
+  <label>Date<br><input id="fvExpenseDate" type="date"></label><label>Category<br><select id="fvExpenseCategory"><option>Stock & Ingredients</option><option>Staff Wages</option><option>Electricity</option><option>Rent</option><option>Transport</option><option>Repairs & Maintenance</option><option>Packaging</option><option>Cleaning</option><option>Bank Charges</option><option>Internet & Airtime</option><option>Security</option><option>Other Expense</option></select></label>
+  <label>Supplier<br><input id="fvExpenseSupplier" placeholder="Supplier or payee"></label><label>Description<br><input id="fvExpenseDescription" placeholder="What was paid for?"></label><label>Payment<br><select id="fvExpensePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Other</option></select></label>
+  <label>Amount<br><input id="fvExpenseAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reference<br><input id="fvExpenseReference" placeholder="Invoice / receipt no."></label><button type="button" class="primary" id="fvSaveExpense">SAVE EXPENSE</button>
+ </div></div>
+ <div class="fv-finance-box"><h3>Income Details</h3><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Date</th><th>Store</th><th>Source</th><th>Description</th><th>Payment</th><th>Amount</th><th class="fv-no-print">Action</th></tr></thead><tbody id="fvIncomeRows"></tbody></table></div></div>
+ <div class="fv-finance-box"><h3>Expense Details</h3><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Date</th><th>Store</th><th>Category</th><th>Supplier / Description</th><th>Payment</th><th>Reference</th><th>Amount</th><th class="fv-no-print">Action</th></tr></thead><tbody id="fvExpenseRows"></tbody></table></div></div>`;
+ let anchor=$('accessPanel')||$('receiptPrint');anchor.parentNode.insertBefore(panel,anchor);
+ let nav=$('managerInventoryNav')?.querySelector('.inventory-actions');if(nav&&!$('fvFinanceNav')){let b=document.createElement('button');b.type='button';b.className='cat';b.id='fvFinanceNav';b.textContent='INCOME & EXPENSES';b.dataset.managerTarget='fvFinancePanel';nav.appendChild(b)}
+ $('fvFinanceFrom').value=monthStart();$('fvFinanceTo').value=today();$('fvIncomeDate').value=today();$('fvExpenseDate').value=today();$('fvFinanceStore').value=activeStore();
+ $('fvFinanceLoad').onclick=load;$('fvSaveIncome').onclick=saveIncome;$('fvSaveExpense').onclick=saveExpense;$('fvFinancePrint').onclick=printReport;$('fvFinanceCsv').onclick=downloadCsv;
+ $('fvFinanceToday').onclick=()=>setPeriod('today');$('fvFinanceWeek').onclick=()=>setPeriod('week');$('fvFinanceMonth').onclick=()=>setPeriod('month');
+ $('fvFinanceStore').onchange=()=>{let all=selectedStore()==='ALL';$('fvSaveIncome').disabled=all;$('fvSaveExpense').disabled=all;setStatus(all?'Combined report selected. Choose one store to capture a transaction.':'');load().catch(showError)};
+ }
+ function setPeriod(period){let end=today(),d=new Date(end+'T12:00:00');if(period==='today')$('fvFinanceFrom').value=end;else if(period==='month')$('fvFinanceFrom').value=end.slice(0,8)+'01';else{let offset=(d.getDay()+6)%7;d.setDate(d.getDate()-offset);$('fvFinanceFrom').value=d.toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}$('fvFinanceTo').value=end;load().catch(showError)}
+ function queryStore(column){let s=selectedStore();return s==='ALL'?'':('&'+column+'=eq.'+encodeURIComponent(s))}
+ async function load(){
+  if(!window.currentUser||window.currentUser.role!=='manager')return;
+  let from=$('fvFinanceFrom').value,to=$('fvFinanceTo').value;if(!from||!to||from>to){setStatus('Choose a valid From and To date.',true);return}
+  setStatus('Loading income and expenses...');
+  try{
+   let [sales,income,expenses]=await Promise.all([
+    api('pos_sales?select=id,store_code,sale_date,payment,total&sale_date=gte.'+from+'&sale_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=sale_date.desc'),
+    api('pos_other_income?select=id,store_code,transaction_date,category,description,payment_method,amount,reference&transaction_date=gte.'+from+'&transaction_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=transaction_date.desc'),
+    api('pos_store_expenses?select=id,store_code,expense_date,category,supplier,description,payment_method,amount,reference&expense_date=gte.'+from+'&expense_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=expense_date.desc')
+   ]);state={sales,income,expenses};render();setStatus('Report updated at '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'}));
+  }catch(e){showError(e)}
+ }
+ function render(){
+  let selected=selectedStore(),matches=x=>selected==='ALL'||x.store_code===selected,sales=state.sales.filter(matches),income=state.income.filter(matches),expenseRows=state.expenses.filter(matches);
+  let pos=sales.reduce((a,x)=>a+Number(x.total||0),0),other=income.reduce((a,x)=>a+Number(x.amount||0),0),expenses=expenseRows.reduce((a,x)=>a+Number(x.amount||0),0),net=pos+other-expenses;
+  $('fvPosIncome').textContent=money(pos);$('fvOtherIncome').textContent=money(other);$('fvTotalExpenses').textContent=money(expenses);$('fvNetProfit').textContent=money(net);$('fvNetProfit').className=net>=0?'fv-positive':'fv-negative';
+  renderPnl();
+  let salesRows=sales.map(x=>`<tr><td>${esc(x.sale_date)}</td><td>${esc(x.store_code)}</td><td>POS Sale</td><td>POS transaction</td><td>${esc(x.payment||'—')}</td><td>${money(x.total)}</td><td class="fv-no-print">—</td></tr>`);
+  let otherRows=income.map(x=>`<tr><td>${esc(x.transaction_date)}</td><td>${esc(x.store_code)}</td><td>${esc(x.category)}</td><td>${esc(x.description)}</td><td>${esc(x.payment_method)}</td><td>${money(x.amount)}</td><td class="fv-no-print"><button type="button" class="remove" onclick="fvDeleteFinance('income',${Number(x.id)})">DELETE</button></td></tr>`);
+  $('fvIncomeRows').innerHTML=salesRows.concat(otherRows).join('')||'<tr><td colspan="7">No income for this period.</td></tr>';
+  $('fvExpenseRows').innerHTML=expenseRows.map(x=>`<tr><td>${esc(x.expense_date)}</td><td>${esc(x.store_code)}</td><td>${esc(x.category)}</td><td>${esc([x.supplier,x.description].filter(Boolean).join(' — '))}</td><td>${esc(x.payment_method)}</td><td>${esc(x.reference||'—')}</td><td>${money(x.amount)}</td><td class="fv-no-print"><button type="button" class="remove" onclick="fvDeleteFinance('expense',${Number(x.id)})">DELETE</button></td></tr>`).join('')||'<tr><td colspan="8">No expenses for this period.</td></tr>';
+ }
+ function storeTotals(store){let sales=state.sales.filter(x=>x.store_code===store).reduce((a,x)=>a+Number(x.total||0),0),other=state.income.filter(x=>x.store_code===store).reduce((a,x)=>a+Number(x.amount||0),0),categories={};state.expenses.filter(x=>x.store_code===store).forEach(x=>categories[x.category]=(categories[x.category]||0)+Number(x.amount||0));let expenses=Object.values(categories).reduce((a,x)=>a+x,0),total=sales+other,net=total-expenses;return{sales,other,total,categories,expenses,net,margin:total?net/total*100:0}}
+ function renderPnl(){let n=storeTotals('NDAYENI'),s=storeTotals('SIVANA'),allCats=['Stock & Ingredients','Staff Wages','Electricity','Rent','Transport','Repairs & Maintenance','Packaging','Cleaning','Bank Charges','Internet & Airtime','Security','Other Expense'],seen=new Set(allCats);Object.keys(n.categories).concat(Object.keys(s.categories)).forEach(c=>seen.add(c));let rows=[['POS Sales',n.sales,s.sales,''],['Other Income',n.other,s.other,''],['Total Income',n.total,s.total,'fv-pnl-total']];[...seen].forEach(c=>rows.push([c,n.categories[c]||0,s.categories[c]||0,'']));rows.push(['Total Expenses',n.expenses,s.expenses,'fv-pnl-total'],['Net Profit / (Loss)',n.net,s.net,'fv-pnl-result'],['Net Profit %',n.margin,s.margin,'percent']);$('fvPnlRows').innerHTML=rows.map(r=>`<tr class="${r[3]}"><td>${esc(r[0])}</td><td class="${r[0]==='Net Profit / (Loss)'?(r[1]>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number(r[1]).toFixed(1)+'%':money(r[1])}</td><td class="${r[0]==='Net Profit / (Loss)'?(r[2]>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number(r[2]).toFixed(1)+'%':money(r[2])}</td><td class="${r[0]==='Net Profit / (Loss)'?((r[1]+r[2])>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number((n.total+s.total)?(n.net+s.net)/(n.total+s.total)*100:0).toFixed(1)+'%':money(r[1]+r[2])}</td></tr>`).join('');$('fvPnlPeriod').textContent=($('fvFinanceFrom').value||'')+' to '+($('fvFinanceTo').value||'')}
+ async function saveIncome(){
+  let s=selectedStore(),amount=Number($('fvIncomeAmount').value),description=$('fvIncomeDescription').value.trim();if(s==='ALL'){setStatus('Choose Ndayeni or Sivana before saving.',true);return}if(!description||!(amount>0)){setStatus('Enter the income description and an amount above zero.',true);return}
+  try{setStatus('Saving income...');await api('pos_other_income',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:s,transaction_date:$('fvIncomeDate').value,category:$('fvIncomeCategory').value,description,payment_method:$('fvIncomePayment').value,amount,reference:$('fvIncomeReference').value.trim()||null,created_by:window.currentUser.id||window.currentUser.user_id})});$('fvIncomeDescription').value='';$('fvIncomeAmount').value='';$('fvIncomeReference').value='';await load();setStatus('Income saved successfully.') }catch(e){showError(e)}
+ }
+ async function saveExpense(){
+  let s=selectedStore(),amount=Number($('fvExpenseAmount').value),description=$('fvExpenseDescription').value.trim();if(s==='ALL'){setStatus('Choose Ndayeni or Sivana before saving.',true);return}if(!description||!(amount>0)){setStatus('Enter the expense description and an amount above zero.',true);return}
+  try{setStatus('Saving expense...');await api('pos_store_expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:s,expense_date:$('fvExpenseDate').value,category:$('fvExpenseCategory').value,supplier:$('fvExpenseSupplier').value.trim()||null,description,payment_method:$('fvExpensePayment').value,amount,reference:$('fvExpenseReference').value.trim()||null,created_by:window.currentUser.id||window.currentUser.user_id})});$('fvExpenseSupplier').value='';$('fvExpenseDescription').value='';$('fvExpenseAmount').value='';$('fvExpenseReference').value='';await load();setStatus('Expense saved successfully.') }catch(e){showError(e)}
+ }
+ window.fvDeleteFinance=async function(type,id){if(!confirm('Delete this '+type+' transaction?'))return;try{await api((type==='income'?'pos_other_income':'pos_store_expenses')+'?id=eq.'+id,{method:'DELETE',headers:{Prefer:'return=minimal'}});await load();setStatus('Transaction deleted.')}catch(e){showError(e)}};
+ function showError(e){let m=String(e?.message||e);if(/pos_other_income|pos_store_expenses|schema cache|Could not find/i.test(m))m='Income & Expenses database setup is still required. Run SETUP_INCOME_EXPENSES.sql in Supabase first.';setStatus(m,true)}
+ function printReport(){document.body.classList.add('fv-finance-print');window.addEventListener('afterprint',()=>document.body.classList.remove('fv-finance-print'),{once:true});window.print()}
+ function csvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
+ function downloadCsv(){let chosen=selectedStore(),ok=x=>chosen==='ALL'||x.store_code===chosen,rows=[['Type','Date','Store','Category / Source','Description','Payment','Reference','Amount']];state.sales.filter(ok).forEach(x=>rows.push(['Income',x.sale_date,x.store_code,'POS Sale','POS transaction',x.payment||'', '',Number(x.total||0).toFixed(2)]));state.income.filter(ok).forEach(x=>rows.push(['Income',x.transaction_date,x.store_code,x.category,x.description,x.payment_method,x.reference||'',Number(x.amount||0).toFixed(2)]));state.expenses.filter(ok).forEach(x=>rows.push(['Expense',x.expense_date,x.store_code,x.category,[x.supplier,x.description].filter(Boolean).join(' — '),x.payment_method,x.reference||'',Number(x.amount||0).toFixed(2)]));let blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Feasterville_Income_Expenses_'+selectedStore()+'_'+$('fvFinanceFrom').value+'_to_'+$('fvFinanceTo').value+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function revealForManager(){let u=window.currentUser;if(!u||u.role!=='manager')return;let p=$('fvFinancePanel');if(p&&p.style.display!=='none'&&token())load().catch(showError)}
+ document.addEventListener('DOMContentLoaded',()=>{makePanel();setTimeout(revealForManager,1600)});
+ document.addEventListener('click',e=>{if(e.target?.id==='fvFinanceNav'){let p=$('fvFinancePanel');if(p){p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'})}setTimeout(()=>load().catch(showError),100)}},true);
+ document.addEventListener('change',e=>{if(e.target&&/store/i.test(e.target.id||'')&&e.target.id!=='fvFinanceStore'){let s=activeStore();if($('fvFinanceStore')&&['NDAYENI','SIVANA'].includes(s))$('fvFinanceStore').value=s}},true);
 })();
 </script>
-<!-- BUILD: LIVE_OPERATIONS_V67 -->
+<!-- BUILD: STORE_FINANCE_PROFIT_LOSS_V68 -->
 
 </body>
 </html>
