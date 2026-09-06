@@ -6796,5 +6796,81 @@ window.showInventoryControllerExpenseV69=reveal;
 </script>
 <!-- BUILD: INVENTORY_CONTROLLER_EXPENSE_ONLY_V69 -->
 
+<style>
+/* V71 — isolated, non-blinking physical count entry */
+#fv71StableCountSheet{margin-top:10px}
+#fv71StableCountSheet .fv71-status{font-weight:700;min-height:22px;margin:8px 0}
+#fv71StableCountSheet input{width:130px;min-height:38px;padding:7px;border:2px solid #777;border-radius:6px;font-size:16px}
+#fv71StableCountSheet input:focus{border-color:#64a70b;outline:3px solid rgba(100,167,11,.2)}
+#fv71StableCountSheet button{white-space:nowrap}
+.fv71LegacyCountTable,.fv71LegacyCountButton{display:none!important}
+</style>
+<script>
+/* V71 — Uses a separate DOM target that legacy refreshers cannot replace. */
+(function(){
+'use strict';
+if(window.__fvStableCountV71)return;window.__fvStableCountV71=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const $=id=>document.getElementById(id);
+const me=()=>window.inventorySessionUser||null;
+const allowed=()=>me()?.role==='inventory_control';
+const store=()=>String(me()?.store_code||'NDAYENI').toUpperCase();
+const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>Number(v||0);
+let inputs=[],current={};
+function status(message,bad){const e=$('fv71CountStatus');if(e){e.textContent=message||'';e.style.color=bad?'#b42318':'#08752f'}}
+async function api(path,opt={}){const h=Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},opt.headers||{});const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h})),t=await r.text();if(!r.ok){let m=t;try{m=JSON.parse(t).message||t}catch(_){}throw Error(m)}return t?JSON.parse(t):[]}
+function make(){
+ if($('fv71StableCountSheet'))return;
+ const panel=$('productionInputsPanel');if(!panel)return;
+ const heading=Array.from(panel.querySelectorAll(':scope > h3')).find(h=>/^3\./.test((h.textContent||'').trim()));if(!heading)return;
+ const host=document.createElement('div');host.id='fv71StableCountSheet';host.innerHTML='<p class="small">Enter each physical quantity, then click <b>SAVE COUNT</b>. The number will remain on screen while you work.</p><div><button type="button" class="secondary" id="fv71RefreshCount">REFRESH FROM DATABASE</button></div><div id="fv71CountStatus" class="fv71-status"></div><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Code</th><th>Production Input</th><th>Unit</th><th>Expected</th><th>Physical Count</th><th>Variance</th><th>Action</th></tr></thead><tbody id="fv71CountRows"></tbody></table></div>';
+ heading.insertAdjacentElement('afterend',host);
+ const oldBody=$('productionCountBody');if(oldBody?.closest('table'))oldBody.closest('table').classList.add('fv71LegacyCountTable');
+ const oldBtn=$('fv63RefreshCount');if(oldBtn)oldBtn.classList.add('fv71LegacyCountButton');
+ $('fv71RefreshCount').onclick=()=>load(true);
+}
+function priorClosing(history,code){const rows=history.filter(x=>x.input_code===code&&x.count_date<day()).sort((a,b)=>String(b.count_date).localeCompare(String(a.count_date)));const p=rows[0];if(!p)return 0;return num(p.physical_count)!==0?num(p.physical_count):num(p.opening_qty)+num(p.received_qty)-num(p.used_qty)}
+async function load(announce=false){
+ if(!allowed()||!token())return;
+ make();const tbody=$('fv71CountRows');if(!tbody)return;
+ if(tbody.contains(document.activeElement))return status('Finish typing or save the current count before refreshing.',true);
+ try{
+  if(announce)status('Refreshing count sheet...');
+  const sc=store(),d=day();
+  const data=await Promise.all([
+   api('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),
+   api('pos_store_input_counts?select=input_code,count_date,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&order=count_date.desc')
+  ]);
+  inputs=data[0]||[];const history=data[1]||[];current={};history.filter(x=>x.count_date===d).forEach(x=>current[x.input_code]=x);
+  tbody.innerHTML=inputs.map(i=>{const c=current[i.code]||{},opening=current[i.code]?num(c.opening_qty):priorClosing(history,i.code),received=num(c.received_qty),used=num(c.used_qty),expected=opening+received-used,physical=num(c.physical_count),variance=physical-expected;return '<tr><td>'+esc(i.code)+'</td><td>'+esc(i.name)+'</td><td>'+esc(i.unit||'')+'</td><td><b>'+expected.toFixed(2)+'</b></td><td><input type="number" min="0" step="0.001" value="'+physical+'" data-fv71-code="'+esc(i.code)+'"></td><td data-fv71-var="'+esc(i.code)+'">'+variance.toFixed(2)+'</td><td><button type="button" class="primary" data-fv71-save="'+esc(i.code)+'">SAVE COUNT</button></td></tr>'}).join('');
+  tbody.querySelectorAll('input[data-fv71-code]').forEach(field=>field.addEventListener('input',function(){const row=this.closest('tr'),expected=num(row.children[3].textContent),variance=num(this.value)-expected;row.querySelector('[data-fv71-var]').textContent=variance.toFixed(2);this.dataset.dirty='true'}));
+  tbody.querySelectorAll('button[data-fv71-save]').forEach(button=>button.onclick=()=>save(button.dataset.fv71Save));
+  status('Ready — '+(sc==='SIVANA'?'Sivana':'Ndayini')+' count sheet for '+d+'.');
+ }catch(e){status('Count sheet could not load: '+String(e?.message||e),true)}
+}
+async function save(code){
+ const field=document.querySelector('#fv71CountRows input[data-fv71-code="'+CSS.escape(code)+'"]');if(!field)return;
+ const physical=Number(field.value);if(!Number.isFinite(physical)||physical<0)return status('Enter a valid quantity of zero or more.',true);
+ const c=current[code]||{},row=field.closest('tr'),expected=num(row.children[3].textContent),opening=current[code]?num(c.opening_qty):Math.max(0,expected-num(c.received_qty)+num(c.used_qty));
+ field.disabled=true;status('Saving '+code+' count...');
+ try{
+  await api('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({store_code:store(),input_code:code,count_date:day(),opening_qty:opening,received_qty:num(c.received_qty),used_qty:num(c.used_qty),physical_count:physical})});
+  const verify=await api('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(store())+'&input_code=eq.'+encodeURIComponent(code)+'&count_date=eq.'+day()+'&limit=1');
+  if(!verify.length||Math.abs(num(verify[0].physical_count)-physical)>.0005)throw Error('The database did not confirm the saved quantity.');
+  current[code]=Object.assign({},verify[0],{count_date:day()});field.disabled=false;field.dataset.dirty='false';field.value=physical;status(code+' saved successfully: '+physical+'.');
+  if(window.refreshLiveReconV55)window.refreshLiveReconV55();
+ }catch(e){field.disabled=false;status('Count was not saved: '+String(e?.message||e),true)}
+}
+function reveal(){if(!allowed())return;make();const host=$('fv71StableCountSheet');if(host)host.style.display='block';const oldBody=$('productionCountBody');if(oldBody?.closest('table'))oldBody.closest('table').classList.add('fv71LegacyCountTable');load(false)}
+let tries=0;const boot=setInterval(()=>{tries++;if(allowed()&&token()){clearInterval(boot);reveal()}else if(tries>120)clearInterval(boot)},250);
+window.refreshStableCountSheetV71=()=>load(true);
+})();
+</script>
+<!-- BUILD: ISOLATED_STABLE_COUNT_SHEET_V71 -->
+
 </body>
 </html>
