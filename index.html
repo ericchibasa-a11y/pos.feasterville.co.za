@@ -2014,6 +2014,13 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
         label:'Salesperson: '+(profile.display_name || authData.user.email)
       };
       window.salesSessionUser = su;
+
+      // V70: clear stale legacy/manager role state before salesperson UI starts.
+      try { window.currentUser = null; } catch (_) {}
+      try { currentUser = null; } catch (_) {}
+      try { sessionStorage.removeItem('feastervilleUser'); } catch (_) {}
+      try { window.inventorySessionUser = null; } catch (_) {}
+
       currentLiveUser = authData.user;
       currentProfile = profile;
       try { localStorage.setItem('feastervilleStoreCode', su.store_code); } catch (_) {}
@@ -6818,123 +6825,41 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
 </script>
 <!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
 
-<style id="fvInventoryControllerHardLockV69">
-body.fv-inventory-controller .app > section,
-body.fv-inventory-controller .app > div.panel { display:none !important; }
-body.fv-inventory-controller #productionInputsPanel,
-body.fv-inventory-controller #reconPanel,
-body.fv-inventory-controller #fvInventoryExpensePanelV69 { display:block !important; }
-body.fv-inventory-controller #products,
-body.fv-inventory-controller .products,
-body.fv-inventory-controller #cart,
-body.fv-inventory-controller #reportsPanel,
-body.fv-inventory-controller #userPanel,
-body.fv-inventory-controller #accessPanel,
-body.fv-inventory-controller #recipePanel,
-body.fv-inventory-controller #easyLinkPanel,
-body.fv-inventory-controller #usagePanel,
-body.fv-inventory-controller #stockMovementPanel,
-body.fv-inventory-controller #masterProductionEditorPanel,
-body.fv-inventory-controller #inventoryListingPanel,
-body.fv-inventory-controller #managerInventoryNav { display:none !important; }
-</style>
+
 <script>
-/* V69 — HARD INVENTORY CONTROLLER ACCESS LOCK + EXPENSE CAPTURE */
+/* V70 SALESPERSON SALES SCREEN REPAIR */
 (function(){
 'use strict';
-if(window.__fvInventoryHardLockV69)return; window.__fvInventoryHardLockV69=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function icUser(){
-  const u=window.inventorySessionUser||window.currentUser||null;
-  return u&&u.role==='inventory_control'?u:null;
+if(window.__fvSalesScreenV70)return; window.__fvSalesScreenV70=true;
+function enforceSalespersonScreen(){
+  const u=window.salesSessionUser;
+  if(!u || u.role!=='salesperson') return;
+  try{ window.currentUser=null; }catch(e){}
+  try{ if(typeof currentUser!=='undefined') currentUser=null; }catch(e){}
+  try{ window.inventorySessionUser=null; }catch(e){}
+  const app=document.querySelector('.app');
+  if(!app)return;
+  const saleSection=app.querySelector(':scope > section.panel');
+  if(saleSection) saleSection.style.setProperty('display','block','important');
+  ['accessPanel','recipePanel','reportsPanel','userPanel','reconPanel','productionInputsPanel','stockMovementPanel','usagePanel','easyLinkPanel','masterProductionEditorPanel','managerInventoryNav','inventoryListingPanel','sellableItemsPanel'].forEach(function(id){
+    const n=document.getElementById(id); if(n)n.style.setProperty('display','none','important');
+  });
+  document.querySelectorAll('.manager-only,.inventory-panel').forEach(function(n){
+    if(!saleSection || !saleSection.contains(n)) n.style.setProperty('display','none','important');
+  });
+  ['categories','products','cart'].forEach(function(id){ const n=document.getElementById(id); if(n)n.style.removeProperty('display'); });
+  const discount=document.getElementById('discount');
+  if(discount){discount.disabled=true;discount.title='Manager approval required for discounts';}
+  const store=document.getElementById('storeLocationSelect');
+  if(store){store.value=u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';store.disabled=true;}
 }
-function token(){return sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';}
-function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
-function ensureExpensePanel(){
-  let p=document.getElementById('fvInventoryExpensePanelV69');
-  if(p)return p;
-  p=document.createElement('section');
-  p.className='panel'; p.id='fvInventoryExpensePanelV69'; p.style.gridColumn='1/-1';
-  p.innerHTML=`<h2>Inventory Controller — Expense Capture</h2>
-  <p class="small">Capture store expenses only. Income, sales reports and Profit &amp; Loss are not available on this login.</p>
-  <div class="order-head">
-    <label><b>Date</b><br><input id="fvIcExpenseDate" type="date"></label>
-    <label><b>Category</b><br><select id="fvIcExpenseCategory"><option>Stock / Ingredients</option><option>Transport</option><option>Electricity</option><option>Maintenance</option><option>Cleaning</option><option>Packaging</option><option>Cash Deposit Fees</option><option>Other</option></select></label>
-    <label><b>Supplier</b><br><input id="fvIcExpenseSupplier" placeholder="Supplier / payee"></label>
-    <label><b>Description</b><br><input id="fvIcExpenseDescription" placeholder="What was paid for"></label>
-    <label><b>Payment Method</b><br><select id="fvIcExpensePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Other</option></select></label>
-    <label><b>Amount (R)</b><br><input id="fvIcExpenseAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label>
-    <label><b>Reference</b><br><input id="fvIcExpenseReference" placeholder="Receipt / invoice no."></label>
-    <button type="button" class="primary" id="fvIcSaveExpenseBtn">SAVE EXPENSE</button>
-  </div><p id="fvIcExpenseMsg" class="small"></p>`;
-  const app=document.querySelector('.app'); if(app)app.appendChild(p);
-  const d=p.querySelector('#fvIcExpenseDate'); if(d&&!d.value)d.value=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'});
-  p.querySelector('#fvIcSaveExpenseBtn').addEventListener('click',saveExpense);
-  return p;
-}
-async function saveExpense(){
-  const u=icUser(); if(!u)return;
-  const msg=document.getElementById('fvIcExpenseMsg');
-  const body={
-    store_code:u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI',
-    expense_date:document.getElementById('fvIcExpenseDate').value,
-    category:document.getElementById('fvIcExpenseCategory').value,
-    supplier:document.getElementById('fvIcExpenseSupplier').value.trim()||null,
-    description:document.getElementById('fvIcExpenseDescription').value.trim(),
-    payment_method:document.getElementById('fvIcExpensePayment').value,
-    amount:Number(document.getElementById('fvIcExpenseAmount').value||0),
-    reference:document.getElementById('fvIcExpenseReference').value.trim()||null
-  };
-  if(!body.expense_date||!body.description||!(body.amount>0)){msg.textContent='Enter date, description and an amount greater than R0.00.';return;}
-  try{
-    msg.textContent='Saving expense...';
-    const r=await fetch(BASE+'/pos_store_expenses',{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(body)});
-    const txt=await r.text(); if(!r.ok)throw new Error(txt||('HTTP '+r.status));
-    msg.textContent='Expense saved successfully for '+body.store_code+'.';
-    document.getElementById('fvIcExpenseSupplier').value=''; document.getElementById('fvIcExpenseDescription').value=''; document.getElementById('fvIcExpenseAmount').value=''; document.getElementById('fvIcExpenseReference').value='';
-  }catch(e){console.error('Expense save failed',e);msg.textContent='Expense could not be saved: '+e.message;}
-}
-function trimProductionPanel(){
- const pp=document.getElementById('productionInputsPanel'); if(!pp)return;
- Array.from(pp.children).forEach(ch=>ch.style.display='none');
- const h2=pp.querySelector(':scope > h2'); if(h2){h2.textContent='Inventory Controller — Production Inputs';h2.style.display='';}
- Array.from(pp.querySelectorAll(':scope > h3')).forEach(h=>{
-   const t=(h.textContent||'').trim(); if(/^1\./.test(t)||/^3\./.test(t)){
-     h.style.display=''; let x=h.nextElementSibling; while(x&&x.tagName!=='H3'){x.style.display='';x=x.nextElementSibling;}
-   }
- });
-}
-function trimReconPanel(){
- const rp=document.getElementById('reconPanel'); if(!rp)return;
- rp.querySelectorAll('.inventory-actions button').forEach(b=>{
-   const t=b.textContent||'';
-   if(/Finished Products/i.test(t))b.style.setProperty('display','none','important');
-   if(/Production Inputs/i.test(t)||/SAVE RECONCILIATION AS PDF/i.test(t))b.style.removeProperty('display');
- });
- try{if(typeof window.showRecon==='function')window.showRecon('production',null);}catch(e){}
-}
-function enforce(){
- const u=icUser(); if(!u)return false;
- document.body.classList.add('fv-inventory-controller');
- ensureExpensePanel(); trimProductionPanel(); trimReconPanel();
- try{localStorage.setItem('feastervilleStoreCode',u.store_code||'NDAYENI')}catch(e){}
- const ss=document.getElementById('storeLocationSelect'); if(ss){ss.value=u.store_code||'NDAYENI';ss.disabled=true;}
- const badge=document.getElementById('userBadge'); if(badge)badge.textContent='Inventory Controller: '+(u.name||u.email||'User');
- const ov=document.getElementById('liveLoginOverlay'); if(ov)ov.style.setProperty('display','none','important');
- return true;
-}
-window.enforceInventoryControllerV69=enforce;
-let n=0;const timer=setInterval(()=>{n++;if(enforce()&&n>12){} if(n>600)clearInterval(timer);},250);
-new MutationObserver(()=>{if(icUser())enforce();}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});
-document.addEventListener('click',function(e){
- if(!icUser())return;
- const target=e.target.closest('button,a,[onclick]'); if(!target)return;
- const allowed=target.closest('#productionInputsPanel,#reconPanel,#fvInventoryExpensePanelV69');
- if(!allowed){e.preventDefault();e.stopImmediatePropagation();}
-},true);
+window.enforceSalespersonScreenV70=enforceSalespersonScreen;
+let guardTimer=setInterval(function(){
+  if(window.salesSessionUser?.role==='salesperson') enforceSalespersonScreen();
+},500);
+window.addEventListener('beforeunload',function(){clearInterval(guardTimer);});
 })();
 </script>
-<!-- BUILD: INVENTORY_CONTROLLER_HARD_LOCK_EXPENSE_V69 -->
+<!-- BUILD: SALESPERSON_SALES_SCREEN_REPAIR_V70 -->
 </body>
 </html>
