@@ -702,14 +702,20 @@ const baseProductsForStore=(store)=>store==='NDAYENI'?ndayeniProducts:products;
 const activeProducts=()=>{
   const store=selectedStoreCode();
   const live=(typeof liveStoreProducts!=='undefined'&&liveStoreProducts[store])||(window.liveStoreProducts&&window.liveStoreProducts[store]);
-  return Array.isArray(live)&&live.length?live.filter(p=>p.active!==false):baseProductsForStore(store);
+  if(Array.isArray(live)&&live.length){
+    const enabled=live.filter(p=>p.active!==false);
+    // Safety fallback: never leave a live salesperson with an empty selling menu
+    // merely because all rows in pos_store_products were accidentally inactive.
+    if(enabled.length) return enabled;
+  }
+  return baseProductsForStore(store);
 };
 
 let cart=[];
 let sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]');
 let orderCounter=Number(localStorage.getItem('feastervilleOrderNo')||0)+1;
-document.getElementById('date').value=new Date().toISOString().slice(0,10);
-document.getElementById('orderNo').textContent='Order #'+String(orderCounter).padStart(4,'0');
+{ const d=document.getElementById('date'); if(d)d.value=new Date().toISOString().slice(0,10); }
+{ const o=document.getElementById('orderNo'); if(o)o.textContent='Order #'+String(orderCounter).padStart(4,'0'); }
 
 const money=n=>'R'+Number(n||0).toFixed(2);
 function cats(){
@@ -796,34 +802,7 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div>
-<script>
-/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
-(function(){
-'use strict';
-if(window.__fvV68)return; window.__fvV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
-function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
-function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
-async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
-const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
-async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
-window.fvPresenceTouchV68=touch;
-setInterval(touch,15000);setTimeout(touch,800);
-async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
-window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
-async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
-window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
-})();
-</script>
-<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-</body></html>';
+    '</div></body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -1785,34 +1764,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!w){alert('Please allow pop-ups to print the receipt.');return;}
     const html='<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title>'+
       '<style>@page{size:80mm auto;margin:0}body{width:80mm;margin:0;padding:4mm;box-sizing:border-box;font:11px monospace}hr{border:0;border-top:1px dashed #000}</style>'+
-      '</head><body>'+receipt.innerHTML+'
-<script>
-/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
-(function(){
-'use strict';
-if(window.__fvV68)return; window.__fvV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
-function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
-function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
-async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
-const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
-async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
-window.fvPresenceTouchV68=touch;
-setInterval(touch,15000);setTimeout(touch,800);
-async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
-window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
-async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
-window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
-})();
-</script>
-<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-</body></html>';
+      '</head><body>'+receipt.innerHTML+'</body></html>';
     w.document.open();w.document.write(html);w.document.close();w.focus();
     setTimeout(function(){w.print();},200);
   };
@@ -2014,13 +1966,6 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
         label:'Salesperson: '+(profile.display_name || authData.user.email)
       };
       window.salesSessionUser = su;
-
-      // V70: clear stale legacy/manager role state before salesperson UI starts.
-      try { window.currentUser = null; } catch (_) {}
-      try { currentUser = null; } catch (_) {}
-      try { sessionStorage.removeItem('feastervilleUser'); } catch (_) {}
-      try { window.inventorySessionUser = null; } catch (_) {}
-
       currentLiveUser = authData.user;
       currentProfile = profile;
       try { localStorage.setItem('feastervilleStoreCode', su.store_code); } catch (_) {}
@@ -2038,11 +1983,22 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
       setStatus('ONLINE - '+(su.store_code==='SIVANA'?'Sivana':'Ndayeni'));
       setMessage('');
 
+      // Always initialise the business date when a salesperson signs in.
+      try {
+        const dateEl=document.getElementById('date');
+        if(dateEl && !dateEl.value){
+          const d=new Date();
+          dateEl.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        }
+      } catch (_) {}
+
       // Fetch ONLY the salesperson's sellable menu.
       const rows = await api('/rest/v1/pos_store_products?store_code=eq.'+
         encodeURIComponent(su.store_code)+
         '&select=code,name,category,price,active&order=category.asc,code.asc');
-      liveStoreProducts[su.store_code] = Array.isArray(rows) ? rows : [];
+      const liveRows = Array.isArray(rows) ? rows : [];
+      const enabledRows = liveRows.filter(p=>p.active!==false);
+      liveStoreProducts[su.store_code] = enabledRows.length ? liveRows : [];
       window.liveStoreProducts = liveStoreProducts;
 
       // Build the sales catalogue directly, no production/report refreshes.
@@ -3637,7 +3593,7 @@ document.addEventListener('DOMContentLoaded',function(){
           '<td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td>'+
           '<td>'+fmt(expected)+'</td>'+
           '<td><input type="number" min="0" step="0.01" value="'+physical+
-            '" onchange="setProductionCount(\\''+p.code+'\\',this.value)"></td>'+
+            '" onchange="setProductionCount(\''+p.code+'\',this.value)"></td>'+
           '<td>'+fmt(variance)+'</td><td>'+action+'</td>'+
         '</tr>';
       }).join('');
@@ -4530,10 +4486,23 @@ let currentCategory='ALL';
 
 function getProducts(){
   try{
-    return (typeof activeProducts==='function'?activeProducts():[])||[];
-  }catch(e){
-    console.error('V41 active products',e);
+    let list=(typeof activeProducts==='function'?activeProducts():[])||[];
+    if(Array.isArray(list) && list.length) return list;
+    // V73 hard fallback: the selling screen must never be empty when the built-in
+    // store catalogue exists. This bypasses a bad/empty live-menu state.
+    const store=(typeof selectedStoreCode==='function'?selectedStoreCode():
+      ((window.salesSessionUser&&window.salesSessionUser.store_code)||
+       localStorage.getItem('feastervilleStoreCode')||'NDAYENI'));
+    list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[]);
+    if(Array.isArray(list) && list.length) return list;
+    if(store==='NDAYENI' && typeof ndayeniProducts!=='undefined' && Array.isArray(ndayeniProducts)) return ndayeniProducts;
+    if(typeof products!=='undefined' && Array.isArray(products)) return products;
     return [];
+  }catch(e){
+    console.error('V73 sales products fallback',e);
+    try{
+      return (typeof products!=='undefined' && Array.isArray(products))?products:[];
+    }catch(_){ return []; }
   }
 }
 
@@ -4975,34 +4944,7 @@ function printOnlyV44(title,node){
       'th,td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
       'th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}'+
       'button,input,select{display:none!important}'+
-    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'
-<script>
-/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
-(function(){
-'use strict';
-if(window.__fvV68)return; window.__fvV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
-function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
-function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
-async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
-const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
-async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
-window.fvPresenceTouchV68=touch;
-setInterval(touch,15000);setTimeout(touch,800);
-async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
-window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
-async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
-window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
-})();
-</script>
-<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-</body></html>');
+    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'</body></html>');
   doc.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5142,34 +5084,7 @@ function printNode(title,node){
    'table,.inv-table{width:100%;border-collapse:collapse;table-layout:auto}th,td,.inv-table th,.inv-table td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
    'th,.inv-table th{background:#eee!important;color:#111!important}thead{display:table-header-group}tr{page-break-inside:avoid}'+
    'button,input,select{display:none!important}'+
-   '</style></head><body>'+node.innerHTML+'
-<script>
-/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
-(function(){
-'use strict';
-if(window.__fvV68)return; window.__fvV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
-function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
-function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
-async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
-const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
-async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
-window.fvPresenceTouchV68=touch;
-setInterval(touch,15000);setTimeout(touch,800);
-async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
-window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
-async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
-window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
-})();
-</script>
-<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-</body></html>');
+   '</style></head><body>'+node.innerHTML+'</body></html>');
   d.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5363,34 +5278,7 @@ function printRecon(){
  if(!node||!node.innerHTML.trim())return alert('Open Production Inputs reconciliation first.');
  const w=window.open('','_blank','width=1200,height=800');
  if(!w)return alert('Please allow pop-ups to print the reconciliation.');
- w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'
-<script>
-/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
-(function(){
-'use strict';
-if(window.__fvV68)return; window.__fvV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
-function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
-function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
-async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
-const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
-async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
-window.fvPresenceTouchV68=touch;
-setInterval(touch,15000);setTimeout(touch,800);
-async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
-window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
-async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
-window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
-})();
-</script>
-<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-</body></html>');
+ w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
 window.printRecon=printRecon;try{printRecon=window.printRecon}catch(e){}
@@ -6737,34 +6625,7 @@ window.printSelectedSalesV45=function(){
  const body='<h1>Feasterville Food — Daily Sales Report</h1><p><b>Store:</b> '+E(s)+' &nbsp; <b>Period:</b> '+E(f)+(t!==f?' to '+E(t):'')+'</p><p><b>Number of Sales:</b> '+rows.length+' &nbsp;&nbsp; <b>Total Sales:</b> '+M(total)+'</p><h2>Payment Summary</h2><table><tr><th>Payment Method</th><th>Amount</th></tr>'+ph+'</table><h2>Sales Transactions</h2><table><tr><th>Date</th><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+rh+'</table>';
  const w=window.open('','_blank','width=1000,height=800');
  if(!w){alert('Please allow pop-ups for this POS, then try again.');return;}
- w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'
-<script>
-/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
-(function(){
-'use strict';
-if(window.__fvV68)return; window.__fvV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
-function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
-function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
-async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
-const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
-function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
-async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
-window.fvPresenceTouchV68=touch;
-setInterval(touch,15000);setTimeout(touch,800);
-async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
-window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
-async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
-window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
-})();
-</script>
-<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-</body></html>');
+ w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),500);
 };
 })();
@@ -6827,168 +6688,215 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
 
 
 <script>
-/* V70 SALESPERSON SALES SCREEN REPAIR */
+/* V70 SALESPERSON SCREEN STABILITY FIX */
 (function(){
 'use strict';
-if(window.__fvSalesScreenV70)return; window.__fvSalesScreenV70=true;
-function enforceSalespersonScreen(){
-  const u=window.salesSessionUser;
-  if(!u || u.role!=='salesperson') return;
-  try{ window.currentUser=null; }catch(e){}
-  try{ if(typeof currentUser!=='undefined') currentUser=null; }catch(e){}
-  try{ window.inventorySessionUser=null; }catch(e){}
-  const app=document.querySelector('.app');
-  if(!app)return;
-  const saleSection=app.querySelector(':scope > section.panel');
-  if(saleSection) saleSection.style.setProperty('display','block','important');
-  ['accessPanel','recipePanel','reportsPanel','userPanel','reconPanel','productionInputsPanel','stockMovementPanel','usagePanel','easyLinkPanel','masterProductionEditorPanel','managerInventoryNav','inventoryListingPanel','sellableItemsPanel'].forEach(function(id){
-    const n=document.getElementById(id); if(n)n.style.setProperty('display','none','important');
-  });
-  document.querySelectorAll('.manager-only,.inventory-panel').forEach(function(n){
-    if(!saleSection || !saleSection.contains(n)) n.style.setProperty('display','none','important');
-  });
-  ['categories','products','cart'].forEach(function(id){ const n=document.getElementById(id); if(n)n.style.removeProperty('display'); });
-  const discount=document.getElementById('discount');
-  if(discount){discount.disabled=true;discount.title='Manager approval required for discounts';}
-  const store=document.getElementById('storeLocationSelect');
-  if(store){store.value=u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';store.disabled=true;}
+function isSalesperson(){const u=window.salesSessionUser||window.currentUser;return !!u&&u.role==='salesperson';}
+function stabilize(){
+ if(!isSalesperson())return;
+ // Salesperson must remain on selling screen only; do not let manager/inventory panels leak into this role.
+ ['accessPanel','recipePanel','reportsPanel','userPanel','productionInputsPanel','reconPanel','fvPresencePanel','fvAllUsersV59'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
+ const sale=document.getElementById('salePanel')||document.querySelector('[data-panel="sale"]'); if(sale)sale.style.display='block';
+ const u=window.salesSessionUser||window.currentUser; const assigned=(u.store_code||u.assigned_store||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase();
+ localStorage.setItem('feastervilleStoreCode',assigned); const sel=document.getElementById('storeLocationSelect'); if(sel){sel.value=assigned;sel.disabled=true;}
 }
-window.enforceSalespersonScreenV70=enforceSalespersonScreen;
-let guardTimer=setInterval(function(){
-  if(window.salesSessionUser?.role==='salesperson') enforceSalespersonScreen();
-},500);
-window.addEventListener('beforeunload',function(){clearInterval(guardTimer);});
+document.addEventListener('DOMContentLoaded',()=>{setTimeout(stabilize,300);setTimeout(stabilize,1500);});
+window.addEventListener('load',()=>setTimeout(stabilize,500));
 })();
 </script>
-<!-- BUILD: SALESPERSON_SALES_SCREEN_REPAIR_V70 -->
+<!-- BUILD: SALESPERSON_SCREEN_STABILITY_V70 -->
 
 <script>
-/* V72 SAFE MANAGER STORE PROFIT/LOSS — injected as DOM only, no document markup replacement */
+/* V73 SALESPERSON MENU WATCHDOG */
 (function(){
 'use strict';
-if(window.__fvPLV72)return; window.__fvPLV72=true;
-
-function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-function money(v){return 'R'+Number(v||0).toFixed(2);}
-function today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'});}
-function monthStart(){var d=today();return d.slice(0,8)+'01';}
-function isManager(){
-  var u=window.currentUser;
-  if(u && u.role==='manager') return true;
+if(window.__fvSalesMenuV73)return; window.__fvSalesMenuV73=true;
+function forceMenu(){
+  const u=window.salesSessionUser;
+  if(!u || u.role!=='salesperson') return;
   try{
-    var s=JSON.parse(sessionStorage.getItem('feastervilleUser')||'null');
-    if(s && s.role==='manager') return true;
-  }catch(e){}
-  return false;
-}
-function getApi(){
-  if(typeof window.api==='function') return window.api;
-  try{ if(typeof api==='function') return api; }catch(e){}
-  return null;
-}
-function sum(rows){return (rows||[]).reduce(function(a,x){return a+Number(x.amount!=null?x.amount:x.total||0);},0);}
-function group(rows){
-  var g={};
-  (rows||[]).forEach(function(x){var k=x.category||'Other';g[k]=(g[k]||0)+Number(x.amount||0);});
-  return g;
-}
-function details(g){
-  var keys=Object.keys(g);
-  if(!keys.length)return '<div class="small">No expenses captured for this period.</div>';
-  return '<table><thead><tr><th>Expense Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+
-    keys.sort().map(function(k){return '<tr><td>'+esc(k)+'</td><td style="text-align:right">'+money(g[k])+'</td></tr>';}).join('')+
-    '</tbody></table>';
-}
-
-function install(){
-  if(!isManager()) return;
-  var reports=document.getElementById('reportsPanel');
-  if(!reports || document.getElementById('fvProfitLossV72')) return;
-
-  var box=document.createElement('section');
-  box.id='fvProfitLossV72';
-  box.style.cssText='margin-top:24px;border-top:3px solid #111;padding-top:18px';
-  box.innerHTML=
-    '<h2>Store Profit / Loss</h2>'+
-    '<p class="small">Manager only. Uses live POS sales, other income and captured store expenses.</p>'+
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">'+
-      '<label><b>Store</b><br><select id="fvPLStoreV72"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BOTH">Both Stores</option></select></label>'+
-      '<label><b>From Date</b><br><input type="date" id="fvPLFromV72"></label>'+
-      '<label><b>To Date</b><br><input type="date" id="fvPLToV72"></label>'+
-      '<button type="button" id="fvPLViewV72" class="primary">VIEW PROFIT / LOSS</button>'+
-      '<button type="button" id="fvPLPrintV72">PRINT / SAVE PDF</button>'+
-    '</div>'+
-    '<div id="fvPLOutV72" style="margin-top:15px"><b>Select the period and click VIEW PROFIT / LOSS.</b></div>';
-  reports.appendChild(box);
-
-  document.getElementById('fvPLFromV72').value=monthStart();
-  document.getElementById('fvPLToV72').value=today();
-  var saved=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-  document.getElementById('fvPLStoreV72').value=(saved==='SIVANA'?'SIVANA':'NDAYENI');
-
-  document.getElementById('fvPLViewV72').onclick=load;
-  document.getElementById('fvPLPrintV72').onclick=function(){
-    var out=document.getElementById('fvPLOutV72');
-    if(!out)return;
-    var w=window.open('','_blank');
-    w.document.write('<!doctype html><html><head><title>Store Profit Loss</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ccc;padding:7px;text-align:left}.cards{display:flex;gap:10px;flex-wrap:wrap}.card{border:1px solid #aaa;padding:12px;min-width:150px}</style></head><body><h1>FEASTERVILLE — STORE PROFIT / LOSS</h1>'+out.innerHTML+'</body></html>');
-    w.document.close(); setTimeout(function(){w.print();},300);
-  };
-}
-
-async function oneStore(sc,from,to,A){
-  var sales=await A('pos_sales?select=total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+from+'&sale_date=lte.'+to);
-  var income=await A('pos_other_income?select=amount,category&store_code=eq.'+encodeURIComponent(sc)+'&transaction_date=gte.'+from+'&transaction_date=lte.'+to);
-  var expenses=await A('pos_store_expenses?select=amount,category&store_code=eq.'+encodeURIComponent(sc)+'&expense_date=gte.'+from+'&expense_date=lte.'+to);
-  var salesTotal=sum(sales), otherTotal=sum(income), expTotal=sum(expenses);
-  return {store:sc,sales:salesTotal,other:otherTotal,income:salesTotal+otherTotal,expenses:expTotal,profit:salesTotal+otherTotal-expTotal,groups:group(expenses)};
-}
-
-async function load(){
-  if(!isManager())return;
-  var A=getApi(), out=document.getElementById('fvPLOutV72');
-  if(!A){out.innerHTML='<b>Live database connection is not ready. Please refresh and try again.</b>';return;}
-  var sc=document.getElementById('fvPLStoreV72').value;
-  var from=document.getElementById('fvPLFromV72').value;
-  var to=document.getElementById('fvPLToV72').value;
-  if(!from||!to||from>to){out.innerHTML='<b>Please select a valid date range.</b>';return;}
-  out.innerHTML='<b>Loading live financial data...</b>';
-  try{
-    var stores=sc==='BOTH'?['NDAYENI','SIVANA']:[sc];
-    var results=[];
-    for(var i=0;i<stores.length;i++) results.push(await oneStore(stores[i],from,to,A));
-    var total={sales:0,other:0,income:0,expenses:0,profit:0};
-    results.forEach(function(r){Object.keys(total).forEach(function(k){total[k]+=r[k];});});
-    var cards=function(r){return '<div class="cards" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+
-      '<div class="card"><b>POS Sales</b><br>'+money(r.sales)+'</div>'+
-      '<div class="card"><b>Other Income</b><br>'+money(r.other)+'</div>'+
-      '<div class="card"><b>Total Income</b><br>'+money(r.income)+'</div>'+
-      '<div class="card"><b>Total Expenses</b><br>'+money(r.expenses)+'</div>'+
-      '<div class="card"><b>Profit / (Loss)</b><br><strong>'+money(r.profit)+'</strong></div></div>';};
-    var h='<h3>'+esc(from)+' to '+esc(to)+'</h3>';
-    results.forEach(function(r){
-      h+='<h3>'+(r.store==='NDAYENI'?'Ndayeni':'Sivana')+'</h3>'+cards(r)+'<h4>Expense Breakdown</h4>'+details(r.groups);
-    });
-    if(results.length>1){
-      h+='<h3>Combined Stores</h3>'+cards(total)+
-      '<table><thead><tr><th>Store</th><th>Income</th><th>Expenses</th><th>Profit / (Loss)</th></tr></thead><tbody>'+
-      results.map(function(r){return '<tr><td>'+(r.store==='NDAYENI'?'Ndayeni':'Sivana')+'</td><td>'+money(r.income)+'</td><td>'+money(r.expenses)+'</td><td><b>'+money(r.profit)+'</b></td></tr>';}).join('')+
-      '</tbody></table>';
+    const store=u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+    let list=[];
+    try{ list=(typeof activeProducts==='function'?activeProducts():[])||[]; }catch(_){}
+    if(!Array.isArray(list)||!list.length){
+      try{ list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[])||[]; }catch(_){}
     }
-    out.innerHTML=h;
-  }catch(e){
-    console.error('V72 Profit/Loss',e);
-    out.innerHTML='<b>Could not load Profit / Loss:</b> '+esc(e.message||e);
-  }
+    if(!Array.isArray(list)||!list.length) return;
+    const box=document.getElementById('products');
+    if(box && (/No sellable products found/i.test(box.textContent||'') || !box.querySelector('.product'))){
+      box.innerHTML=list.map(p=>
+        '<button type="button" class="product" data-sales-code="'+String(p.code||'').replace(/"/g,'&quot;')+'">'+
+        '<span class="name">'+String(p.code||'')+' — '+String(p.name||'')+'</span>'+
+        '<span class="price">'+(typeof money==='function'?money(p.price):('R'+Number(p.price||0).toFixed(2)))+'</span></button>'
+      ).join('');
+      if(typeof cats==='function') try{cats();}catch(_){}
+    }
+  }catch(e){ console.error('V73 force menu',e); }
 }
-
-var tries=0, timer=setInterval(function(){
-  tries++; install();
-  if(document.getElementById('fvProfitLossV72')||tries>120) clearInterval(timer);
-},500);
+document.addEventListener('click',function(e){
+  const b=e.target.closest&&e.target.closest('#products .product');
+  if(!b)return;
+  const code=b.getAttribute('data-sales-code');
+  if(!code)return;
+  try{
+    if(typeof addSaleProduct==='function') addSaleProduct(code);
+    else if(typeof add==='function') add(code);
+  }catch(err){console.error('V73 add product',err);}
+},true);
+setInterval(forceMenu,1000);
+setTimeout(forceMenu,250);
+setTimeout(forceMenu,1200);
 })();
 </script>
-<!-- BUILD: SAFE_MANAGER_PROFIT_LOSS_V72 -->
+<!-- BUILD: SALESPERSON_FORCE_MENU_V73 -->
+
+<!-- BUILD: V74 FULL JAVASCRIPT SYNTAX REPAIR -->
+
+<style>
+/* V68 — STORE INCOME, EXPENSES & PROFIT/LOSS */
+#fvFinancePanel .fv-finance-filters,#fvFinancePanel .fv-finance-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+#fvFinancePanel label{font-weight:700;font-size:14px}
+#fvFinancePanel input,#fvFinancePanel select{min-height:40px;padding:8px;border:1px solid #bbb;border-radius:6px;background:#fff}
+#fvFinancePanel .fv-finance-cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin:14px 0}
+#fvFinancePanel .fv-finance-card{border:1px solid #ddd;border-radius:8px;padding:14px;background:#fafafa}
+#fvFinancePanel .fv-finance-card span{display:block;font-size:13px;color:#555;margin-bottom:5px}
+#fvFinancePanel .fv-finance-card strong{font-size:22px}
+#fvFinancePanel .fv-positive{color:#08752f}#fvFinancePanel .fv-negative{color:#b42318}
+#fvFinancePanel .fv-finance-box{border:1px solid #ddd;border-radius:8px;padding:14px;margin:14px 0}
+#fvFinancePanel .fv-finance-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+#fvFinancePanel .fv-finance-status{min-height:20px;margin:8px 0;font-weight:700}
+#fvFinancePanel .fv-period-buttons{display:flex;gap:6px;flex-wrap:wrap}
+#fvFinancePanel .fv-pnl-title{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+#fvFinancePanel .fv-pnl-table td:not(:first-child),#fvFinancePanel .fv-pnl-table th:not(:first-child){text-align:right}
+#fvFinancePanel .fv-pnl-total td{font-weight:700;border-top:2px solid #111}
+#fvFinancePanel .fv-pnl-result td{font-weight:800;font-size:16px;background:#f3f8ea}
+@media(max-width:720px){#fvFinancePanel .fv-finance-cards{grid-template-columns:1fr 1fr}#fvFinancePanel input,#fvFinancePanel select{max-width:100%;width:100%}#fvFinancePanel label{flex:1 1 145px}}
+@media print{body.fv-finance-print>*.app~*{display:none!important}body.fv-finance-print .app>*:not(#fvFinancePanel){display:none!important}body.fv-finance-print #fvFinancePanel,body.fv-finance-print #fvFinancePanel *{visibility:visible!important}body.fv-finance-print #fvFinancePanel{display:block!important;position:absolute;left:0;top:0;width:100%;box-shadow:none;border:0}body.fv-finance-print #receiptPrint{display:none!important;visibility:hidden!important}body.fv-finance-print .fv-no-print{display:none!important}}
+</style>
+
+<script>
+/* V68 — STORE INCOME, EXPENSES & PROFIT/LOSS (isolated manager module) */
+(function(){
+'use strict';
+if(window.__fvFinanceV68)return;window.__fvFinanceV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+let state={sales:[],income:[],expenses:[]};
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>'R'+Number(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+function token(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return''}
+function today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function monthStart(){let d=today();return d.slice(0,8)+'01'}
+function selectedStore(){return $('fvFinanceStore')?.value||'NDAYENI'}
+function activeStore(){return String(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase()}
+function headers(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},extra||{})}
+async function api(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)})),txt=await r.text();if(!r.ok){let m=txt;try{m=JSON.parse(txt).message||txt}catch(_){}throw Error(m)}return txt?JSON.parse(txt):[]}
+function setStatus(message,bad){let e=$('fvFinanceStatus');if(e){e.textContent=message||'';e.style.color=bad?'#b42318':'#08752f'}}
+function makePanel(){
+ if($('fvFinancePanel'))return;
+ let panel=document.createElement('section');panel.id='fvFinancePanel';panel.className='panel manager-only';panel.style.cssText='grid-column:1/-1;display:none';
+ panel.innerHTML=`<h2>Store Income & Expenses</h2>
+ <p class="small">POS sales are pulled automatically. Capture only other income and operating expenses here.</p>
+ <div class="fv-finance-filters fv-no-print">
+  <label>Store<br><select id="fvFinanceStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="ALL">Both Stores — Combined</option></select></label>
+  <label>From<br><input id="fvFinanceFrom" type="date"></label><label>To<br><input id="fvFinanceTo" type="date"></label>
+  <button type="button" class="primary" id="fvFinanceLoad">VIEW REPORT</button>
+  <div class="fv-period-buttons"><button type="button" class="secondary" id="fvFinanceToday">TODAY</button><button type="button" class="secondary" id="fvFinanceWeek">THIS WEEK</button><button type="button" class="secondary" id="fvFinanceMonth">THIS MONTH</button></div>
+ </div><div id="fvFinanceStatus" class="fv-finance-status"></div>
+ <div class="fv-finance-cards"><div class="fv-finance-card"><span>POS Sales</span><strong id="fvPosIncome">R0.00</strong></div><div class="fv-finance-card"><span>Other Income</span><strong id="fvOtherIncome">R0.00</strong></div><div class="fv-finance-card"><span>Total Expenses</span><strong id="fvTotalExpenses">R0.00</strong></div><div class="fv-finance-card"><span>Profit / (Loss)</span><strong id="fvNetProfit">R0.00</strong></div></div>
+ <div class="fv-finance-box"><div class="fv-pnl-title"><h3>Profit or Loss Statement</h3><b id="fvPnlPeriod"></b></div><div style="overflow:auto"><table class="inv-table fv-pnl-table"><thead><tr><th>Income / Expense</th><th>Ndayeni</th><th>Sivana</th><th>Combined</th></tr></thead><tbody id="fvPnlRows"></tbody></table></div><p class="small">This is a cash-management profit or loss statement: stock and ingredients are recognised when captured as expenses.</p></div>
+ <div class="fv-finance-actions fv-no-print"><button type="button" class="secondary" id="fvFinancePrint">PRINT / SAVE PDF</button><button type="button" class="secondary" id="fvFinanceCsv">DOWNLOAD CSV</button></div>
+ <div class="fv-finance-box fv-no-print"><h3>Add Other Income</h3><div class="fv-finance-form">
+  <label>Date<br><input id="fvIncomeDate" type="date"></label><label>Category<br><select id="fvIncomeCategory"><option>Delivery Income</option><option>Catering</option><option>Refund Received</option><option>Other Income</option></select></label>
+  <label>Description<br><input id="fvIncomeDescription" placeholder="What was the income for?"></label><label>Payment<br><select id="fvIncomePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Mr D</option><option>Uber Eats</option><option>Other</option></select></label>
+  <label>Amount<br><input id="fvIncomeAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reference<br><input id="fvIncomeReference" placeholder="Optional"></label><button type="button" class="primary" id="fvSaveIncome">SAVE INCOME</button>
+ </div></div>
+ <div class="fv-finance-box fv-no-print"><h3>Add Expense</h3><div class="fv-finance-form">
+  <label>Date<br><input id="fvExpenseDate" type="date"></label><label>Category<br><select id="fvExpenseCategory"><option>Stock & Ingredients</option><option>Staff Wages</option><option>Electricity</option><option>Rent</option><option>Transport</option><option>Repairs & Maintenance</option><option>Packaging</option><option>Cleaning</option><option>Bank Charges</option><option>Internet & Airtime</option><option>Security</option><option>Other Expense</option></select></label>
+  <label>Supplier<br><input id="fvExpenseSupplier" placeholder="Supplier or payee"></label><label>Description<br><input id="fvExpenseDescription" placeholder="What was paid for?"></label><label>Payment<br><select id="fvExpensePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Other</option></select></label>
+  <label>Amount<br><input id="fvExpenseAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reference<br><input id="fvExpenseReference" placeholder="Invoice / receipt no."></label><button type="button" class="primary" id="fvSaveExpense">SAVE EXPENSE</button>
+ </div></div>
+ <div class="fv-finance-box"><h3>Income Details</h3><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Date</th><th>Store</th><th>Source</th><th>Description</th><th>Payment</th><th>Amount</th><th class="fv-no-print">Action</th></tr></thead><tbody id="fvIncomeRows"></tbody></table></div></div>
+ <div class="fv-finance-box"><h3>Expense Details</h3><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Date</th><th>Store</th><th>Category</th><th>Supplier / Description</th><th>Payment</th><th>Reference</th><th>Amount</th><th class="fv-no-print">Action</th></tr></thead><tbody id="fvExpenseRows"></tbody></table></div></div>`;
+ let anchor=$('accessPanel')||$('receiptPrint');anchor.parentNode.insertBefore(panel,anchor);
+ let nav=$('managerInventoryNav')?.querySelector('.inventory-actions');if(nav&&!$('fvFinanceNav')){let b=document.createElement('button');b.type='button';b.className='cat';b.id='fvFinanceNav';b.textContent='INCOME & EXPENSES';b.dataset.managerTarget='fvFinancePanel';nav.appendChild(b)}
+ $('fvFinanceFrom').value=monthStart();$('fvFinanceTo').value=today();$('fvIncomeDate').value=today();$('fvExpenseDate').value=today();$('fvFinanceStore').value=activeStore();
+ $('fvFinanceLoad').onclick=load;$('fvSaveIncome').onclick=saveIncome;$('fvSaveExpense').onclick=saveExpense;$('fvFinancePrint').onclick=printReport;$('fvFinanceCsv').onclick=downloadCsv;
+ $('fvFinanceToday').onclick=()=>setPeriod('today');$('fvFinanceWeek').onclick=()=>setPeriod('week');$('fvFinanceMonth').onclick=()=>setPeriod('month');
+ $('fvFinanceStore').onchange=()=>{let all=selectedStore()==='ALL';$('fvSaveIncome').disabled=all;$('fvSaveExpense').disabled=all;setStatus(all?'Combined report selected. Choose one store to capture a transaction.':'');load().catch(showError)};
+ }
+ function setPeriod(period){let end=today(),d=new Date(end+'T12:00:00');if(period==='today')$('fvFinanceFrom').value=end;else if(period==='month')$('fvFinanceFrom').value=end.slice(0,8)+'01';else{let offset=(d.getDay()+6)%7;d.setDate(d.getDate()-offset);$('fvFinanceFrom').value=d.toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}$('fvFinanceTo').value=end;load().catch(showError)}
+ function queryStore(column){let s=selectedStore();return s==='ALL'?'':('&'+column+'=eq.'+encodeURIComponent(s))}
+ async function load(){
+  if(!window.currentUser||window.currentUser.role!=='manager')return;
+  let from=$('fvFinanceFrom').value,to=$('fvFinanceTo').value;if(!from||!to||from>to){setStatus('Choose a valid From and To date.',true);return}
+  setStatus('Loading income and expenses...');
+  try{
+   let [sales,income,expenses]=await Promise.all([
+    api('pos_sales?select=id,store_code,sale_date,payment,total&sale_date=gte.'+from+'&sale_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=sale_date.desc'),
+    api('pos_other_income?select=id,store_code,transaction_date,category,description,payment_method,amount,reference&transaction_date=gte.'+from+'&transaction_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=transaction_date.desc'),
+    api('pos_store_expenses?select=id,store_code,expense_date,category,supplier,description,payment_method,amount,reference&expense_date=gte.'+from+'&expense_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=expense_date.desc')
+   ]);state={sales,income,expenses};render();setStatus('Report updated at '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'}));
+  }catch(e){showError(e)}
+ }
+ function render(){
+  let selected=selectedStore(),matches=x=>selected==='ALL'||x.store_code===selected,sales=state.sales.filter(matches),income=state.income.filter(matches),expenseRows=state.expenses.filter(matches);
+  let pos=sales.reduce((a,x)=>a+Number(x.total||0),0),other=income.reduce((a,x)=>a+Number(x.amount||0),0),expenses=expenseRows.reduce((a,x)=>a+Number(x.amount||0),0),net=pos+other-expenses;
+  $('fvPosIncome').textContent=money(pos);$('fvOtherIncome').textContent=money(other);$('fvTotalExpenses').textContent=money(expenses);$('fvNetProfit').textContent=money(net);$('fvNetProfit').className=net>=0?'fv-positive':'fv-negative';
+  renderPnl();
+  let salesRows=sales.map(x=>`<tr><td>${esc(x.sale_date)}</td><td>${esc(x.store_code)}</td><td>POS Sale</td><td>POS transaction</td><td>${esc(x.payment||'—')}</td><td>${money(x.total)}</td><td class="fv-no-print">—</td></tr>`);
+  let otherRows=income.map(x=>`<tr><td>${esc(x.transaction_date)}</td><td>${esc(x.store_code)}</td><td>${esc(x.category)}</td><td>${esc(x.description)}</td><td>${esc(x.payment_method)}</td><td>${money(x.amount)}</td><td class="fv-no-print"><button type="button" class="remove" onclick="fvDeleteFinance('income',${Number(x.id)})">DELETE</button></td></tr>`);
+  $('fvIncomeRows').innerHTML=salesRows.concat(otherRows).join('')||'<tr><td colspan="7">No income for this period.</td></tr>';
+  $('fvExpenseRows').innerHTML=expenseRows.map(x=>`<tr><td>${esc(x.expense_date)}</td><td>${esc(x.store_code)}</td><td>${esc(x.category)}</td><td>${esc([x.supplier,x.description].filter(Boolean).join(' — '))}</td><td>${esc(x.payment_method)}</td><td>${esc(x.reference||'—')}</td><td>${money(x.amount)}</td><td class="fv-no-print"><button type="button" class="remove" onclick="fvDeleteFinance('expense',${Number(x.id)})">DELETE</button></td></tr>`).join('')||'<tr><td colspan="8">No expenses for this period.</td></tr>';
+ }
+ function storeTotals(store){let sales=state.sales.filter(x=>x.store_code===store).reduce((a,x)=>a+Number(x.total||0),0),other=state.income.filter(x=>x.store_code===store).reduce((a,x)=>a+Number(x.amount||0),0),categories={};state.expenses.filter(x=>x.store_code===store).forEach(x=>categories[x.category]=(categories[x.category]||0)+Number(x.amount||0));let expenses=Object.values(categories).reduce((a,x)=>a+x,0),total=sales+other,net=total-expenses;return{sales,other,total,categories,expenses,net,margin:total?net/total*100:0}}
+ function renderPnl(){let n=storeTotals('NDAYENI'),s=storeTotals('SIVANA'),allCats=['Stock & Ingredients','Staff Wages','Electricity','Rent','Transport','Repairs & Maintenance','Packaging','Cleaning','Bank Charges','Internet & Airtime','Security','Other Expense'],seen=new Set(allCats);Object.keys(n.categories).concat(Object.keys(s.categories)).forEach(c=>seen.add(c));let rows=[['POS Sales',n.sales,s.sales,''],['Other Income',n.other,s.other,''],['Total Income',n.total,s.total,'fv-pnl-total']];[...seen].forEach(c=>rows.push([c,n.categories[c]||0,s.categories[c]||0,'']));rows.push(['Total Expenses',n.expenses,s.expenses,'fv-pnl-total'],['Net Profit / (Loss)',n.net,s.net,'fv-pnl-result'],['Net Profit %',n.margin,s.margin,'percent']);$('fvPnlRows').innerHTML=rows.map(r=>`<tr class="${r[3]}"><td>${esc(r[0])}</td><td class="${r[0]==='Net Profit / (Loss)'?(r[1]>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number(r[1]).toFixed(1)+'%':money(r[1])}</td><td class="${r[0]==='Net Profit / (Loss)'?(r[2]>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number(r[2]).toFixed(1)+'%':money(r[2])}</td><td class="${r[0]==='Net Profit / (Loss)'?((r[1]+r[2])>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number((n.total+s.total)?(n.net+s.net)/(n.total+s.total)*100:0).toFixed(1)+'%':money(r[1]+r[2])}</td></tr>`).join('');$('fvPnlPeriod').textContent=($('fvFinanceFrom').value||'')+' to '+($('fvFinanceTo').value||'')}
+ async function saveIncome(){
+  let s=selectedStore(),amount=Number($('fvIncomeAmount').value),description=$('fvIncomeDescription').value.trim();if(s==='ALL'){setStatus('Choose Ndayeni or Sivana before saving.',true);return}if(!description||!(amount>0)){setStatus('Enter the income description and an amount above zero.',true);return}
+  try{setStatus('Saving income...');await api('pos_other_income',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:s,transaction_date:$('fvIncomeDate').value,category:$('fvIncomeCategory').value,description,payment_method:$('fvIncomePayment').value,amount,reference:$('fvIncomeReference').value.trim()||null,created_by:window.currentUser.id||window.currentUser.user_id})});$('fvIncomeDescription').value='';$('fvIncomeAmount').value='';$('fvIncomeReference').value='';await load();setStatus('Income saved successfully.') }catch(e){showError(e)}
+ }
+ async function saveExpense(){
+  let s=selectedStore(),amount=Number($('fvExpenseAmount').value),description=$('fvExpenseDescription').value.trim();if(s==='ALL'){setStatus('Choose Ndayeni or Sivana before saving.',true);return}if(!description||!(amount>0)){setStatus('Enter the expense description and an amount above zero.',true);return}
+  try{setStatus('Saving expense...');await api('pos_store_expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:s,expense_date:$('fvExpenseDate').value,category:$('fvExpenseCategory').value,supplier:$('fvExpenseSupplier').value.trim()||null,description,payment_method:$('fvExpensePayment').value,amount,reference:$('fvExpenseReference').value.trim()||null,created_by:window.currentUser.id||window.currentUser.user_id})});$('fvExpenseSupplier').value='';$('fvExpenseDescription').value='';$('fvExpenseAmount').value='';$('fvExpenseReference').value='';await load();setStatus('Expense saved successfully.') }catch(e){showError(e)}
+ }
+ window.fvDeleteFinance=async function(type,id){if(!confirm('Delete this '+type+' transaction?'))return;try{await api((type==='income'?'pos_other_income':'pos_store_expenses')+'?id=eq.'+id,{method:'DELETE',headers:{Prefer:'return=minimal'}});await load();setStatus('Transaction deleted.')}catch(e){showError(e)}};
+ function showError(e){let m=String(e?.message||e);if(/pos_other_income|pos_store_expenses|schema cache|Could not find/i.test(m))m='Income & Expenses database setup is still required. Run SETUP_INCOME_EXPENSES.sql in Supabase first.';setStatus(m,true)}
+ function printReport(){document.body.classList.add('fv-finance-print');window.addEventListener('afterprint',()=>document.body.classList.remove('fv-finance-print'),{once:true});window.print()}
+ function csvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
+ function downloadCsv(){let chosen=selectedStore(),ok=x=>chosen==='ALL'||x.store_code===chosen,rows=[['Type','Date','Store','Category / Source','Description','Payment','Reference','Amount']];state.sales.filter(ok).forEach(x=>rows.push(['Income',x.sale_date,x.store_code,'POS Sale','POS transaction',x.payment||'', '',Number(x.total||0).toFixed(2)]));state.income.filter(ok).forEach(x=>rows.push(['Income',x.transaction_date,x.store_code,x.category,x.description,x.payment_method,x.reference||'',Number(x.amount||0).toFixed(2)]));state.expenses.filter(ok).forEach(x=>rows.push(['Expense',x.expense_date,x.store_code,x.category,[x.supplier,x.description].filter(Boolean).join(' — '),x.payment_method,x.reference||'',Number(x.amount||0).toFixed(2)]));let blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Feasterville_Income_Expenses_'+selectedStore()+'_'+$('fvFinanceFrom').value+'_to_'+$('fvFinanceTo').value+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function revealForManager(){let u=window.currentUser;if(!u||u.role!=='manager')return;let p=$('fvFinancePanel');if(p&&p.style.display!=='none'&&token())load().catch(showError)}
+ document.addEventListener('DOMContentLoaded',()=>{makePanel();setTimeout(revealForManager,1600)});
+ document.addEventListener('click',e=>{if(e.target?.id==='fvFinanceNav'){let p=$('fvFinancePanel');if(p){p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'})}setTimeout(()=>load().catch(showError),100)}},true);
+ document.addEventListener('change',e=>{if(e.target&&/store/i.test(e.target.id||'')&&e.target.id!=='fvFinanceStore'){let s=activeStore();if($('fvFinanceStore')&&['NDAYENI','SIVANA'].includes(s))$('fvFinanceStore').value=s}},true);
+})();
+</script>
+<!-- BUILD: STORE_FINANCE_PROFIT_LOSS_V68 -->
+
+<script>
+/* V75 RECOVERY — Manager shortcut to existing finance report */
+(function(){
+'use strict';
+function manager(){return window.currentUser&&window.currentUser.role==='manager';}
+function install(){
+ if(!manager())return;
+ var reports=document.getElementById('reportsPanel');
+ if(!reports||document.getElementById('fvOpenFinanceRecovery'))return;
+ var b=document.createElement('button');
+ b.type='button'; b.id='fvOpenFinanceRecovery'; b.className='primary';
+ b.textContent='OPEN STORE PROFIT / LOSS';
+ b.style.margin='10px 0 0 0';
+ b.onclick=function(){
+   var p=document.getElementById('fvFinancePanel');
+   if(p){p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'});}
+   var nav=document.getElementById('fvFinanceNav'); if(nav)nav.click();
+ };
+ reports.insertBefore(b,reports.children[2]||null);
+}
+var n=0,t=setInterval(function(){n++;install();if(document.getElementById('fvOpenFinanceRecovery')||n>120)clearInterval(t)},250);
+})();
+</script>
+<!-- BUILD: RECOVERY_FINANCE_SHORTCUT_V75 -->
 
 </body>
 </html>
