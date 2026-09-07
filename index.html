@@ -381,6 +381,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 
 <section class="panel" id="masterProductionEditorPanel" style="grid-column:1/-1">
 <h2>Master Production Inputs — Add / Edit Products</h2>
+<div id="fvLiveMasterInputStatus" class="small" style="margin:6px 0 10px 0"><b>LIVE DATABASE:</b> Select Ndayini or Sivana, then add or edit inputs for that store.</div>
 <p class="small">Add new production inputs or edit existing production inputs. Changes are saved and used by recipes, stock movements, ledger, count sheet and reconciliation.</p>
 
 <div class="order-head">
@@ -490,6 +491,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
   <p class="small">Quick access to production inputs, usage, stock movements, reconciliation and reports.</p>
   <div class="inventory-actions">
     <button type="button" class="cat" data-manager-target="productionInputsPanel">PRODUCTION INPUT STOCK</button>
+    <button type="button" class="cat" data-manager-target="masterProductionEditorPanel">ADD / EDIT PRODUCTION INPUTS</button>
     <button type="button" class="cat" data-manager-target="usagePanel">USAGE FROM SALES</button>
     <button type="button" class="cat" data-manager-target="stockMovementPanel">STOCK MOVEMENTS</button>
     <button type="button" class="cat" data-manager-target="reconPanel">STOCK RECONCILIATION</button>
@@ -7121,5 +7123,254 @@ var n=0,t=setInterval(function(){n++;install();if(document.getElementById('fvOpe
 </script>
 
 <!-- BUILD: CASHUP_HISTORY_CANDIDATE_V2_20260907 -->
+
+
+<script>
+/* FEASTERVILLE LIVE MASTER PRODUCTION INPUT EDITOR — CANDIDATE V3 */
+(function(){
+  'use strict';
+  if(window.__fvLiveMasterInputEditorV3)return;
+  window.__fvLiveMasterInputEditorV3=true;
+
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+
+  const E=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+  const user=()=>window.currentUser||null;
+  const isManager=()=>!!(user()&&user().role==='manager');
+
+  function store(){
+    const g=document.getElementById('masterProductionStoreSelect');
+    if(g&&g.value)return g.value;
+    const top=document.getElementById('storeLocationSelect');
+    if(top&&top.value)return top.value;
+    return localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+  }
+
+  function headers(extra){
+    return Object.assign({
+      apikey:KEY,
+      Authorization:'Bearer '+token(),
+      'Content-Type':'application/json'
+    },extra||{});
+  }
+
+  async function api(path,opt={}){
+    const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)}));
+    const t=await r.text();
+    if(!r.ok)throw Error(t||('HTTP '+r.status));
+    return t?JSON.parse(t):null;
+  }
+
+  let liveRows=[];
+
+  async function loadLiveEditor(){
+    const panel=document.getElementById('masterProductionEditorPanel');
+    if(!panel)return;
+    if(!isManager()){
+      panel.style.display='none';
+      return;
+    }
+    panel.style.display='block';
+
+    const sc=store();
+    localStorage.setItem('feastervilleStoreCode',sc);
+
+    const status=document.getElementById('fvLiveMasterInputStatus');
+    if(status)status.innerHTML='<b>LIVE DATABASE:</b> Loading '+(sc==='SIVANA'?'Sivana':'Ndayini')+' production inputs...';
+
+    liveRows=await api(
+      'pos_store_production_inputs?select=id,store_code,code,name,unit,category,reorder_level,active,purchase_group,purchase_cycle_days,safety_stock,target_stock,preferred_supplier,preferred_unit_cost'+
+      '&store_code=eq.'+encodeURIComponent(sc)+'&order=code.asc'
+    )||[];
+
+    const sel=document.getElementById('masterEditSelect');
+    const body=document.getElementById('oldMasterEditorBody');
+
+    if(sel){
+      sel.innerHTML='<option value="">-- Add New / Select Existing --</option>'+
+        liveRows.map(p=>'<option value="'+E(p.code)+'">'+E(p.code)+' — '+E(p.name)+'</option>').join('');
+    }
+
+    if(body){
+      body.innerHTML=liveRows.length
+        ? liveRows.map(p=>'<tr>'+
+            '<td>'+E(p.code)+'</td>'+
+            '<td>'+E(p.name)+'</td>'+
+            '<td>'+E(p.category||'')+'</td>'+
+            '<td>'+E(p.unit||'EA')+'</td>'+
+            '<td>'+Number(p.reorder_level||0)+'</td>'+
+            '<td>'+(p.active===false?'INACTIVE':'ACTIVE')+'</td>'+
+            '<td><button type="button" onclick="editOldMasterInput(\''+String(p.code).replace(/'/g,"\\'")+'\')">EDIT</button></td>'+
+          '</tr>').join('')
+        : '<tr><td colspan="7">No production inputs found for this store.</td></tr>';
+    }
+
+    // Make room for ACTIVE column if old header has only 6 columns.
+    const table=body&&body.closest('table');
+    if(table){
+      const ths=table.querySelectorAll('thead th');
+      if(ths.length===6){
+        const tr=table.querySelector('thead tr');
+        tr.innerHTML='<th>Code</th><th>Production Input</th><th>Category</th><th>Unit</th><th>Reorder Level</th><th>Status</th><th>Action</th>';
+      }
+    }
+
+    if(status)status.innerHTML='<b>LIVE DATABASE:</b> '+(sc==='SIVANA'?'Sivana':'Ndayini')+' — '+liveRows.length+' production input(s).';
+  }
+
+  window.renderOldMasterEditor=function(){
+    loadLiveEditor().catch(e=>{
+      console.error(e);
+      const b=document.getElementById('oldMasterEditorBody');
+      if(b)b.innerHTML='<tr><td colspan="7">Could not load production inputs: '+E(e.message)+'</td></tr>';
+    });
+  };
+
+  window.editOldMasterInput=function(code){
+    const p=liveRows.find(x=>x.code===code);
+    if(!p)return alert('Production input not found for this store.');
+    const sel=document.getElementById('masterEditSelect');
+    if(sel)sel.value=code;
+    const c=document.getElementById('masterEditCode');
+    c.value=p.code;c.disabled=true;
+    document.getElementById('masterEditName').value=p.name||'';
+    document.getElementById('masterEditCategory').value=p.category||'Ingredient';
+    document.getElementById('masterEditUnit').value=p.unit||'EA';
+    document.getElementById('masterEditReorder').value=Number(p.reorder_level||0);
+  };
+
+  window.clearOldMasterEditor=function(){
+    const sel=document.getElementById('masterEditSelect');
+    if(sel)sel.value='';
+    const c=document.getElementById('masterEditCode');
+    if(c){c.disabled=false;c.value='';}
+    const n=document.getElementById('masterEditName'); if(n)n.value='';
+    const cat=document.getElementById('masterEditCategory'); if(cat)cat.value='Ingredient';
+    const unit=document.getElementById('masterEditUnit'); if(unit)unit.value='EA';
+    const r=document.getElementById('masterEditReorder'); if(r)r.value='5';
+  };
+
+  window.saveOldMasterInput=async function(){
+    try{
+      if(!isManager())throw Error('Manager access required.');
+      const sc=store();
+      const c=document.getElementById('masterEditCode');
+      const code=(c?.value||'').trim().toUpperCase();
+      const name=(document.getElementById('masterEditName')?.value||'').trim();
+      const category=(document.getElementById('masterEditCategory')?.value||'Ingredient').trim()||'Ingredient';
+      const unit=document.getElementById('masterEditUnit')?.value||'EA';
+      const reorder=Number(document.getElementById('masterEditReorder')?.value||0);
+
+      if(!code||!name)throw Error('Please enter the input code and name.');
+      if(reorder<0)throw Error('Reorder level cannot be negative.');
+
+      const existing=liveRows.find(x=>x.code===code);
+
+      if(existing){
+        await api(
+          'pos_store_production_inputs?store_code=eq.'+encodeURIComponent(sc)+'&code=eq.'+encodeURIComponent(code),
+          {
+            method:'PATCH',
+            headers:{Prefer:'return=minimal'},
+            body:JSON.stringify({
+              name,category,unit,reorder_level:reorder,active:true,
+              updated_at:new Date().toISOString()
+            })
+          }
+        );
+      }else{
+        await api('pos_store_production_inputs',{
+          method:'POST',
+          headers:{Prefer:'return=minimal'},
+          body:JSON.stringify({
+            store_code:sc,
+            code,
+            name,
+            unit,
+            category,
+            reorder_level:reorder,
+            active:true,
+            purchase_group:'WEEKLY',
+            purchase_cycle_days:7,
+            safety_stock:0,
+            target_stock:0
+          })
+        });
+      }
+
+      window.clearOldMasterEditor();
+      await loadLiveEditor();
+
+      try{
+        if(typeof window.refreshStoreProductionData==='function')
+          await window.refreshStoreProductionData();
+      }catch(e){console.warn('Store input refresh:',e)}
+
+      try{
+        if(typeof window.refreshProductionInputs==='function')
+          window.refreshProductionInputs();
+      }catch(e){console.warn('Production panel refresh:',e)}
+
+      alert('Production input saved successfully to '+(sc==='SIVANA'?'Sivana':'Ndayini')+'.');
+    }catch(e){
+      console.error(e);
+      alert('Could not save Production Input: '+e.message);
+    }
+  };
+
+  function bind(){
+    const sel=document.getElementById('masterEditSelect');
+    if(sel&&!sel.dataset.liveBound){
+      sel.dataset.liveBound='1';
+      sel.addEventListener('change',function(){
+        if(this.value)window.editOldMasterInput(this.value);
+        else window.clearOldMasterEditor();
+      });
+    }
+
+    const storeSel=document.getElementById('masterProductionStoreSelect');
+    if(storeSel&&!storeSel.dataset.liveEditorBound){
+      storeSel.dataset.liveEditorBound='1';
+      storeSel.addEventListener('change',function(){
+        localStorage.setItem('feastervilleStoreCode',this.value);
+        window.clearOldMasterEditor();
+        loadLiveEditor().catch(e=>alert('Could not switch Production Input store: '+e.message));
+      });
+    }
+
+    document.querySelectorAll('[data-manager-target="masterProductionEditorPanel"]').forEach(btn=>{
+      if(btn.dataset.liveEditorBound)return;
+      btn.dataset.liveEditorBound='1';
+      btn.addEventListener('click',()=>{
+        setTimeout(()=>loadLiveEditor().catch(e=>alert('Could not load Production Inputs: '+e.message)),50);
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    let n=0;
+    const t=setInterval(()=>{
+      n++;
+      if(isManager()){
+        bind();
+        if(document.getElementById('masterProductionEditorPanel')){
+          loadLiveEditor().catch(console.error);
+        }
+        if(n>20)clearInterval(t);
+      }
+      if(n>100)clearInterval(t);
+    },250);
+  });
+
+  const obs=new MutationObserver(()=>{if(isManager())bind()});
+  obs.observe(document.documentElement,{childList:true,subtree:true});
+
+  window.refreshLiveMasterProductionEditorV3=loadLiveEditor;
+})();
+</script>
+<!-- BUILD: LIVE_MASTER_PRODUCTION_INPUT_EDITOR_CANDIDATE_V3_20260907 -->
+
 </body>
 </html>
