@@ -702,7 +702,13 @@ const baseProductsForStore=(store)=>store==='NDAYENI'?ndayeniProducts:products;
 const activeProducts=()=>{
   const store=selectedStoreCode();
   const live=(typeof liveStoreProducts!=='undefined'&&liveStoreProducts[store])||(window.liveStoreProducts&&window.liveStoreProducts[store]);
-  return Array.isArray(live)&&live.length?live.filter(p=>p.active!==false):baseProductsForStore(store);
+  if(Array.isArray(live)&&live.length){
+    const enabled=live.filter(p=>p.active!==false);
+    // Safety fallback: never leave a live salesperson with an empty selling menu
+    // merely because all rows in pos_store_products were accidentally inactive.
+    if(enabled.length) return enabled;
+  }
+  return baseProductsForStore(store);
 };
 
 let cart=[];
@@ -797,6 +803,7 @@ function printReceipt(){
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
     '</div>
+<!-- BUILD: V72 SALESPERSON PRODUCT FALLBACK + DATE FIX -->
 </body></html>';
 
   w.document.open();
@@ -1979,11 +1986,22 @@ document.addEventListener('DOMContentLoaded',function(){
       setStatus('ONLINE - '+(su.store_code==='SIVANA'?'Sivana':'Ndayeni'));
       setMessage('');
 
+      // Always initialise the business date when a salesperson signs in.
+      try {
+        const dateEl=document.getElementById('date');
+        if(dateEl && !dateEl.value){
+          const d=new Date();
+          dateEl.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        }
+      } catch (_) {}
+
       // Fetch ONLY the salesperson's sellable menu.
       const rows = await api('/rest/v1/pos_store_products?store_code=eq.'+
         encodeURIComponent(su.store_code)+
         '&select=code,name,category,price,active&order=category.asc,code.asc');
-      liveStoreProducts[su.store_code] = Array.isArray(rows) ? rows : [];
+      const liveRows = Array.isArray(rows) ? rows : [];
+      const enabledRows = liveRows.filter(p=>p.active!==false);
+      liveStoreProducts[su.store_code] = enabledRows.length ? liveRows : [];
       window.liveStoreProducts = liveStoreProducts;
 
       // Build the sales catalogue directly, no production/report refreshes.
