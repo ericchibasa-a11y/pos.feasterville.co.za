@@ -6993,5 +6993,133 @@ var n=0,t=setInterval(function(){n++;install();if(document.getElementById('fvOpe
 </script>
 <!-- BUILD: RECOVERY_FINANCE_SHORTCUT_V75 -->
 
+
+<div id="fvCashupHistoryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;color:#111;width:min(1100px,96vw);max-height:90vh;overflow:auto;border-radius:14px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0">Cash-Up History</h2>
+      <button type="button" id="fvCloseCashupHistory">CLOSE</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
+      <label>Store
+        <select id="fvCashupHistoryStore">
+          <option value="">Both Stores</option>
+          <option value="NDAYENI">Ndayini</option>
+          <option value="SIVANA">Sivana</option>
+        </select>
+      </label>
+      <label>From <input type="date" id="fvCashupHistoryFrom"></label>
+      <label>To <input type="date" id="fvCashupHistoryTo"></label>
+      <button type="button" id="fvLoadCashupHistory">VIEW</button>
+      <button type="button" id="fvPrintCashupHistory">PRINT / PDF</button>
+    </div>
+    <div id="fvCashupHistorySummary" style="margin:10px 0;font-weight:700"></div>
+    <div id="fvCashupHistoryTableWrap">Loading...</div>
+  </div>
+</div>
+
+<script>
+/* FEASTERVILLE MANAGER CASH-UP HISTORY — CANDIDATE V2 */
+(function(){
+ 'use strict';
+ if(window.__fvCashupHistoryInstalled)return; window.__fvCashupHistoryInstalled=true;
+ const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+ const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+ const money=n=>'R'+Number(n||0).toFixed(2);
+ function U(){return window.currentUser||window.salesSessionUser||null}
+ function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||''}
+ function headers(){return {'apikey':KEY,'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}}
+ function iso(d){return d.toISOString().slice(0,10)}
+ function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+ async function api(path){
+   const r=await fetch(BASE+'/'+path,{headers:headers()});
+   const t=await r.text();
+   if(!r.ok)throw Error(t||('HTTP '+r.status));
+   return t?JSON.parse(t):[];
+ }
+ function isManager(){const u=U();return !!(u&&u.role==='manager')}
+ function setDefaultDates(){
+   const to=new Date(), from=new Date(); from.setDate(from.getDate()-30);
+   const f=document.getElementById('fvCashupHistoryFrom'), t=document.getElementById('fvCashupHistoryTo');
+   if(f&&!f.value)f.value=iso(from); if(t&&!t.value)t.value=iso(to);
+ }
+ async function loadHistory(){
+   if(!isManager()){alert('Manager access required.');return}
+   const store=document.getElementById('fvCashupHistoryStore').value;
+   const from=document.getElementById('fvCashupHistoryFrom').value;
+   const to=document.getElementById('fvCashupHistoryTo').value;
+   let q='pos_daily_cashups?select=store_code,cashup_date,salesperson_name,total_sales,expected_cash,actual_cash,variance,status,closed_at,notes&order=cashup_date.desc,closed_at.desc';
+   if(store)q+='&store_code=eq.'+encodeURIComponent(store);
+   if(from)q+='&cashup_date=gte.'+from;
+   if(to)q+='&cashup_date=lte.'+to;
+   const wrap=document.getElementById('fvCashupHistoryTableWrap');
+   wrap.innerHTML='Loading...';
+   try{
+     const rows=await api(q);
+     const total=rows.reduce((a,r)=>a+Number(r.total_sales||0),0);
+     const variance=rows.reduce((a,r)=>a+Number(r.variance||0),0);
+     document.getElementById('fvCashupHistorySummary').textContent=
+       rows.length+' cash-up record(s) | Total Sales '+money(total)+' | Net Variance '+money(variance);
+     if(!rows.length){wrap.innerHTML='<p>No cash-up records found for the selected period.</p>';return}
+     wrap.innerHTML=
+       '<table style="width:100%;border-collapse:collapse;font-size:14px">'+
+       '<thead><tr>'+
+       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Date</th>'+
+       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Store</th>'+
+       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Closed By</th>'+
+       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Total Sales</th>'+
+       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Expected Cash</th>'+
+       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Actual Cash</th>'+
+       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Variance</th>'+
+       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Status</th>'+
+       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Closed At</th>'+
+       '</tr></thead><tbody>'+
+       rows.map(r=>'<tr>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.cashup_date)+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.store_code==='SIVANA'?'Sivana':'Ndayini')+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.salesperson_name||'')+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.total_sales)+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.expected_cash)+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.actual_cash)+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.variance)+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.status||'')+'</td>'+
+         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.closed_at?new Date(r.closed_at).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg'}):'')+'</td>'+
+       '</tr>').join('')+
+       '</tbody></table>';
+   }catch(e){
+     console.error(e); wrap.innerHTML='<p>Could not load cash-up history: '+esc(e.message)+'</p>';
+   }
+ }
+ window.openFvCashupHistory=function(){
+   if(!isManager()){alert('Manager access required.');return}
+   setDefaultDates();
+   document.getElementById('fvCashupHistoryModal').style.display='flex';
+   loadHistory();
+ }
+ function installButton(){
+   if(!isManager()||document.getElementById('fvCashupHistoryBtn'))return;
+   const cash=document.getElementById('fvCashupBtn');
+   const target=(cash&&cash.parentElement)||document.querySelector('header .actions')||document.querySelector('header')||document.body;
+   const b=document.createElement('button');
+   b.id='fvCashupHistoryBtn'; b.type='button'; b.textContent='CASH-UP HISTORY';
+   b.style.marginLeft='8px';
+   b.onclick=openFvCashupHistory;
+   if(cash&&cash.nextSibling) target.insertBefore(b,cash.nextSibling); else target.appendChild(b);
+ }
+ document.addEventListener('click',e=>{
+   if(e.target&&e.target.id==='fvCloseCashupHistory')document.getElementById('fvCashupHistoryModal').style.display='none';
+   if(e.target&&e.target.id==='fvLoadCashupHistory')loadHistory();
+   if(e.target&&e.target.id==='fvPrintCashupHistory'){
+     const content=document.querySelector('#fvCashupHistoryModal > div').innerHTML;
+     const w=window.open('','_blank','width=1100,height=800');
+     w.document.write('<html><head><title>Cash-Up History</title><style>body{font-family:Arial;padding:20px}button{display:none}table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #ccc;font-size:12px}</style></head><body>'+content+'</body></html>');
+     w.document.close(); w.focus(); setTimeout(()=>w.print(),250);
+   }
+ });
+ let n=0,t=setInterval(()=>{n++;installButton();if(document.getElementById('fvCashupHistoryBtn')||n>120)clearInterval(t)},250);
+})();
+</script>
+
+<!-- BUILD: CASHUP_HISTORY_CANDIDATE_V2_20260907 -->
 </body>
 </html>
