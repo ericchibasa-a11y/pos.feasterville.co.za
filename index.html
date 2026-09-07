@@ -6830,16 +6830,9 @@ function forceMenu(){
     }
   }catch(e){ console.error('V73 force menu',e); }
 }
-document.addEventListener('click',function(e){
-  const b=e.target.closest&&e.target.closest('#products .product');
-  if(!b)return;
-  const code=b.getAttribute('data-sales-code');
-  if(!code)return;
-  try{
-    if(typeof addSaleProduct==='function') addSaleProduct(code);
-    else if(typeof add==='function') add(code);
-  }catch(err){console.error('V73 add product',err);}
-},true);
+/* V4 FIX: product clicks are handled by Sales Selection V41.
+   The old V73 watchdog click handler was adding the same item a second time.
+   Keep V73 only as a menu-display watchdog; do not process sales clicks here. */
 setInterval(forceMenu,1000);
 setTimeout(forceMenu,250);
 setTimeout(forceMenu,1200);
@@ -7372,5 +7365,7 @@ var n=0,t=setInterval(function(){n++;install();if(document.getElementById('fvOpe
 </script>
 <!-- BUILD: LIVE_MASTER_PRODUCTION_INPUT_EDITOR_CANDIDATE_V3_20260907 -->
 
+
+<!-- BUILD: SINGLE_CLICK_SALES_FIX_V4_20260907 -->
 </body>
 </html>
