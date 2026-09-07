@@ -714,8 +714,8 @@ const activeProducts=()=>{
 let cart=[];
 let sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]');
 let orderCounter=Number(localStorage.getItem('feastervilleOrderNo')||0)+1;
-document.getElementById('date').value=new Date().toISOString().slice(0,10);
-document.getElementById('orderNo').textContent='Order #'+String(orderCounter).padStart(4,'0');
+{ const d=document.getElementById('date'); if(d)d.value=new Date().toISOString().slice(0,10); }
+{ const o=document.getElementById('orderNo'); if(o)o.textContent='Order #'+String(orderCounter).padStart(4,'0'); }
 
 const money=n=>'R'+Number(n||0).toFixed(2);
 function cats(){
@@ -802,9 +802,7 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div>
-<!-- BUILD: V72 SALESPERSON PRODUCT FALLBACK + DATE FIX -->
-</body></html>';
+    '</div></body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -1766,8 +1764,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!w){alert('Please allow pop-ups to print the receipt.');return;}
     const html='<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title>'+
       '<style>@page{size:80mm auto;margin:0}body{width:80mm;margin:0;padding:4mm;box-sizing:border-box;font:11px monospace}hr{border:0;border-top:1px dashed #000}</style>'+
-      '</head><body>'+receipt.innerHTML+'
-</body></html>';
+      '</head><body>'+receipt.innerHTML+'</body></html>';
     w.document.open();w.document.write(html);w.document.close();w.focus();
     setTimeout(function(){w.print();},200);
   };
@@ -3596,7 +3593,7 @@ document.addEventListener('DOMContentLoaded',function(){
           '<td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td>'+
           '<td>'+fmt(expected)+'</td>'+
           '<td><input type="number" min="0" step="0.01" value="'+physical+
-            '" onchange="setProductionCount(\\''+p.code+'\\',this.value)"></td>'+
+            '" onchange="setProductionCount(\''+p.code+'\',this.value)"></td>'+
           '<td>'+fmt(variance)+'</td><td>'+action+'</td>'+
         '</tr>';
       }).join('');
@@ -4489,10 +4486,23 @@ let currentCategory='ALL';
 
 function getProducts(){
   try{
-    return (typeof activeProducts==='function'?activeProducts():[])||[];
-  }catch(e){
-    console.error('V41 active products',e);
+    let list=(typeof activeProducts==='function'?activeProducts():[])||[];
+    if(Array.isArray(list) && list.length) return list;
+    // V73 hard fallback: the selling screen must never be empty when the built-in
+    // store catalogue exists. This bypasses a bad/empty live-menu state.
+    const store=(typeof selectedStoreCode==='function'?selectedStoreCode():
+      ((window.salesSessionUser&&window.salesSessionUser.store_code)||
+       localStorage.getItem('feastervilleStoreCode')||'NDAYENI'));
+    list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[]);
+    if(Array.isArray(list) && list.length) return list;
+    if(store==='NDAYENI' && typeof ndayeniProducts!=='undefined' && Array.isArray(ndayeniProducts)) return ndayeniProducts;
+    if(typeof products!=='undefined' && Array.isArray(products)) return products;
     return [];
+  }catch(e){
+    console.error('V73 sales products fallback',e);
+    try{
+      return (typeof products!=='undefined' && Array.isArray(products))?products:[];
+    }catch(_){ return []; }
   }
 }
 
@@ -4934,8 +4944,7 @@ function printOnlyV44(title,node){
       'th,td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
       'th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}'+
       'button,input,select{display:none!important}'+
-    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'
-</body></html>');
+    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'</body></html>');
   doc.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5075,8 +5084,7 @@ function printNode(title,node){
    'table,.inv-table{width:100%;border-collapse:collapse;table-layout:auto}th,td,.inv-table th,.inv-table td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
    'th,.inv-table th{background:#eee!important;color:#111!important}thead{display:table-header-group}tr{page-break-inside:avoid}'+
    'button,input,select{display:none!important}'+
-   '</style></head><body>'+node.innerHTML+'
-</body></html>');
+   '</style></head><body>'+node.innerHTML+'</body></html>');
   d.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5270,8 +5278,7 @@ function printRecon(){
  if(!node||!node.innerHTML.trim())return alert('Open Production Inputs reconciliation first.');
  const w=window.open('','_blank','width=1200,height=800');
  if(!w)return alert('Please allow pop-ups to print the reconciliation.');
- w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'
-</body></html>');
+ w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
 window.printRecon=printRecon;try{printRecon=window.printRecon}catch(e){}
@@ -6618,8 +6625,7 @@ window.printSelectedSalesV45=function(){
  const body='<h1>Feasterville Food — Daily Sales Report</h1><p><b>Store:</b> '+E(s)+' &nbsp; <b>Period:</b> '+E(f)+(t!==f?' to '+E(t):'')+'</p><p><b>Number of Sales:</b> '+rows.length+' &nbsp;&nbsp; <b>Total Sales:</b> '+M(total)+'</p><h2>Payment Summary</h2><table><tr><th>Payment Method</th><th>Amount</th></tr>'+ph+'</table><h2>Sales Transactions</h2><table><tr><th>Date</th><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+rh+'</table>';
  const w=window.open('','_blank','width=1000,height=800');
  if(!w){alert('Please allow pop-ups for this POS, then try again.');return;}
- w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'
-</body></html>');
+ w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),500);
 };
 })();
@@ -6699,5 +6705,51 @@ window.addEventListener('load',()=>setTimeout(stabilize,500));
 })();
 </script>
 <!-- BUILD: SALESPERSON_SCREEN_STABILITY_V70 -->
+
+<script>
+/* V73 SALESPERSON MENU WATCHDOG */
+(function(){
+'use strict';
+if(window.__fvSalesMenuV73)return; window.__fvSalesMenuV73=true;
+function forceMenu(){
+  const u=window.salesSessionUser;
+  if(!u || u.role!=='salesperson') return;
+  try{
+    const store=u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+    let list=[];
+    try{ list=(typeof activeProducts==='function'?activeProducts():[])||[]; }catch(_){}
+    if(!Array.isArray(list)||!list.length){
+      try{ list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[])||[]; }catch(_){}
+    }
+    if(!Array.isArray(list)||!list.length) return;
+    const box=document.getElementById('products');
+    if(box && (/No sellable products found/i.test(box.textContent||'') || !box.querySelector('.product'))){
+      box.innerHTML=list.map(p=>
+        '<button type="button" class="product" data-sales-code="'+String(p.code||'').replace(/"/g,'&quot;')+'">'+
+        '<span class="name">'+String(p.code||'')+' — '+String(p.name||'')+'</span>'+
+        '<span class="price">'+(typeof money==='function'?money(p.price):('R'+Number(p.price||0).toFixed(2)))+'</span></button>'
+      ).join('');
+      if(typeof cats==='function') try{cats();}catch(_){}
+    }
+  }catch(e){ console.error('V73 force menu',e); }
+}
+document.addEventListener('click',function(e){
+  const b=e.target.closest&&e.target.closest('#products .product');
+  if(!b)return;
+  const code=b.getAttribute('data-sales-code');
+  if(!code)return;
+  try{
+    if(typeof addSaleProduct==='function') addSaleProduct(code);
+    else if(typeof add==='function') add(code);
+  }catch(err){console.error('V73 add product',err);}
+},true);
+setInterval(forceMenu,1000);
+setTimeout(forceMenu,250);
+setTimeout(forceMenu,1200);
+})();
+</script>
+<!-- BUILD: SALESPERSON_FORCE_MENU_V73 -->
+
+<!-- BUILD: V74 FULL JAVASCRIPT SYNTAX REPAIR -->
 </body>
 </html>
