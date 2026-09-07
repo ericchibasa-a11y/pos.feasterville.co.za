@@ -702,20 +702,14 @@ const baseProductsForStore=(store)=>store==='NDAYENI'?ndayeniProducts:products;
 const activeProducts=()=>{
   const store=selectedStoreCode();
   const live=(typeof liveStoreProducts!=='undefined'&&liveStoreProducts[store])||(window.liveStoreProducts&&window.liveStoreProducts[store]);
-  if(Array.isArray(live)&&live.length){
-    const enabled=live.filter(p=>p.active!==false);
-    // Safety fallback: never leave a live salesperson with an empty selling menu
-    // merely because all rows in pos_store_products were accidentally inactive.
-    if(enabled.length) return enabled;
-  }
-  return baseProductsForStore(store);
+  return Array.isArray(live)&&live.length?live.filter(p=>p.active!==false):baseProductsForStore(store);
 };
 
 let cart=[];
 let sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]');
 let orderCounter=Number(localStorage.getItem('feastervilleOrderNo')||0)+1;
-{ const d=document.getElementById('date'); if(d)d.value=new Date().toISOString().slice(0,10); }
-{ const o=document.getElementById('orderNo'); if(o)o.textContent='Order #'+String(orderCounter).padStart(4,'0'); }
+document.getElementById('date').value=new Date().toISOString().slice(0,10);
+document.getElementById('orderNo').textContent='Order #'+String(orderCounter).padStart(4,'0');
 
 const money=n=>'R'+Number(n||0).toFixed(2);
 function cats(){
@@ -802,7 +796,34 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div></body></html>';
+    '</div>
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -1764,7 +1785,34 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!w){alert('Please allow pop-ups to print the receipt.');return;}
     const html='<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title>'+
       '<style>@page{size:80mm auto;margin:0}body{width:80mm;margin:0;padding:4mm;box-sizing:border-box;font:11px monospace}hr{border:0;border-top:1px dashed #000}</style>'+
-      '</head><body>'+receipt.innerHTML+'</body></html>';
+      '</head><body>'+receipt.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>';
     w.document.open();w.document.write(html);w.document.close();w.focus();
     setTimeout(function(){w.print();},200);
   };
@@ -1983,22 +2031,11 @@ document.addEventListener('DOMContentLoaded',function(){
       setStatus('ONLINE - '+(su.store_code==='SIVANA'?'Sivana':'Ndayeni'));
       setMessage('');
 
-      // Always initialise the business date when a salesperson signs in.
-      try {
-        const dateEl=document.getElementById('date');
-        if(dateEl && !dateEl.value){
-          const d=new Date();
-          dateEl.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        }
-      } catch (_) {}
-
       // Fetch ONLY the salesperson's sellable menu.
       const rows = await api('/rest/v1/pos_store_products?store_code=eq.'+
         encodeURIComponent(su.store_code)+
         '&select=code,name,category,price,active&order=category.asc,code.asc');
-      const liveRows = Array.isArray(rows) ? rows : [];
-      const enabledRows = liveRows.filter(p=>p.active!==false);
-      liveStoreProducts[su.store_code] = enabledRows.length ? liveRows : [];
+      liveStoreProducts[su.store_code] = Array.isArray(rows) ? rows : [];
       window.liveStoreProducts = liveStoreProducts;
 
       // Build the sales catalogue directly, no production/report refreshes.
@@ -3593,7 +3630,7 @@ document.addEventListener('DOMContentLoaded',function(){
           '<td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td>'+
           '<td>'+fmt(expected)+'</td>'+
           '<td><input type="number" min="0" step="0.01" value="'+physical+
-            '" onchange="setProductionCount(\''+p.code+'\',this.value)"></td>'+
+            '" onchange="setProductionCount(\\''+p.code+'\\',this.value)"></td>'+
           '<td>'+fmt(variance)+'</td><td>'+action+'</td>'+
         '</tr>';
       }).join('');
@@ -4486,23 +4523,10 @@ let currentCategory='ALL';
 
 function getProducts(){
   try{
-    let list=(typeof activeProducts==='function'?activeProducts():[])||[];
-    if(Array.isArray(list) && list.length) return list;
-    // V73 hard fallback: the selling screen must never be empty when the built-in
-    // store catalogue exists. This bypasses a bad/empty live-menu state.
-    const store=(typeof selectedStoreCode==='function'?selectedStoreCode():
-      ((window.salesSessionUser&&window.salesSessionUser.store_code)||
-       localStorage.getItem('feastervilleStoreCode')||'NDAYENI'));
-    list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[]);
-    if(Array.isArray(list) && list.length) return list;
-    if(store==='NDAYENI' && typeof ndayeniProducts!=='undefined' && Array.isArray(ndayeniProducts)) return ndayeniProducts;
-    if(typeof products!=='undefined' && Array.isArray(products)) return products;
-    return [];
+    return (typeof activeProducts==='function'?activeProducts():[])||[];
   }catch(e){
-    console.error('V73 sales products fallback',e);
-    try{
-      return (typeof products!=='undefined' && Array.isArray(products))?products:[];
-    }catch(_){ return []; }
+    console.error('V41 active products',e);
+    return [];
   }
 }
 
@@ -4944,7 +4968,34 @@ function printOnlyV44(title,node){
       'th,td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
       'th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}'+
       'button,input,select{display:none!important}'+
-    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'</body></html>');
+    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
   doc.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5084,7 +5135,34 @@ function printNode(title,node){
    'table,.inv-table{width:100%;border-collapse:collapse;table-layout:auto}th,td,.inv-table th,.inv-table td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
    'th,.inv-table th{background:#eee!important;color:#111!important}thead{display:table-header-group}tr{page-break-inside:avoid}'+
    'button,input,select{display:none!important}'+
-   '</style></head><body>'+node.innerHTML+'</body></html>');
+   '</style></head><body>'+node.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
   d.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5278,7 +5356,34 @@ function printRecon(){
  if(!node||!node.innerHTML.trim())return alert('Open Production Inputs reconciliation first.');
  const w=window.open('','_blank','width=1200,height=800');
  if(!w)return alert('Please allow pop-ups to print the reconciliation.');
- w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'</body></html>');
+ w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
 window.printRecon=printRecon;try{printRecon=window.printRecon}catch(e){}
@@ -6625,7 +6730,34 @@ window.printSelectedSalesV45=function(){
  const body='<h1>Feasterville Food — Daily Sales Report</h1><p><b>Store:</b> '+E(s)+' &nbsp; <b>Period:</b> '+E(f)+(t!==f?' to '+E(t):'')+'</p><p><b>Number of Sales:</b> '+rows.length+' &nbsp;&nbsp; <b>Total Sales:</b> '+M(total)+'</p><h2>Payment Summary</h2><table><tr><th>Payment Method</th><th>Amount</th></tr>'+ph+'</table><h2>Sales Transactions</h2><table><tr><th>Date</th><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+rh+'</table>';
  const w=window.open('','_blank','width=1000,height=800');
  if(!w){alert('Please allow pop-ups for this POS, then try again.');return;}
- w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'</body></html>');
+ w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),500);
 };
 })();
@@ -6685,71 +6817,6 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
 })();
 </script>
 <!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
-
-
-<script>
-/* V70 SALESPERSON SCREEN STABILITY FIX */
-(function(){
-'use strict';
-function isSalesperson(){const u=window.salesSessionUser||window.currentUser;return !!u&&u.role==='salesperson';}
-function stabilize(){
- if(!isSalesperson())return;
- // Salesperson must remain on selling screen only; do not let manager/inventory panels leak into this role.
- ['accessPanel','recipePanel','reportsPanel','userPanel','productionInputsPanel','reconPanel','fvPresencePanel','fvAllUsersV59'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
- const sale=document.getElementById('salePanel')||document.querySelector('[data-panel="sale"]'); if(sale)sale.style.display='block';
- const u=window.salesSessionUser||window.currentUser; const assigned=(u.store_code||u.assigned_store||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase();
- localStorage.setItem('feastervilleStoreCode',assigned); const sel=document.getElementById('storeLocationSelect'); if(sel){sel.value=assigned;sel.disabled=true;}
-}
-document.addEventListener('DOMContentLoaded',()=>{setTimeout(stabilize,300);setTimeout(stabilize,1500);});
-window.addEventListener('load',()=>setTimeout(stabilize,500));
-})();
-</script>
-<!-- BUILD: SALESPERSON_SCREEN_STABILITY_V70 -->
-
-<script>
-/* V73 SALESPERSON MENU WATCHDOG */
-(function(){
-'use strict';
-if(window.__fvSalesMenuV73)return; window.__fvSalesMenuV73=true;
-function forceMenu(){
-  const u=window.salesSessionUser;
-  if(!u || u.role!=='salesperson') return;
-  try{
-    const store=u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-    let list=[];
-    try{ list=(typeof activeProducts==='function'?activeProducts():[])||[]; }catch(_){}
-    if(!Array.isArray(list)||!list.length){
-      try{ list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[])||[]; }catch(_){}
-    }
-    if(!Array.isArray(list)||!list.length) return;
-    const box=document.getElementById('products');
-    if(box && (/No sellable products found/i.test(box.textContent||'') || !box.querySelector('.product'))){
-      box.innerHTML=list.map(p=>
-        '<button type="button" class="product" data-sales-code="'+String(p.code||'').replace(/"/g,'&quot;')+'">'+
-        '<span class="name">'+String(p.code||'')+' — '+String(p.name||'')+'</span>'+
-        '<span class="price">'+(typeof money==='function'?money(p.price):('R'+Number(p.price||0).toFixed(2)))+'</span></button>'
-      ).join('');
-      if(typeof cats==='function') try{cats();}catch(_){}
-    }
-  }catch(e){ console.error('V73 force menu',e); }
-}
-document.addEventListener('click',function(e){
-  const b=e.target.closest&&e.target.closest('#products .product');
-  if(!b)return;
-  const code=b.getAttribute('data-sales-code');
-  if(!code)return;
-  try{
-    if(typeof addSaleProduct==='function') addSaleProduct(code);
-    else if(typeof add==='function') add(code);
-  }catch(err){console.error('V73 add product',err);}
-},true);
-setInterval(forceMenu,1000);
-setTimeout(forceMenu,250);
-setTimeout(forceMenu,1200);
-})();
-</script>
-<!-- BUILD: SALESPERSON_FORCE_MENU_V73 -->
-
-<!-- BUILD: V74 FULL JAVASCRIPT SYNTAX REPAIR -->
+\n<script>\n/* V71 — MANAGER STORE PROFIT / LOSS RESTORE */\n(function(){\n'use strict';\nif(window.__fvPLV71)return; window.__fvPLV71=true;\nconst BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1', KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';\nconst E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\nconst M=n=>'R'+Number(n||0).toFixed(2);\nfunction U(){return window.currentUser||window.salesSessionUser||window.inventorySessionUser||null}\nfunction T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return''}\nasync function A(path){let r=await fetch(BASE+'/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+T()}}),t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):[]}\nfunction today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}\nfunction monthStart(){let d=today();return d.slice(0,8)+'01'}\nfunction install(){\n let rp=document.getElementById('reportsPanel'); if(!rp)return;\n let box=document.getElementById('fvProfitLossV71');\n if(!box){box=document.createElement('section');box.id='fvProfitLossV71';box.style='margin-top:24px;border-top:3px solid #111;padding-top:18px';box.innerHTML=`<h2>Store Profit / Loss</h2><p class="small">Manager only. Compare sales/income and expenses per store for the selected period.</p><div class="order-head" style="gap:10px;align-items:end;flex-wrap:wrap"><label><b>Store</b><br><select id="fvPLStoreV71"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BOTH">Both Stores</option></select></label><label><b>From Date</b><br><input id="fvPLFromV71" type="date"></label><label><b>To Date</b><br><input id="fvPLToV71" type="date"></label><button class="primary" onclick="fvLoadPLV71()">VIEW PROFIT / LOSS</button><button class="secondary" onclick="fvPrintPLV71()">PRINT / SAVE PDF</button></div><div id="fvPLResultV71" style="margin-top:14px"></div>`;rp.appendChild(box);document.getElementById('fvPLFromV71').value=monthStart();document.getElementById('fvPLToV71').value=today()}\n let manager=U()?.role==='manager'; box.style.display=manager?'block':'none';\n}\nasync function one(sc,f,t){let [sales,inc,exp]=await Promise.all([A('pos_sales?select=total&store_code=eq.'+sc+'&sale_date=gte.'+f+'&sale_date=lte.'+t),A('pos_other_income?select=category,amount&store_code=eq.'+sc+'&transaction_date=gte.'+f+'&transaction_date=lte.'+t),A('pos_store_expenses?select=category,description,amount&store_code=eq.'+sc+'&expense_date=gte.'+f+'&expense_date=lte.'+t+'&order=expense_date.desc')]);let st=sales.reduce((a,x)=>a+Number(x.total||0),0),ot=inc.reduce((a,x)=>a+Number(x.amount||0),0),et=exp.reduce((a,x)=>a+Number(x.amount||0),0),cats={};exp.forEach(x=>cats[x.category||'Other']=(cats[x.category||'Other']||0)+Number(x.amount||0));return{sc,st,ot,et,profit:st+ot-et,cats}}\nwindow.fvLoadPLV71=async function(){try{if(U()?.role!=='manager')throw Error('Manager access required.');let f=document.getElementById('fvPLFromV71').value,t=document.getElementById('fvPLToV71').value,s=document.getElementById('fvPLStoreV71').value;if(!f||!t)throw Error('Select From Date and To Date.');let stores=s==='BOTH'?['NDAYENI','SIVANA']:[s],rows=await Promise.all(stores.map(x=>one(x,f,t)));let total={st:0,ot:0,et:0,profit:0};rows.forEach(x=>{total.st+=x.st;total.ot+=x.ot;total.et+=x.et;total.profit+=x.profit});let h='<h3>Profit / Loss — '+E(s==='BOTH'?'Both Stores':s)+'</h3><p><b>Period:</b> '+f+' to '+t+'</p><table class="inv-table"><tr><th>Store</th><th>POS Sales</th><th>Other Income</th><th>Total Income</th><th>Expenses</th><th>Profit / (Loss)</th></tr>'+rows.map(x=>'<tr><td><b>'+E(x.sc)+'</b></td><td>'+M(x.st)+'</td><td>'+M(x.ot)+'</td><td>'+M(x.st+x.ot)+'</td><td>'+M(x.et)+'</td><td><b>'+M(x.profit)+'</b></td></tr>').join('');if(rows.length>1)h+='<tr><td><b>TOTAL</b></td><td><b>'+M(total.st)+'</b></td><td><b>'+M(total.ot)+'</b></td><td><b>'+M(total.st+total.ot)+'</b></td><td><b>'+M(total.et)+'</b></td><td><b>'+M(total.profit)+'</b></td></tr>';h+='</table>';rows.forEach(x=>{h+='<h4>'+E(x.sc)+' — Expense Breakdown</h4><table class="inv-table"><tr><th>Expense Category</th><th>Amount</th></tr>'+Object.entries(x.cats).map(([c,v])=>'<tr><td>'+E(c)+'</td><td>'+M(v)+'</td></tr>').join('')+(Object.keys(x.cats).length?'':'<tr><td colspan="2">No expenses captured for this period.</td></tr>')+'</table>'});h+='<p class="small">Profit / (Loss) = POS Sales + Other Income − Store Expenses. Live database — updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</p>';document.getElementById('fvPLResultV71').innerHTML=h}catch(e){alert('Profit / Loss: '+e.message)}};\nwindow.fvPrintPLV71=function(){let h=document.getElementById('fvPLResultV71')?.innerHTML;if(!h){alert('View the Profit / Loss report first.');return}let w=open('','_blank');w.document.write('<html><head><title>Store Profit Loss</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;margin:10px 0 22px}th,td{border:1px solid #bbb;padding:7px;text-align:left}</style></head><body><h1>Feasterville Food — Store Profit / Loss</h1>'+h+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),300)};\nsetInterval(install,800);document.addEventListener('DOMContentLoaded',install);setTimeout(install,500);\n})();\n</script>\n<!-- BUILD: MANAGER_STORE_PROFIT_LOSS_V71 -->\n
 </body>
 </html>
