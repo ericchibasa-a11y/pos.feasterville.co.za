@@ -485,6 +485,57 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 </section>
 
 
+<section class="panel manager-only" id="costingProfitPanel" style="grid-column:1/-1;display:none">
+  <h2>Costing & Pricing / Profitability</h2>
+  <p class="small">Manager only. Capture purchase costs for production inputs and direct costs for sellable items. The system uses recipes to calculate product cost, gross profit, margin and suggested selling price.</p>
+  <div class="order-head" style="align-items:end;flex-wrap:wrap">
+    <label><b>Store</b><br><select id="costStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label>
+    <label><b>Target Gross Margin %</b><br><input id="costTargetMargin" type="number" min="0" max="99" step="0.1" value="35" style="width:120px"></label>
+    <label><b>Overhead Allowance %</b><br><input id="costOverheadPct" type="number" min="0" max="99" step="0.1" value="0" style="width:120px"></label>
+    <label><b>Mr D Fee %</b><br><input id="costMrdFeePct" type="number" min="0" max="99" step="0.1" value="0" style="width:120px"></label>
+    <button type="button" class="primary" id="saveCostSettingsBtn">SAVE SETTINGS</button>
+    <button type="button" class="secondary" id="refreshCostingBtn">REFRESH</button>
+  </div>
+  <p class="small" id="costingStatus"></p>
+  <h3>1. Capture Production Input Purchase Cost</h3>
+  <div class="order-head" style="align-items:end;flex-wrap:wrap">
+    <label><b>Production Input</b><br><select id="costInputCode" style="min-width:260px"></select></label>
+    <label><b>Purchase Date</b><br><input id="costPurchaseDate" type="date"></label>
+    <label><b>Quantity Purchased</b><br><input id="costPurchaseQty" type="number" min="0.001" step="0.001" value="1" style="width:130px"></label>
+    <label><b>Total Purchase Cost (R)</b><br><input id="costPurchaseTotal" type="number" min="0" step="0.01" placeholder="0.00" style="width:150px"></label>
+    <label><b>Supplier</b><br><input id="costSupplier" placeholder="Optional" style="width:180px"></label>
+    <button type="button" class="primary" id="saveInputCostBtn">SAVE PURCHASE COST</button>
+  </div>
+  <div id="costInputHint" class="small"></div>
+  <div style="overflow:auto;margin-top:10px"><table class="inv-table">
+    <thead><tr><th>Input</th><th>Unit</th><th>Latest Cost / Unit</th><th>Weighted Avg Cost / Unit</th><th>Last Purchase</th><th>Supplier</th></tr></thead>
+    <tbody id="inputCostRows"><tr><td colspan="6">Open this section to load costing.</td></tr></tbody>
+  </table></div>
+  <h3>2. Direct Cost for Sellable Items Without a Recipe</h3>
+  <div class="order-head" style="align-items:end;flex-wrap:wrap">
+    <label><b>Sellable Product</b><br><select id="directCostProduct" style="min-width:300px"></select></label>
+    <label><b>Cost per Item (R)</b><br><input id="directCostValue" type="number" min="0" step="0.01" placeholder="0.00" style="width:140px"></label>
+    <button type="button" class="primary" id="saveDirectCostBtn">SAVE DIRECT COST</button>
+  </div>
+  <p class="small">Use this for bought-in items such as drinks, packaged ice cream or other products sold directly. Recipe-based food items use their production-input costs automatically.</p>
+  <h3>3. Product Profitability</h3>
+  <div class="order-head" style="align-items:end;flex-wrap:wrap">
+    <label><b>Menu</b><br><select id="profitMenuFilter"><option value="ALL">All Products</option><option value="STORE">Store Menu</option><option value="MRD">Mr D Menu</option></select></label>
+    <label><b>Profitability</b><br><select id="profitStatusFilter"><option value="ALL">All</option><option value="GOOD">Good Margin</option><option value="LOW">Low Margin</option><option value="LOSS">Loss</option><option value="MISSING">Missing Cost</option></select></label>
+    <input id="profitSearch" placeholder="Search code or product" style="min-width:220px">
+  </div>
+  <div class="inv-grid" style="margin-top:10px">
+    <div class="inv-card">Products Costed<br><b id="profitCostedCount">0</b></div>
+    <div class="inv-card">Good Margin<br><b id="profitGoodCount">0</b></div>
+    <div class="inv-card">Low Margin / Loss<br><b id="profitRiskCount">0</b></div>
+    <div class="inv-card">Missing Cost<br><b id="profitMissingCount">0</b></div>
+  </div>
+  <div style="overflow:auto;margin-top:10px"><table class="inv-table">
+    <thead><tr><th>Code</th><th>Product</th><th>Menu</th><th>Selling Price</th><th>Ingredient / Direct Cost</th><th>Overhead</th><th>Mr D Fee</th><th>Total Cost</th><th>Gross Profit</th><th>Margin %</th><th>Suggested Price</th><th>Status</th></tr></thead>
+    <tbody id="profitabilityRows"><tr><td colspan="12">Open this section to load profitability.</td></tr></tbody>
+  </table></div>
+</section>
+
 <div id="managerInventoryNav" class="panel" style="grid-column:1/-1;display:none">
   <h2>Manager — Inventory & Reports</h2>
   <p class="small">Quick access to production inputs, usage, stock movements, reconciliation and reports.</p>
@@ -494,6 +545,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
     <button type="button" class="cat" data-manager-target="stockMovementPanel">STOCK MOVEMENTS</button>
     <button type="button" class="cat" data-manager-target="reconPanel">STOCK RECONCILIATION</button>
     <button type="button" class="cat" data-manager-target="reportsPanel">SALES & INVENTORY REPORTS</button>
+    <button type="button" class="cat" data-manager-target="costingProfitPanel">COSTING & PROFITABILITY</button>
   </div>
 </div>
 
@@ -6710,6 +6762,41 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
 })();
 </script>
 <!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+<script>
+(function(){
+  if(window.__fvCostingProfitV47) return;
+  window.__fvCostingProfitV47=true;
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const TOKEN=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+  const $=id=>document.getElementById(id);
+  let state={store:'NDAYENI',inputs:[],products:[],recipes:[],purchases:[],direct:[],settings:{target_margin_pct:35,overhead_pct:0,mrd_fee_pct:0},profit:[]};
+  function authHeaders(extra){const t=TOKEN();return Object.assign({'apikey':KEY,'Authorization':'Bearer '+t,'Content-Type':'application/json'},extra||{});}
+  async function api(path,opt={}){if(!TOKEN()) throw new Error('Manager session not available. Please sign in again.');const r=await fetch(BASE+path,Object.assign({},opt,{headers:authHeaders(opt.headers)}));const txt=await r.text();let data=null;try{data=txt?JSON.parse(txt):null}catch(_){data=txt}if(!r.ok)throw new Error((data&&data.message)||txt||('HTTP '+r.status));return data;}
+  const money=n=>'R'+Number(n||0).toFixed(2),num=n=>Number(n||0);
+  const esc=s=>String(s??'').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[m]));
+  function today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'});} function status(msg,err){if($('costingStatus')){$('costingStatus').textContent=msg||'';$('costingStatus').style.color=err?'#b00020':'';}} function isManager(){return (window.currentUser?.role||window.salesSessionUser?.role)==='manager';}
+  async function load(){if(!isManager())return;state.store=$('costStore')?.value||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';status('Loading costing and profitability...');try{const st=encodeURIComponent(state.store);const [inputs,products,recipes,purchases,direct,settings]=await Promise.all([
+    api('/pos_store_production_inputs?store_code=eq.'+st+'&active=eq.true&select=code,name,unit,category,preferred_supplier&order=name'),
+    api('/pos_store_products?store_code=eq.'+st+'&active=eq.true&select=code,name,category,price&order=category,name'),
+    api('/pos_store_product_recipes?store_code=eq.'+st+'&select=product_code,recipe'),
+    api('/pos_input_purchase_costs?store_code=eq.'+st+'&select=id,input_code,purchase_date,purchase_qty,purchase_unit,total_purchase_cost,supplier,created_at&order=purchase_date.desc,id.desc'),
+    api('/pos_direct_product_costs?store_code=eq.'+st+'&select=product_code,cost_per_unit,effective_date,notes'),
+    api('/pos_store_cost_settings?store_code=eq.'+st+'&select=target_margin_pct,overhead_pct,mrd_fee_pct')]);state.inputs=inputs||[];state.products=products||[];state.recipes=recipes||[];state.purchases=purchases||[];state.direct=direct||[];state.settings=(settings&&settings[0])||{target_margin_pct:35,overhead_pct:0,mrd_fee_pct:0};renderControls();renderInputCosts();calculateProfit();renderProfit();status('Costing loaded for '+state.store+'.');}catch(e){console.error(e);status(e.message,true);}}
+  function renderControls(){if($('costTargetMargin'))$('costTargetMargin').value=num(state.settings.target_margin_pct);if($('costOverheadPct'))$('costOverheadPct').value=num(state.settings.overhead_pct);if($('costMrdFeePct'))$('costMrdFeePct').value=num(state.settings.mrd_fee_pct);if($('costPurchaseDate')&&!$('costPurchaseDate').value)$('costPurchaseDate').value=today();if($('costInputCode'))$('costInputCode').innerHTML=state.inputs.map(x=>`<option value="${esc(x.code)}">${esc(x.code)} — ${esc(x.name)} (${esc(x.unit||'unit')})</option>`).join('');if($('directCostProduct'))$('directCostProduct').innerHTML='<option value="">-- Select Product --</option>'+state.products.map(x=>`<option value="${esc(x.code)}">${esc(x.code)} — ${esc(x.name)}</option>`).join('');updateInputHint();}
+  function purchaseStats(code){const rows=state.purchases.filter(x=>x.input_code===code);if(!rows.length)return{latest:null,avg:null};const latest=rows[0],qty=rows.reduce((a,x)=>a+num(x.purchase_qty),0),cost=rows.reduce((a,x)=>a+num(x.total_purchase_cost),0);return{latest:Object.assign({},latest,{unit_cost:num(latest.total_purchase_cost)/num(latest.purchase_qty)}),avg:qty>0?cost/qty:null};}
+  function renderInputCosts(){if(!$('inputCostRows'))return;$('inputCostRows').innerHTML=state.inputs.map(i=>{const s=purchaseStats(i.code);return`<tr><td>${esc(i.code)} — ${esc(i.name)}</td><td>${esc(i.unit||'unit')}</td><td>${s.latest?money(s.latest.unit_cost):'Missing'}</td><td>${s.avg!=null?money(s.avg):'Missing'}</td><td>${s.latest?esc(s.latest.purchase_date):'-'}</td><td>${s.latest?esc(s.latest.supplier||''):'-'}</td></tr>`}).join('')||'<tr><td colspan="6">No production inputs found.</td></tr>';}
+  function updateInputHint(){const code=$('costInputCode')?.value,i=state.inputs.find(x=>x.code===code),s=purchaseStats(code);if($('costInputHint'))$('costInputHint').textContent=i?`Enter the quantity purchased in ${i.unit||'the input unit'} and the total amount paid. Current weighted average: ${s.avg!=null?money(s.avg):'not yet captured'} per ${i.unit||'unit'}.`:'';}
+  async function savePurchase(){const code=$('costInputCode').value,qty=num($('costPurchaseQty').value),total=num($('costPurchaseTotal').value),input=state.inputs.find(x=>x.code===code);if(!code||qty<=0||total<0||!$('costPurchaseTotal').value){alert('Enter the production input, purchase quantity and total purchase cost.');return;}try{await api('/pos_input_purchase_costs',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify({store_code:state.store,input_code:code,purchase_date:$('costPurchaseDate').value||today(),purchase_qty:qty,purchase_unit:input?.unit||null,total_purchase_cost:total,supplier:$('costSupplier').value.trim()||null})});$('costPurchaseTotal').value='';$('costSupplier').value='';status('Purchase cost saved.');await load();}catch(e){status(e.message,true);}}
+  async function saveDirect(){const code=$('directCostProduct').value,cost=num($('directCostValue').value);if(!code||!$('directCostValue').value||cost<0){alert('Select a product and enter its direct cost per item.');return;}try{await api('/pos_direct_product_costs?on_conflict=store_code,product_code',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({store_code:state.store,product_code:code,cost_per_unit:cost,effective_date:today()})});$('directCostValue').value='';status('Direct product cost saved.');await load();}catch(e){status(e.message,true);}}
+  async function saveSettings(){const payload={store_code:state.store,target_margin_pct:num($('costTargetMargin').value),overhead_pct:num($('costOverheadPct').value),mrd_fee_pct:num($('costMrdFeePct').value)};if(payload.target_margin_pct>=100||payload.overhead_pct>=100||payload.mrd_fee_pct>=100){alert('Percentages must be below 100%.');return;}try{await api('/pos_store_cost_settings?on_conflict=store_code',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(payload)});status('Costing settings saved.');await load();}catch(e){status(e.message,true);}}
+  function calculateProfit(){const recMap=Object.fromEntries(state.recipes.map(r=>[r.product_code,Array.isArray(r.recipe)?r.recipe:[]])),dirMap=Object.fromEntries(state.direct.map(d=>[d.product_code,num(d.cost_per_unit)])),inputCost={};state.inputs.forEach(i=>inputCost[i.code]=purchaseStats(i.code).avg);const target=num(state.settings.target_margin_pct)/100,overheadPct=num(state.settings.overhead_pct)/100,mrdFeePct=num(state.settings.mrd_fee_pct)/100;state.profit=state.products.map(p=>{const recipe=recMap[p.code]||[];let base=null,missing=[];if(recipe.length){base=0;recipe.forEach(x=>{const c=inputCost[x.inputCode||x.input_code];if(c==null)missing.push(x.inputCode||x.input_code);else base+=c*num(x.qty);});if(missing.length)base=null;}else if(Object.prototype.hasOwnProperty.call(dirMap,p.code))base=dirMap[p.code];const sp=num(p.price),isMrd=String(p.code).startsWith('MRD-')||String(p.category||'').toUpperCase().includes('MR D'),overhead=base==null?null:base*overheadPct,fee=base==null?null:(isMrd?sp*mrdFeePct:0),totalCost=base==null?null:base+overhead+fee,gp=totalCost==null?null:sp-totalCost,margin=(gp==null||sp<=0)?null:(gp/sp*100),denominator=1-target-(isMrd?mrdFeePct:0),suggested=(base==null||denominator<=0)?null:(base*(1+overheadPct))/denominator;let stat='MISSING';if(totalCost!=null){if(gp<0)stat='LOSS';else if(margin<num(state.settings.target_margin_pct))stat='LOW';else stat='GOOD';}return{code:p.code,name:p.name,category:p.category,sp,isMrd,base,overhead,fee,totalCost,gp,margin,suggested,stat,missing};});}
+  function renderProfit(){if(!$('profitabilityRows'))return;const menu=$('profitMenuFilter')?.value||'ALL',sf=$('profitStatusFilter')?.value||'ALL',q=($('profitSearch')?.value||'').trim().toLowerCase();let rows=state.profit.filter(x=>(menu==='ALL'||(menu==='MRD'&&x.isMrd)||(menu==='STORE'&&!x.isMrd))&&(sf==='ALL'||x.stat===sf)&&(!q||(x.code+' '+x.name).toLowerCase().includes(q)));const badge=x=>x.stat==='GOOD'?'GOOD':x.stat==='LOW'?'LOW MARGIN':x.stat==='LOSS'?'LOSS':'MISSING COST';$('profitabilityRows').innerHTML=rows.map(x=>`<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td>${x.isMrd?'Mr D':'Store'}</td><td>${money(x.sp)}</td><td>${x.base==null?'<b>Missing</b>':money(x.base)}</td><td>${x.overhead==null?'-':money(x.overhead)}</td><td>${x.fee==null?'-':money(x.fee)}</td><td>${x.totalCost==null?'-':money(x.totalCost)}</td><td>${x.gp==null?'-':money(x.gp)}</td><td>${x.margin==null?'-':x.margin.toFixed(1)+'%'}</td><td>${x.suggested==null?'-':money(x.suggested)}</td><td><b>${badge(x)}</b>${x.missing?.length?'<br><span class="small">Missing: '+esc(x.missing.join(', '))+'</span>':''}</td></tr>`).join('')||'<tr><td colspan="12">No products match this filter.</td></tr>';const costed=state.profit.filter(x=>x.totalCost!=null).length,good=state.profit.filter(x=>x.stat==='GOOD').length,risk=state.profit.filter(x=>x.stat==='LOW'||x.stat==='LOSS').length,missing=state.profit.filter(x=>x.stat==='MISSING').length;$('profitCostedCount').textContent=costed;$('profitGoodCount').textContent=good;$('profitRiskCount').textContent=risk;$('profitMissingCount').textContent=missing;}
+  function bind(){$('costStore')?.addEventListener('change',load);$('refreshCostingBtn')?.addEventListener('click',load);$('saveInputCostBtn')?.addEventListener('click',savePurchase);$('saveDirectCostBtn')?.addEventListener('click',saveDirect);$('saveCostSettingsBtn')?.addEventListener('click',saveSettings);$('costInputCode')?.addEventListener('change',updateInputHint);['profitMenuFilter','profitStatusFilter'].forEach(id=>$(id)?.addEventListener('change',renderProfit));$('profitSearch')?.addEventListener('input',renderProfit);document.querySelectorAll('[data-manager-target="costingProfitPanel"]').forEach(b=>b.addEventListener('click',()=>setTimeout(load,50)));}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();window.loadCostingProfitability=load;
+})();
+</script>
 
 </body>
 </html>
