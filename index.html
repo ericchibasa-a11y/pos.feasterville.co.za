@@ -485,6 +485,33 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 </section>
 
 
+<section class="panel manager-only" id="profitLossPanel" style="grid-column:1/-1;display:none">
+  <h2>Store Profit &amp; Loss</h2>
+  <p class="small">Manager only. Uses live POS sales, other income and captured store expenses. Sales are taken directly from completed POS sales to avoid cash-up duplication.</p>
+  <div class="order-head" style="align-items:end;flex-wrap:wrap">
+    <label><b>Store</b><br><select id="plStore"><option value="ALL">All Stores</option><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label>
+    <label><b>From Date</b><br><input id="plFrom" type="date"></label>
+    <label><b>To Date</b><br><input id="plTo" type="date"></label>
+    <button type="button" class="primary" id="plRefreshBtn">VIEW PROFIT / LOSS</button>
+    <button type="button" class="secondary" id="plThisMonthBtn">THIS MONTH</button>
+    <button type="button" class="secondary" id="plPrintBtn">PRINT / SAVE PDF</button>
+  </div>
+  <p id="plStatus" class="small"></p>
+  <div id="plPrintArea">
+    <div class="inv-grid" style="margin-top:10px">
+      <div class="inv-card">Sales Income<br><b id="plSales">R0.00</b></div>
+      <div class="inv-card">Other Income<br><b id="plOtherIncome">R0.00</b></div>
+      <div class="inv-card">Total Income<br><b id="plIncome">R0.00</b></div>
+      <div class="inv-card">Total Expenses<br><b id="plExpenses">R0.00</b></div>
+      <div class="inv-card">Net Profit / (Loss)<br><b id="plNet">R0.00</b></div>
+    </div>
+    <h3>Profit &amp; Loss Statement</h3>
+    <div style="overflow:auto"><table class="inv-table"><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody id="plStatementRows"><tr><td colspan="2">Open this section to load the live Profit &amp; Loss statement.</td></tr></tbody></table></div>
+    <h3>Expense Breakdown</h3>
+    <div style="overflow:auto"><table class="inv-table"><thead><tr><th>Expense Category</th><th style="text-align:right">Amount</th><th style="text-align:right">% of Expenses</th></tr></thead><tbody id="plExpenseRows"><tr><td colspan="3">No data loaded.</td></tr></tbody></table></div>
+  </div>
+</section>
+
 <section class="panel manager-only" id="costingProfitPanel" style="grid-column:1/-1;display:none">
   <h2>Costing & Pricing / Profitability</h2>
   <p class="small">Manager only. Capture purchase costs for production inputs and direct costs for sellable items. The system uses recipes to calculate product cost, gross profit, margin and suggested selling price.</p>
@@ -545,6 +572,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
     <button type="button" class="cat" data-manager-target="stockMovementPanel">STOCK MOVEMENTS</button>
     <button type="button" class="cat" data-manager-target="reconPanel">STOCK RECONCILIATION</button>
     <button type="button" class="cat" data-manager-target="reportsPanel">SALES & INVENTORY REPORTS</button>
+    <button type="button" class="cat" data-manager-target="profitLossPanel">PROFIT & LOSS</button>
     <button type="button" class="cat" data-manager-target="costingProfitPanel">COSTING & PROFITABILITY</button>
   </div>
 </div>
@@ -6594,7 +6622,7 @@ async function render(){
 }
 window.refreshProductionInputCountSheetV63=render;
 // neutralize stale renderers by restoring our rows after they run
-setInterval(()=>{const b=document.getElementById('productionCountBody');const a=document.activeElement;if(document.visibilityState==='visible'&&b&&!(a&&b.contains(a)))render().catch(()=>{})},5000);
+/* V48 disabled V63 timed redraw; V48 confirmation renderer owns count sheet. */
 document.addEventListener('click',e=>{if(/production input count sheet|inventory/i.test(e.target?.textContent||''))setTimeout(()=>render().catch(console.error),250)},true);
 const oldReceive=window.receiveProductionStock;
 if(typeof oldReceive==='function')window.receiveProductionStock=async function(){let x=await oldReceive.apply(this,arguments);setTimeout(()=>render().catch(console.error),1000);return x};
@@ -6798,5 +6826,79 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
 })();
 </script>
 
+
+<script>
+/* V48 — RESTORE MANAGER PROFIT & LOSS */
+(function(){
+'use strict';
+if(window.__fvProfitLossV48)return;window.__fvProfitLossV48=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const U=()=>window.inventorySessionUser||window.currentUser||window.salesSessionUser||{};
+const tok=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||'';
+const money=n=>'R'+Number(n||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function day(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
+function monthStart(){return day().slice(0,8)+'01'}
+async function api(path){const r=await fetch(BASE+'/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+tok()}}),t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):[]}
+function setDates(){const f=document.getElementById('plFrom'),t=document.getElementById('plTo');if(f&&!f.value)f.value=monthStart();if(t&&!t.value)t.value=day()}
+function sum(a,k){return (a||[]).reduce((x,r)=>x+Number(r[k]||0),0)}
+async function load(){
+ if(U().role!=='manager')return;setDates();
+ const st=document.getElementById('plStore')?.value||'ALL',from=document.getElementById('plFrom')?.value,to=document.getElementById('plTo')?.value;
+ if(!from||!to)return alert('Select From Date and To Date.');if(from>to)return alert('From Date cannot be after To Date.');
+ const sf=st==='ALL'?'':'&store_code=eq.'+encodeURIComponent(st),status=document.getElementById('plStatus');if(status)status.textContent='Loading live Profit & Loss...';
+ try{
+  const [sales,other,exp]=await Promise.all([
+   api('pos_sales?select=store_code,total,sale_date&sale_date=gte.'+from+'&sale_date=lte.'+to+sf),
+   api('pos_other_income?select=store_code,amount,category,transaction_date&transaction_date=gte.'+from+'&transaction_date=lte.'+to+sf),
+   api('pos_store_expenses?select=store_code,amount,category,expense_date&expense_date=gte.'+from+'&expense_date=lte.'+to+sf)
+  ]);
+  const salesTotal=sum(sales,'total'),otherTotal=sum(other,'amount'),income=salesTotal+otherTotal,expenses=sum(exp,'amount'),net=income-expenses;
+  document.getElementById('plSales').textContent=money(salesTotal);document.getElementById('plOtherIncome').textContent=money(otherTotal);document.getElementById('plIncome').textContent=money(income);document.getElementById('plExpenses').textContent=money(expenses);
+  const ne=document.getElementById('plNet');ne.textContent=money(net);ne.style.color=net<0?'#b00020':'#176b2c';
+  const by={};(exp||[]).forEach(x=>{const c=x.category||'Other Expenses';by[c]=(by[c]||0)+Number(x.amount||0)});
+  document.getElementById('plStatementRows').innerHTML='<tr><td>POS Sales</td><td style="text-align:right">'+money(salesTotal)+'</td></tr><tr><td>Other Income</td><td style="text-align:right">'+money(otherTotal)+'</td></tr><tr><td><b>Total Income</b></td><td style="text-align:right"><b>'+money(income)+'</b></td></tr><tr><td colspan="2"><b>Less: Expenses</b></td></tr>'+(Object.keys(by).sort().map(c=>'<tr><td>&nbsp;&nbsp;'+esc(c)+'</td><td style="text-align:right">'+money(by[c])+'</td></tr>').join('')||'<tr><td>&nbsp;&nbsp;No expenses captured</td><td style="text-align:right">R0.00</td></tr>')+'<tr><td><b>Total Expenses</b></td><td style="text-align:right"><b>'+money(expenses)+'</b></td></tr><tr><td><b>NET '+(net<0?'LOSS':'PROFIT')+'</b></td><td style="text-align:right"><b>'+money(net)+'</b></td></tr>';
+  document.getElementById('plExpenseRows').innerHTML=Object.keys(by).sort((a,b)=>by[b]-by[a]).map(c=>'<tr><td>'+esc(c)+'</td><td style="text-align:right">'+money(by[c])+'</td><td style="text-align:right">'+(expenses?((by[c]/expenses)*100).toFixed(1):'0.0')+'%</td></tr>').join('')||'<tr><td colspan="3">No expenses captured for this period.</td></tr>';
+  if(status)status.textContent=(st==='ALL'?'All Stores':st)+' — '+from+' to '+to+' — '+sales.length+' completed sale(s).';
+ }catch(e){console.error(e);if(status)status.textContent='Could not load Profit & Loss: '+e.message}
+}
+window.loadProfitLossV48=load;
+function install(){setDates();const r=document.getElementById('plRefreshBtn'),m=document.getElementById('plThisMonthBtn'),p=document.getElementById('plPrintBtn');if(r&&!r.dataset.v48){r.dataset.v48='1';r.onclick=load}if(m&&!m.dataset.v48){m.dataset.v48='1';m.onclick=()=>{document.getElementById('plFrom').value=monthStart();document.getElementById('plTo').value=day();load()}}if(p&&!p.dataset.v48){p.dataset.v48='1';p.onclick=()=>{const a=document.getElementById('plPrintArea');if(!a)return;const w=window.open('','_blank','width=1000,height=800');if(!w)return alert('Please allow pop-ups to print the Profit & Loss.');w.document.write('<!doctype html><html><head><title>Feasterville Profit & Loss</title><style>@page{size:A4;margin:12mm}body{font-family:Arial}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:7px}.inv-grid{display:flex;gap:8px;flex-wrap:wrap}.inv-card{border:1px solid #ccc;padding:8px;min-width:150px}</style></head><body><h2>Feasterville Store Profit & Loss</h2><p>'+esc(document.getElementById('plStatus')?.textContent||'')+'</p>'+a.innerHTML+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),300)}}}
+setTimeout(install,300);
+document.addEventListener('click',e=>{if((e.target?.dataset?.managerTarget||'')==='profitLossPanel')setTimeout(()=>{install();load()},100)},true);
+})();
+</script>
+<!-- BUILD: RESTORED_PROFIT_LOSS_V48 -->
+
+<script>
+/* V48 — INVENTORY CONTROLLER COUNT SHEET CONFIRMATION */
+(function(){
+'use strict';
+if(window.__fvCountConfirmV48)return;window.__fvCountConfirmV48=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1',KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const drafts={};let current={};
+const U=()=>window.inventorySessionUser||window.currentUser||{};
+function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||''}
+function store(){const u=U();return String(u.role==='inventory_control'?(u.store_code||u.assigned_store||'NDAYENI'):(document.getElementById('storeLocationSelect')?.value||localStorage.getItem('feastervilleStoreCode')||'NDAYENI')).toUpperCase()}
+function day(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
+async function req(path,opt={}){const r=await fetch(BASE+'/'+path,{...opt,headers:{apikey:KEY,Authorization:'Bearer '+tok(),'Content-Type':'application/json',...(opt.headers||{})}}),t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):[]}
+async function render(){
+ const body=document.getElementById('productionCountBody');if(!body||!tok()||!['manager','inventory_control'].includes(U().role))return;
+ const sc=store(),d=day(),[inputs,counts]=await Promise.all([req('pos_store_production_inputs?select=code,name,unit&store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&order=name.asc'),req('pos_store_input_counts?select=input_code,opening_qty,received_qty,used_qty,physical_count&store_code=eq.'+encodeURIComponent(sc)+'&count_date=eq.'+d)]);
+ current={};counts.forEach(x=>current[x.input_code]=x);
+ body.innerHTML=inputs.map(i=>{const c=current[i.code]||{},o=+c.opening_qty||0,r=+c.received_qty||0,u=+c.used_qty||0,p=+c.physical_count||0,e=o+r-u,shown=Object.prototype.hasOwnProperty.call(drafts,i.code)?Number(drafts[i.code]||0):p,v=shown-e,act=Math.abs(v)<.0005?'OK':(v<0?'INVESTIGATE SHORTAGE':'INVESTIGATE SURPLUS');return '<tr><td>'+i.code+'</td><td>'+i.name+'</td><td>'+(i.unit||'')+'</td><td><b>'+e.toFixed(2)+'</b></td><td><input type="number" step="0.001" class="stock-input fv48physical" data-code="'+i.code+'" value="'+shown+'" style="max-width:165px"></td><td>'+v.toFixed(2)+'</td><td>'+act+'</td></tr>'}).join('');
+ body.querySelectorAll('.fv48physical').forEach(el=>el.addEventListener('input',function(){drafts[this.dataset.code]=this.value}));
+ let refresh=document.getElementById('fv48CountRefresh');if(!refresh){refresh=document.createElement('button');refresh.id='fv48CountRefresh';refresh.className='secondary';refresh.textContent='REFRESH COUNT SHEET';refresh.style.margin='8px 8px 8px 0';body.closest('table').before(refresh);refresh.onclick=()=>{Object.keys(drafts).forEach(k=>delete drafts[k]);render().catch(e=>alert('Could not refresh count sheet: '+e.message))}}
+ let save=document.getElementById('fv48CountConfirm');if(!save){save=document.createElement('button');save.id='fv48CountConfirm';save.className='primary';save.textContent='CONFIRM & SAVE COUNT SHEET';save.style.margin='8px 0';refresh.insertAdjacentElement('afterend',save);save.onclick=confirmSave}
+ let st=document.getElementById('fv48CountStatus');if(!st){st=document.createElement('span');st.id='fv48CountStatus';st.className='small';st.style.marginLeft='10px';save.insertAdjacentElement('afterend',st)}st.textContent='Enter physical quantities, then confirm once. Changes are not saved until confirmed.';
+}
+async function confirmSave(){const entries=Object.entries(drafts);if(!entries.length)return alert('No count changes to confirm. Enter the physical counts first.');if(!confirm('Confirm and save '+entries.length+' count change(s) for '+store()+'?'))return;const b=document.getElementById('fv48CountConfirm');b.disabled=true;b.textContent='SAVING COUNTS...';try{for(const [code,val] of entries){const c=current[code]||{};await req('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({store_code:store(),input_code:code,count_date:day(),opening_qty:Number(c.opening_qty)||0,received_qty:Number(c.received_qty)||0,used_qty:Number(c.used_qty)||0,physical_count:Number(val)||0})})}Object.keys(drafts).forEach(k=>delete drafts[k]);await render();if(window.refreshLiveReconV55)await window.refreshLiveReconV55();alert('Count sheet confirmed and saved successfully.')}catch(e){alert('Could not confirm count sheet: '+e.message)}finally{b.disabled=false;b.textContent='CONFIRM & SAVE COUNT SHEET'}}
+window.refreshProductionInputCountSheetV63=render;window.refreshProductionInputCountSheetV48=render;
+setTimeout(()=>render().catch(()=>{}),900);
+setInterval(()=>{const b=document.getElementById('productionCountBody'),a=document.activeElement;if(document.visibilityState==='visible'&&b&&!(a&&b.contains(a))&&!Object.keys(drafts).length)render().catch(()=>{})},6000);
+document.addEventListener('click',e=>{if(/production input count sheet|inventory/i.test(e.target?.textContent||''))setTimeout(()=>render().catch(()=>{}),350)},true);
+})();
+</script>
+<!-- BUILD: COUNT_SHEET_CONFIRMATION_V48 -->
 </body>
 </html>
