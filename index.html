@@ -381,7 +381,6 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 
 <section class="panel" id="masterProductionEditorPanel" style="grid-column:1/-1">
 <h2>Master Production Inputs — Add / Edit Products</h2>
-<div id="fvLiveMasterInputStatus" class="small" style="margin:6px 0 10px 0"><b>LIVE DATABASE:</b> Select Ndayini or Sivana, then add or edit inputs for that store.</div>
 <p class="small">Add new production inputs or edit existing production inputs. Changes are saved and used by recipes, stock movements, ledger, count sheet and reconciliation.</p>
 
 <div class="order-head">
@@ -491,7 +490,6 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
   <p class="small">Quick access to production inputs, usage, stock movements, reconciliation and reports.</p>
   <div class="inventory-actions">
     <button type="button" class="cat" data-manager-target="productionInputsPanel">PRODUCTION INPUT STOCK</button>
-    <button type="button" class="cat" data-manager-target="masterProductionEditorPanel">ADD / EDIT PRODUCTION INPUTS</button>
     <button type="button" class="cat" data-manager-target="usagePanel">USAGE FROM SALES</button>
     <button type="button" class="cat" data-manager-target="stockMovementPanel">STOCK MOVEMENTS</button>
     <button type="button" class="cat" data-manager-target="reconPanel">STOCK RECONCILIATION</button>
@@ -704,20 +702,14 @@ const baseProductsForStore=(store)=>store==='NDAYENI'?ndayeniProducts:products;
 const activeProducts=()=>{
   const store=selectedStoreCode();
   const live=(typeof liveStoreProducts!=='undefined'&&liveStoreProducts[store])||(window.liveStoreProducts&&window.liveStoreProducts[store]);
-  if(Array.isArray(live)&&live.length){
-    const enabled=live.filter(p=>p.active!==false);
-    // Safety fallback: never leave a live salesperson with an empty selling menu
-    // merely because all rows in pos_store_products were accidentally inactive.
-    if(enabled.length) return enabled;
-  }
-  return baseProductsForStore(store);
+  return Array.isArray(live)&&live.length?live.filter(p=>p.active!==false):baseProductsForStore(store);
 };
 
 let cart=[];
 let sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]');
 let orderCounter=Number(localStorage.getItem('feastervilleOrderNo')||0)+1;
-{ const d=document.getElementById('date'); if(d)d.value=new Date().toISOString().slice(0,10); }
-{ const o=document.getElementById('orderNo'); if(o)o.textContent='Order #'+String(orderCounter).padStart(4,'0'); }
+document.getElementById('date').value=new Date().toISOString().slice(0,10);
+document.getElementById('orderNo').textContent='Order #'+String(orderCounter).padStart(4,'0');
 
 const money=n=>'R'+Number(n||0).toFixed(2);
 function cats(){
@@ -804,7 +796,34 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+
     receiptHtml+
-    '</div></body></html>';
+    '</div>
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>';
 
   w.document.open();
   w.document.write(doc);
@@ -1766,7 +1785,34 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!w){alert('Please allow pop-ups to print the receipt.');return;}
     const html='<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title>'+
       '<style>@page{size:80mm auto;margin:0}body{width:80mm;margin:0;padding:4mm;box-sizing:border-box;font:11px monospace}hr{border:0;border-top:1px dashed #000}</style>'+
-      '</head><body>'+receipt.innerHTML+'</body></html>';
+      '</head><body>'+receipt.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>';
     w.document.open();w.document.write(html);w.document.close();w.focus();
     setTimeout(function(){w.print();},200);
   };
@@ -1985,22 +2031,11 @@ document.addEventListener('DOMContentLoaded',function(){
       setStatus('ONLINE - '+(su.store_code==='SIVANA'?'Sivana':'Ndayeni'));
       setMessage('');
 
-      // Always initialise the business date when a salesperson signs in.
-      try {
-        const dateEl=document.getElementById('date');
-        if(dateEl && !dateEl.value){
-          const d=new Date();
-          dateEl.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        }
-      } catch (_) {}
-
       // Fetch ONLY the salesperson's sellable menu.
       const rows = await api('/rest/v1/pos_store_products?store_code=eq.'+
         encodeURIComponent(su.store_code)+
         '&select=code,name,category,price,active&order=category.asc,code.asc');
-      const liveRows = Array.isArray(rows) ? rows : [];
-      const enabledRows = liveRows.filter(p=>p.active!==false);
-      liveStoreProducts[su.store_code] = enabledRows.length ? liveRows : [];
+      liveStoreProducts[su.store_code] = Array.isArray(rows) ? rows : [];
       window.liveStoreProducts = liveStoreProducts;
 
       // Build the sales catalogue directly, no production/report refreshes.
@@ -3595,7 +3630,7 @@ document.addEventListener('DOMContentLoaded',function(){
           '<td>'+p.code+'</td><td>'+p.name+'</td><td>'+p.unit+'</td>'+
           '<td>'+fmt(expected)+'</td>'+
           '<td><input type="number" min="0" step="0.01" value="'+physical+
-            '" onchange="setProductionCount(\''+p.code+'\',this.value)"></td>'+
+            '" onchange="setProductionCount(\\''+p.code+'\\',this.value)"></td>'+
           '<td>'+fmt(variance)+'</td><td>'+action+'</td>'+
         '</tr>';
       }).join('');
@@ -3935,13 +3970,6 @@ document.addEventListener('DOMContentLoaded',function(){
  <div id="fvCashupCard">
   <h2>Close Day / Cash-Up</h2>
   <div id="fvCashupIdentity" class="small"></div>
-  <div id="fvManagerCashupStoreWrap" style="display:none;margin:10px 0">
-    <label><b>Store to Close</b></label>
-    <select id="fvManagerCashupStore" style="width:100%;padding:10px;margin-top:5px">
-      <option value="NDAYENI">Ndayini</option>
-      <option value="SIVANA">Sivana</option>
-    </select>
-  </div>
   <div id="fvCashupSummary">Loading today's sales...</div>
   <label><b>Opening Cash Float (R)</b></label><input id="fvOpeningFloat" type="number" min="0" step="0.01" value="0">
   <label><b>Actual Cash Counted (R)</b></label><input id="fvActualCash" type="number" min="0" step="0.01" placeholder="Enter cash counted">
@@ -3951,10 +3979,10 @@ document.addEventListener('DOMContentLoaded',function(){
  </div>
 </div>
 <script>
-/* FEASTERVILLE DAILY CASH-UP — SALESPERSON + MANAGER STORE CLOSE — CANDIDATE V1 */
+/* FEASTERVILLE SALESPERSON DAILY CASH-UP — isolated from sales flow */
 (function(){
  'use strict';
- if(window.__fvCashupInstalledV2)return;window.__fvCashupInstalledV2=true;
+ if(window.__fvCashupInstalled)return;window.__fvCashupInstalled=true;
  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
  let totals=null;
@@ -3962,133 +3990,45 @@ document.addEventListener('DOMContentLoaded',function(){
  function u(){return window.salesSessionUser||window.currentUser||null}
  function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||''}
  function day(){let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
- function isManager(){let me=u();return !!(me&&me.role==='manager')}
- function store(){
-   if(isManager()){
-     let ms=document.getElementById('fvManagerCashupStore');
-     if(ms&&ms.value)return ms.value;
-   }
-   let me=u();
-   return (me&&me.role!=='manager'&&me.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
- }
+ function store(){return (u()&&u().store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI'}
  function headers(extra){return Object.assign({'apikey':KEY,'Authorization':'Bearer '+tok(),'Content-Type':'application/json'},extra||{})}
  async function api(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)}));let t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):null}
  function payBucket(p){p=String(p||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(p==='cash')return'cash';if(p==='card')return'card';if(p==='mrd')return'mrd';if(p==='ubereats')return'uber';return'other'}
  async function calc(){
    const me=u();if(!me)throw Error('Please sign in.');
-   let rows=[];
-   if(me.role==='manager'){
-     rows=await api('pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&select=id,total,payment,cashier');
-   }else{
-     const q='pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&cashier=eq.'+encodeURIComponent(me.name||me.display_name||me.email||'')+'&select=id,total,payment,cashier';
-     rows=await api(q);
-     if(!rows.length && me.email){
-       rows=await api('pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&select=id,total,payment,cashier');
-       rows=rows.filter(x=>[me.name,me.display_name,me.email].filter(Boolean).map(String).map(v=>v.toLowerCase()).includes(String(x.cashier||'').toLowerCase()));
-     }
-   }
+   const q='pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&cashier=eq.'+encodeURIComponent(me.name||me.display_name||me.email||'')+'&select=id,total,payment,cashier';
+   let rows=await api(q);
+   // Some historic cashier values may differ from display name. For salesperson, use current user's email/name variants if exact name has no rows.
+   if(!rows.length && me.email){rows=await api('pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&select=id,total,payment,cashier');rows=rows.filter(x=>[me.name,me.display_name,me.email].filter(Boolean).map(String).map(v=>v.toLowerCase()).includes(String(x.cashier||'').toLowerCase()));}
    let x={cash:0,card:0,mrd:0,uber:0,other:0,total:0,count:rows.length};
    rows.forEach(r=>{let v=Number(r.total||0),b=payBucket(r.payment);x[b]+=v;x.total+=v});return x;
  }
- async function existing(){
-   const me=u();if(!me||!me.id)return[];
-   return api('pos_daily_cashups?store_code=eq.'+encodeURIComponent(store())+'&cashup_date=eq.'+day()+'&user_id=eq.'+encodeURIComponent(me.id)+'&select=*');
- }
- function variance(){
-   if(!totals)return;
-   let f=Number(document.getElementById('fvOpeningFloat').value||0),
-       a=Number(document.getElementById('fvActualCash').value||0),
-       expected=totals.cash+f,v=a-expected;
-   document.getElementById('fvCashupVariance').textContent='Expected cash: '+money(expected)+' | Difference: '+money(v);
- }
- async function refreshSummary(){
-   const me=u();if(!me)return;
-   document.getElementById('fvCashupIdentity').textContent=
-     (me.role==='manager'?'Manager — ':'')+
-     (store()==='SIVANA'?'Sivana':'Ndayini')+' — '+day();
-   totals=await calc();
-   document.getElementById('fvCashupSummary').innerHTML=
-     '<table><tr><td>Number of sales</td><td>'+totals.count+'</td></tr>'+
-     '<tr><td>Cash Sales</td><td>'+money(totals.cash)+'</td></tr>'+
-     '<tr><td>Card Sales</td><td>'+money(totals.card)+'</td></tr>'+
-     '<tr><td>Mr D</td><td>'+money(totals.mrd)+'</td></tr>'+
-     '<tr><td>Uber Eats</td><td>'+money(totals.uber)+'</td></tr>'+
-     '<tr><td>Other</td><td>'+money(totals.other)+'</td></tr>'+
-     '<tr><td><b>Total Sales</b></td><td><b>'+money(totals.total)+'</b></td></tr></table>';
-   variance();
- }
+ async function existing(){const me=u();if(!me||!me.id)return[];return api('pos_daily_cashups?store_code=eq.'+encodeURIComponent(store())+'&cashup_date=eq.'+day()+'&user_id=eq.'+encodeURIComponent(me.id)+'&select=*')}
+ function variance(){if(!totals)return;let f=Number(document.getElementById('fvOpeningFloat').value||0),a=Number(document.getElementById('fvActualCash').value||0),expected=totals.cash+f,v=a-expected;document.getElementById('fvCashupVariance').textContent='Expected cash: '+money(expected)+' | Difference: '+money(v)}
  window.openFvCashup=async function(){
    try{
-     const me=u();
-     if(!me||!['salesperson','manager'].includes(me.role)){alert('Cash-up is available to Salesperson and Manager accounts.');return}
-     const wrap=document.getElementById('fvManagerCashupStoreWrap');
-     const sel=document.getElementById('fvManagerCashupStore');
-     if(me.role==='manager'){
-       wrap.style.display='block';
-       let saved=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-       sel.value=(saved==='SIVANA'?'SIVANA':'NDAYENI');
-     }else{
-       wrap.style.display='none';
-     }
-     let ex=await existing();
-     if(ex.length){
-       alert((me.role==='manager'?'This store':'Your sales')+' for '+day()+' have already been closed under this account.');
-       return;
-     }
-     document.getElementById('fvCashupModal').style.display='flex';
-     await refreshSummary();
+    const me=u();if(!me||me.role!=='salesperson'){alert('Cash-up is for salesperson accounts.');return}
+    let ex=await existing();if(ex.length){alert('Your sales for '+day()+' have already been closed. Manager can review the saved cash-up.');return}
+    document.getElementById('fvCashupModal').style.display='flex';document.getElementById('fvCashupIdentity').textContent=(me.name||me.display_name||me.email)+' — '+(store()==='SIVANA'?'Sivana':'Ndayini')+' — '+day();
+    totals=await calc();document.getElementById('fvCashupSummary').innerHTML='<table><tr><td>Number of sales</td><td>'+totals.count+'</td></tr><tr><td>Cash Sales</td><td>'+money(totals.cash)+'</td></tr><tr><td>Card Sales</td><td>'+money(totals.card)+'</td></tr><tr><td>Mr D</td><td>'+money(totals.mrd)+'</td></tr><tr><td>Uber Eats</td><td>'+money(totals.uber)+'</td></tr><tr><td>Other</td><td>'+money(totals.other)+'</td></tr><tr><td><b>Total Sales</b></td><td><b>'+money(totals.total)+'</b></td></tr></table>';variance();
    }catch(e){console.error(e);alert('Could not prepare cash-up: '+e.message)}
  }
  window.closeFvCashupModal=function(){document.getElementById('fvCashupModal').style.display='none'};
- document.getElementById('fvOpeningFloat').addEventListener('input',variance);
- document.getElementById('fvActualCash').addEventListener('input',variance);
- document.getElementById('fvManagerCashupStore').addEventListener('change',async function(){
-   try{
-     localStorage.setItem('feastervilleStoreCode',this.value);
-     let ex=await existing();
-     if(ex.length){
-       document.getElementById('fvCashupSummary').innerHTML='<b>This store has already been closed today under this Manager account.</b>';
-       totals=null;
-       return;
-     }
-     await refreshSummary();
-   }catch(e){alert('Could not switch cash-up store: '+e.message)}
- });
+ document.getElementById('fvOpeningFloat').addEventListener('input',variance);document.getElementById('fvActualCash').addEventListener('input',variance);
  document.getElementById('fvSubmitCashup').onclick=async function(){
    try{
-     const me=u();if(!me||!totals)return;
-     let actualRaw=document.getElementById('fvActualCash').value;
-     if(actualRaw===''){alert('Enter the actual cash counted.');return}
-     let ex=await existing();if(ex.length){alert('This day is already closed for this store under this account.');return}
-     let f=Number(document.getElementById('fvOpeningFloat').value||0),a=Number(actualRaw),expected=totals.cash+f;
-     let payload={
-       store_code:store(),cashup_date:day(),user_id:me.id,
-       salesperson_name:me.role==='manager'?'Manager Store Close':(me.name||me.display_name||me.email||'Salesperson'),
-       opening_float:f,cash_sales:totals.cash,card_sales:totals.card,mr_d_sales:totals.mrd,
-       uber_eats_sales:totals.uber,other_sales:totals.other,total_sales:totals.total,
-       expected_cash:expected,actual_cash:a,variance:a-expected,sale_count:totals.count,
-       notes:document.getElementById('fvCashupNotes').value||null,status:'CLOSED'
-     };
-     await api('pos_daily_cashups',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify(payload)});
-     closeFvCashupModal();
-     alert((me.role==='manager'?(store()==='SIVANA'?'Sivana':'Ndayini')+' store':'Day')+
-       ' closed successfully. Expected cash '+money(expected)+' | Actual cash '+money(a)+' | Difference '+money(a-expected));
+    const me=u();if(!me||!totals)return;let actualRaw=document.getElementById('fvActualCash').value;if(actualRaw===''){alert('Enter the actual cash counted.');return}
+    let ex=await existing();if(ex.length){alert('This day is already closed.');return}
+    let f=Number(document.getElementById('fvOpeningFloat').value||0),a=Number(actualRaw),expected=totals.cash+f;
+    let payload={store_code:store(),cashup_date:day(),user_id:me.id,salesperson_name:me.name||me.display_name||me.email||'Salesperson',opening_float:f,cash_sales:totals.cash,card_sales:totals.card,mr_d_sales:totals.mrd,uber_eats_sales:totals.uber,other_sales:totals.other,total_sales:totals.total,expected_cash:expected,actual_cash:a,sale_count:totals.count,notes:document.getElementById('fvCashupNotes').value||null,status:'CLOSED'};
+    await api('pos_daily_cashups',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify(payload)});closeFvCashupModal();alert('Day closed successfully. Expected cash '+money(expected)+' | Actual cash '+money(a)+' | Difference '+money(a-expected));
    }catch(e){console.error(e);alert('Cash-up could not be saved: '+e.message)}
  };
- function addButton(){
-   let me=u();
-   if(!me||!['salesperson','manager'].includes(me.role)||document.getElementById('fvCashupBtn'))return;
-   let target=document.querySelector('header .actions')||document.querySelector('header')||document.body;
-   let b=document.createElement('button');
-   b.id='fvCashupBtn';b.type='button';
-   b.textContent=me.role==='manager'?'CLOSE DAY / CASH-UP — STORE':'CLOSE DAY / CASH-UP';
-   b.onclick=openFvCashup;
-   target.appendChild(b);
- }
+ function addButton(){let me=u();if(!me||me.role!=='salesperson'||document.getElementById('fvCashupBtn'))return;let target=document.querySelector('header .actions')||document.querySelector('header')||document.body;let b=document.createElement('button');b.id='fvCashupBtn';b.type='button';b.textContent='CLOSE DAY / CASH-UP';b.onclick=openFvCashup;target.appendChild(b)}
  let n=0,t=setInterval(()=>{n++;addButton();if(document.getElementById('fvCashupBtn')||n>120)clearInterval(t)},250);
 })();
 </script>
-<!-- BUILD: MANAGER_STORE_CASHUP_CANDIDATE_V1_20260907 -->
+<!-- BUILD: SALESPERSON_DAILY_CASHUP_20260831 -->
 
 
 <script>
@@ -4574,52 +4514,74 @@ window.refreshActualRecipeBuilderV40=loadAll;
 
 
 <script>
-/* SALES PRODUCT SELECTION REPAIR V41 */
+/* SALES MENU HIERARCHY V42 - MR D MAIN MENU */
 (function(){
 'use strict';
-if(window.__fvSalesSelectionV41)return;window.__fvSalesSelectionV41=true;
+if(window.__fvSalesMenuHierarchyV42)return;window.__fvSalesMenuHierarchyV42=true;
 
+let currentMenu='MRD';
 let currentCategory='ALL';
 
 function getProducts(){
   try{
-    let list=(typeof activeProducts==='function'?activeProducts():[])||[];
-    if(Array.isArray(list) && list.length) return list;
-    // V73 hard fallback: the selling screen must never be empty when the built-in
-    // store catalogue exists. This bypasses a bad/empty live-menu state.
-    const store=(typeof selectedStoreCode==='function'?selectedStoreCode():
-      ((window.salesSessionUser&&window.salesSessionUser.store_code)||
-       localStorage.getItem('feastervilleStoreCode')||'NDAYENI'));
-    list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[]);
-    if(Array.isArray(list) && list.length) return list;
-    if(store==='NDAYENI' && typeof ndayeniProducts!=='undefined' && Array.isArray(ndayeniProducts)) return ndayeniProducts;
-    if(typeof products!=='undefined' && Array.isArray(products)) return products;
-    return [];
+    return (typeof activeProducts==='function'?activeProducts():[])||[];
   }catch(e){
-    console.error('V73 sales products fallback',e);
-    try{
-      return (typeof products!=='undefined' && Array.isArray(products))?products:[];
-    }catch(_){ return []; }
+    console.error('V42 active products',e);
+    return [];
   }
 }
-
+function isMrD(p){
+  return String(p.code||'').toUpperCase().startsWith('MRD-') || String(p.category||'').toUpperCase().startsWith('MR D -');
+}
+function availableMenu(){
+  const list=getProducts();
+  if(currentMenu==='MRD' && !list.some(isMrD)) return 'STORE';
+  return currentMenu;
+}
+function menuProducts(){
+  const mode=availableMenu();
+  const list=getProducts();
+  return mode==='MRD' ? list.filter(isMrD) : list.filter(p=>!isMrD(p));
+}
+function displayCategory(raw){
+  const c=String(raw||'');
+  return currentMenu==='MRD' ? c.replace(/^MR D\s*-\s*/i,'') : c;
+}
+function ensureMenuBar(){
+  const cats=document.getElementById('categories');
+  if(!cats)return null;
+  let bar=document.getElementById('salesMainMenu');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='salesMainMenu';
+    bar.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px 0;padding:10px;border:2px solid #111;border-radius:10px;background:#f7f7f7';
+    cats.parentNode.insertBefore(bar,cats);
+  }
+  const hasMrD=getProducts().some(isMrD);
+  if(currentMenu==='MRD'&&!hasMrD) currentMenu='STORE';
+  bar.innerHTML=
+    (hasMrD?'<button type="button" data-main-sales-menu="MRD" class="cat '+(currentMenu==='MRD'?'active':'')+'" style="font-weight:800">MR D MENU</button>':'')+
+    '<button type="button" data-main-sales-menu="STORE" class="cat '+(currentMenu==='STORE'?'active':'')+'" style="font-weight:800">STORE MENU</button>';
+  return bar;
+}
 function renderCategories(){
   const box=document.getElementById('categories');
   if(!box)return;
-  const list=getProducts();
+  ensureMenuBar();
+  const list=menuProducts();
   const cats=['ALL',...new Set(list.map(p=>p.category).filter(Boolean))];
   if(!cats.includes(currentCategory))currentCategory='ALL';
   box.innerHTML=cats.map(c=>
     '<button type="button" class="cat '+(c===currentCategory?'active':'')+'" data-sales-category="'+
-    String(c).replace(/"/g,'&quot;')+'">'+c+'</button>'
+    String(c).replace(/"/g,'&quot;')+'">'+(c==='ALL'?'ALL':displayCategory(c))+'</button>'
   ).join('');
 }
-
 function renderProducts(){
   const box=document.getElementById('products');
   if(!box)return;
+  ensureMenuBar();
   const q=(document.getElementById('salesProductSearch')?.value||'').trim().toLowerCase();
-  const list=getProducts().filter(p=>{
+  const list=menuProducts().filter(p=>{
     const cat=currentCategory==='ALL'||p.category===currentCategory;
     const search=!q||String(p.code||'').toLowerCase().includes(q)||
       String(p.name||'').toLowerCase().includes(q)||
@@ -4630,15 +4592,21 @@ function renderProducts(){
     '<button type="button" class="product" data-sales-code="'+String(p.code).replace(/"/g,'&quot;')+'">'+
     '<span class="name">'+p.code+' — '+p.name+'</span>'+
     '<span class="price">'+money(p.price)+'</span></button>'
-  ).join(''):'<div class="small" style="padding:12px">No sellable products found.</div>';
+  ).join(''):'<div class="small" style="padding:12px">No sellable products found in this menu.</div>';
 }
-
 function selectCategory(cat){
   currentCategory=cat||'ALL';
   renderCategories();
   renderProducts();
 }
-
+function selectMainMenu(menu){
+  currentMenu=menu==='STORE'?'STORE':'MRD';
+  currentCategory='ALL';
+  const search=document.getElementById('salesProductSearch');
+  if(search)search.value='';
+  renderCategories();
+  renderProducts();
+}
 function addSaleProduct(code){
   const p=getProducts().find(x=>String(x.code)===String(code));
   if(!p){alert('Product could not be found. Please refresh the sale screen.');return}
@@ -4648,58 +4616,49 @@ function addSaleProduct(code){
 }
 
 document.addEventListener('click',function(e){
+  const main=e.target.closest('#salesMainMenu [data-main-sales-menu]');
+  if(main){
+    e.preventDefault();e.stopPropagation();
+    selectMainMenu(main.dataset.mainSalesMenu);
+    return;
+  }
   const cat=e.target.closest('#categories [data-sales-category]');
   if(cat){
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault();e.stopPropagation();
     selectCategory(cat.dataset.salesCategory);
     return;
   }
-
   const product=e.target.closest('#products [data-sales-code]');
   if(product){
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault();e.stopPropagation();
     addSaleProduct(product.dataset.salesCode);
   }
 },true);
 
 const search=document.getElementById('salesProductSearch');
-if(search){
-  search.addEventListener('input',renderProducts);
-  search.addEventListener('keyup',renderProducts);
-}
+if(search){search.addEventListener('input',renderProducts);search.addEventListener('keyup',renderProducts)}
 const clear=document.getElementById('clearSalesProductSearch');
-if(clear){
-  clear.onclick=function(){
-    if(search)search.value='';
-    renderProducts();
-    if(search)search.focus();
-  };
-}
+if(clear){clear.onclick=function(){if(search)search.value='';renderProducts();if(search)search.focus();}}
 
-// Replace old functions called elsewhere with stable V41 versions.
 window.cats=renderCategories;
 window.filterCat=function(cat){selectCategory(cat)};
 window.add=addSaleProduct;
-window.refreshSalesSelectionV41=function(){
-  renderCategories();
-  renderProducts();
-};
+window.refreshSalesSelectionV42=function(){renderCategories();renderProducts();};
+window.selectSalesMainMenuV42=selectMainMenu;
 
-// Initial repair after login/live-store products have had time to load.
-setTimeout(()=>{renderCategories();renderProducts()},500);
-setTimeout(()=>{renderCategories();renderProducts()},1800);
+// MR D is the default main menu whenever MR D products exist for the selected store.
+setTimeout(()=>{currentMenu=getProducts().some(isMrD)?'MRD':'STORE';currentCategory='ALL';renderCategories();renderProducts()},500);
+setTimeout(()=>{if(getProducts().some(isMrD))currentMenu='MRD';renderCategories();renderProducts()},1800);
 
 document.addEventListener('change',function(e){
   if(e.target && /store/i.test(e.target.id||'')){
     currentCategory='ALL';
-    setTimeout(()=>{renderCategories();renderProducts()},250);
+    setTimeout(()=>{currentMenu=getProducts().some(isMrD)?'MRD':'STORE';renderCategories();renderProducts()},250);
   }
 },true);
 })();
 </script>
-<!-- BUILD: SALES_SELECTION_REPAIR_V41 -->
+<!-- BUILD: SALES_MENU_HIERARCHY_V42_MRD_MAIN -->
 
 
 <script>
@@ -5041,7 +5000,34 @@ function printOnlyV44(title,node){
       'th,td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
       'th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}'+
       'button,input,select{display:none!important}'+
-    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'</body></html>');
+    '</style></head><body><h2>'+esc44(title)+'</h2>'+node.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
   doc.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5181,7 +5167,34 @@ function printNode(title,node){
    'table,.inv-table{width:100%;border-collapse:collapse;table-layout:auto}th,td,.inv-table th,.inv-table td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top}'+
    'th,.inv-table th{background:#eee!important;color:#111!important}thead{display:table-header-group}tr{page-break-inside:avoid}'+
    'button,input,select{display:none!important}'+
-   '</style></head><body>'+node.innerHTML+'</body></html>');
+   '</style></head><body>'+node.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
   d.close();
   setTimeout(()=>{
     frame.contentWindow.focus();
@@ -5375,7 +5388,34 @@ function printRecon(){
  if(!node||!node.innerHTML.trim())return alert('Open Production Inputs reconciliation first.');
  const w=window.open('','_blank','width=1200,height=800');
  if(!w)return alert('Please allow pop-ups to print the reconciliation.');
- w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'</body></html>');
+ w.document.write('<!doctype html><html><head><title>Production Inputs Reconciliation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;font-size:9pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+node.innerHTML+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
 window.printRecon=printRecon;try{printRecon=window.printRecon}catch(e){}
@@ -6722,7 +6762,34 @@ window.printSelectedSalesV45=function(){
  const body='<h1>Feasterville Food — Daily Sales Report</h1><p><b>Store:</b> '+E(s)+' &nbsp; <b>Period:</b> '+E(f)+(t!==f?' to '+E(t):'')+'</p><p><b>Number of Sales:</b> '+rows.length+' &nbsp;&nbsp; <b>Total Sales:</b> '+M(total)+'</p><h2>Payment Summary</h2><table><tr><th>Payment Method</th><th>Amount</th></tr>'+ph+'</table><h2>Sales Transactions</h2><table><tr><th>Date</th><th>Time</th><th>Cashier</th><th>Payment</th><th>Total</th></tr>'+rh+'</table>';
  const w=window.open('','_blank','width=1000,height=800');
  if(!w){alert('Please allow pop-ups for this POS, then try again.');return;}
- w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'</body></html>');
+ w.document.write('<!doctype html><html><head><title>Daily Sales Report</title><style>@page{size:A4;margin:12mm}body{font:11px Arial;color:#111}h1{font-size:20px}h2{font-size:14px;margin-top:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px}th{background:#eee}tr{page-break-inside:avoid}</style></head><body>'+body+'
+<script>
+/* V68 — AUTHORITATIVE LIVE USERS + ITEM-LEVEL LIVE SALES */
+(function(){
+'use strict';
+if(window.__fvV68)return; window.__fvV68=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+function T(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return ''}
+function U(){return window.salesSessionUser||window.inventorySessionUser||window.currentUser||null}
+function H(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+T(),'Content-Type':'application/json'},extra||{})}
+async function A(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:H(opt.headers)})),t=await r.text();if(!r.ok)throw Error(t||'HTTP '+r.status);return t?JSON.parse(t):null}
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+function ZA(x){if(!x)return '—';return new Date(x).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function D(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
+function S(){let u=U();return ((u?.role==='manager'?(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')):(u?.store_code||u?.assigned_store))||'NDAYENI').toUpperCase()}
+async function touch(){if(!T())return;await A('rpc/touch_pos_presence',{method:'POST',body:'{}'}).catch(e=>console.warn('presence touch',e))}
+window.fvPresenceTouchV68=touch;
+setInterval(touch,15000);setTimeout(touch,800);
+async function liveUsers(){if(U()?.role!=='manager'||!T())return;let host=document.getElementById('fvAllUsersV59')||document.getElementById('fvPresencePanel');if(!host)return;let [profiles,pres]=await Promise.all([A('pos_profiles?select=user_id,display_name,role,store_code,active&active=eq.true&order=store_code.asc,display_name.asc'),A('pos_user_presence?select=user_id,logged_in_at,last_seen_at,status,signed_off_at')]);let pm={};(pres||[]).forEach(x=>pm[x.user_id]=x);let now=Date.now();host.innerHTML='<h3>Currently Logged In Users</h3><div class="small">Live status refreshes every 5 seconds. ONLINE requires a heartbeat within 2 minutes.</div><div style="overflow:auto"><table><thead><tr><th>User</th><th>Role</th><th>Store</th><th>Login Date & Time</th><th>Last Seen</th><th>Status</th></tr></thead><tbody>'+profiles.map(u=>{let p=pm[u.user_id]||{},last=p.last_seen_at?new Date(p.last_seen_at).getTime():0,on=p.status==='ONLINE'&&last&&(now-last)<120000;return '<tr><td>'+E(u.display_name)+'</td><td>'+E(u.role==='inventory_control'?'Inventory Controller':u.role)+'</td><td>'+E(u.store_code||'All Stores')+'</td><td>'+ZA(p.logged_in_at)+'</td><td>'+ZA(p.last_seen_at)+'</td><td><b>'+(on?'ONLINE':'OFFLINE')+'</b></td></tr>'}).join('')+'</tbody></table></div>'}
+window.refreshAllUsersV68=liveUsers;setInterval(()=>{if(document.visibilityState==='visible')liveUsers().catch(()=>{})},5000);
+async function itemSales(){if(U()?.role!=='manager'||!T())return;let rp=document.getElementById('reportsPanel')||document.getElementById('reportPanel');if(!rp)return;let box=document.getElementById('fvLiveItemSalesV68');if(!box){box=document.createElement('section');box.id='fvLiveItemSalesV68';box.style.marginTop='16px';rp.appendChild(box)}let f=document.getElementById('fvSalesFromV45')?.value||D(),t=document.getElementById('fvSalesToV45')?.value||f,sc=S();let sales=await A('pos_sales?select=id,store_code,sale_date,sale_time,cashier,payment,total&store_code=eq.'+encodeURIComponent(sc)+'&sale_date=gte.'+f+'&sale_date=lte.'+t+'&order=sale_date.desc,sale_time.desc')||[];let ids=sales.map(x=>x.id);let items=[];if(ids.length)items=await A('pos_sale_items?select=sale_id,code,name,qty,price&sale_id=in.('+ids.join(',')+')')||[];let im={};items.forEach(i=>(im[i.sale_id]||(im[i.sale_id]=[])).push(i));let rows=[];sales.forEach(s=>(im[s.id]||[]).forEach(i=>rows.push({s,i})));box.innerHTML='<h3>Live Items Sold — '+E(sc)+'</h3><div class="small">Date, time, salesperson and quantity direct from live database. Updated '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'})+'</div><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Time</th><th>Salesperson</th><th>Code</th><th>Item Sold</th><th>Qty</th><th>Price</th></tr></thead><tbody>'+(rows.map(x=>'<tr><td>'+E(x.s.sale_date)+'</td><td>'+E(String(x.s.sale_time||'').slice(0,8))+'</td><td>'+E(x.s.cashier||'—')+'</td><td>'+E(x.i.code)+'</td><td>'+E(x.i.name)+'</td><td><b>'+Number(x.i.qty||0).toFixed(3).replace(/\.000$/,'')+'</b></td><td>R'+Number(x.i.price||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="7">No items sold for selected period.</td></tr>')+'</tbody></table></div>'}
+window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibilityState==='visible')itemSales().catch(()=>{})},5000);setTimeout(()=>{liveUsers().catch(()=>{});itemSales().catch(()=>{})},1500);
+})();
+</script>
+<!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
+
+</body></html>');
  w.document.close();w.focus();setTimeout(()=>w.print(),500);
 };
 })();
@@ -6783,589 +6850,5 @@ window.refreshLiveItemSalesV68=itemSales;setInterval(()=>{if(document.visibility
 </script>
 <!-- BUILD: LIVE_USERS_ITEM_SALES_V68 -->
 
-
-<script>
-/* V70 SALESPERSON SCREEN STABILITY FIX */
-(function(){
-'use strict';
-function isSalesperson(){const u=window.salesSessionUser||window.currentUser;return !!u&&u.role==='salesperson';}
-function stabilize(){
- if(!isSalesperson())return;
- // Salesperson must remain on selling screen only; do not let manager/inventory panels leak into this role.
- ['accessPanel','recipePanel','reportsPanel','userPanel','productionInputsPanel','reconPanel','fvPresencePanel','fvAllUsersV59'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
- const sale=document.getElementById('salePanel')||document.querySelector('[data-panel="sale"]'); if(sale)sale.style.display='block';
- const u=window.salesSessionUser||window.currentUser; const assigned=(u.store_code||u.assigned_store||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase();
- localStorage.setItem('feastervilleStoreCode',assigned); const sel=document.getElementById('storeLocationSelect'); if(sel){sel.value=assigned;sel.disabled=true;}
-}
-document.addEventListener('DOMContentLoaded',()=>{setTimeout(stabilize,300);setTimeout(stabilize,1500);});
-window.addEventListener('load',()=>setTimeout(stabilize,500));
-})();
-</script>
-<!-- BUILD: SALESPERSON_SCREEN_STABILITY_V70 -->
-
-<script>
-/* V73 SALESPERSON MENU WATCHDOG */
-(function(){
-'use strict';
-if(window.__fvSalesMenuV73)return; window.__fvSalesMenuV73=true;
-function forceMenu(){
-  const u=window.salesSessionUser;
-  if(!u || u.role!=='salesperson') return;
-  try{
-    const store=u.store_code||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-    let list=[];
-    try{ list=(typeof activeProducts==='function'?activeProducts():[])||[]; }catch(_){}
-    if(!Array.isArray(list)||!list.length){
-      try{ list=(typeof baseProductsForStore==='function'?baseProductsForStore(store):[])||[]; }catch(_){}
-    }
-    if(!Array.isArray(list)||!list.length) return;
-    const box=document.getElementById('products');
-    if(box && (/No sellable products found/i.test(box.textContent||'') || !box.querySelector('.product'))){
-      box.innerHTML=list.map(p=>
-        '<button type="button" class="product" data-sales-code="'+String(p.code||'').replace(/"/g,'&quot;')+'">'+
-        '<span class="name">'+String(p.code||'')+' — '+String(p.name||'')+'</span>'+
-        '<span class="price">'+(typeof money==='function'?money(p.price):('R'+Number(p.price||0).toFixed(2)))+'</span></button>'
-      ).join('');
-      if(typeof cats==='function') try{cats();}catch(_){}
-    }
-  }catch(e){ console.error('V73 force menu',e); }
-}
-/* V4 FIX: product clicks are handled by Sales Selection V41.
-   The old V73 watchdog click handler was adding the same item a second time.
-   Keep V73 only as a menu-display watchdog; do not process sales clicks here. */
-setInterval(forceMenu,1000);
-setTimeout(forceMenu,250);
-setTimeout(forceMenu,1200);
-})();
-</script>
-<!-- BUILD: SALESPERSON_FORCE_MENU_V73 -->
-
-<!-- BUILD: V74 FULL JAVASCRIPT SYNTAX REPAIR -->
-
-<style>
-/* V68 — STORE INCOME, EXPENSES & PROFIT/LOSS */
-#fvFinancePanel .fv-finance-filters,#fvFinancePanel .fv-finance-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
-#fvFinancePanel label{font-weight:700;font-size:14px}
-#fvFinancePanel input,#fvFinancePanel select{min-height:40px;padding:8px;border:1px solid #bbb;border-radius:6px;background:#fff}
-#fvFinancePanel .fv-finance-cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin:14px 0}
-#fvFinancePanel .fv-finance-card{border:1px solid #ddd;border-radius:8px;padding:14px;background:#fafafa}
-#fvFinancePanel .fv-finance-card span{display:block;font-size:13px;color:#555;margin-bottom:5px}
-#fvFinancePanel .fv-finance-card strong{font-size:22px}
-#fvFinancePanel .fv-positive{color:#08752f}#fvFinancePanel .fv-negative{color:#b42318}
-#fvFinancePanel .fv-finance-box{border:1px solid #ddd;border-radius:8px;padding:14px;margin:14px 0}
-#fvFinancePanel .fv-finance-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-#fvFinancePanel .fv-finance-status{min-height:20px;margin:8px 0;font-weight:700}
-#fvFinancePanel .fv-period-buttons{display:flex;gap:6px;flex-wrap:wrap}
-#fvFinancePanel .fv-pnl-title{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
-#fvFinancePanel .fv-pnl-table td:not(:first-child),#fvFinancePanel .fv-pnl-table th:not(:first-child){text-align:right}
-#fvFinancePanel .fv-pnl-total td{font-weight:700;border-top:2px solid #111}
-#fvFinancePanel .fv-pnl-result td{font-weight:800;font-size:16px;background:#f3f8ea}
-@media(max-width:720px){#fvFinancePanel .fv-finance-cards{grid-template-columns:1fr 1fr}#fvFinancePanel input,#fvFinancePanel select{max-width:100%;width:100%}#fvFinancePanel label{flex:1 1 145px}}
-@media print{body.fv-finance-print>*.app~*{display:none!important}body.fv-finance-print .app>*:not(#fvFinancePanel){display:none!important}body.fv-finance-print #fvFinancePanel,body.fv-finance-print #fvFinancePanel *{visibility:visible!important}body.fv-finance-print #fvFinancePanel{display:block!important;position:absolute;left:0;top:0;width:100%;box-shadow:none;border:0}body.fv-finance-print #receiptPrint{display:none!important;visibility:hidden!important}body.fv-finance-print .fv-no-print{display:none!important}}
-</style>
-
-<script>
-/* V68 — STORE INCOME, EXPENSES & PROFIT/LOSS (isolated manager module) */
-(function(){
-'use strict';
-if(window.__fvFinanceV68)return;window.__fvFinanceV68=true;
-const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-let state={sales:[],income:[],expenses:[]};
-const $=id=>document.getElementById(id);
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money=v=>'R'+Number(v||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
-function token(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token'))try{let j=JSON.parse(localStorage.getItem(k));if(j?.access_token)return j.access_token}catch(_){}}return''}
-function today(){return new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}
-function monthStart(){let d=today();return d.slice(0,8)+'01'}
-function selectedStore(){return $('fvFinanceStore')?.value||'NDAYENI'}
-function activeStore(){return String(window.selectedStoreCode||localStorage.getItem('feastervilleStoreCode')||'NDAYENI').toUpperCase()}
-function headers(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},extra||{})}
-async function api(path,opt={}){let r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)})),txt=await r.text();if(!r.ok){let m=txt;try{m=JSON.parse(txt).message||txt}catch(_){}throw Error(m)}return txt?JSON.parse(txt):[]}
-function setStatus(message,bad){let e=$('fvFinanceStatus');if(e){e.textContent=message||'';e.style.color=bad?'#b42318':'#08752f'}}
-function makePanel(){
- if($('fvFinancePanel'))return;
- let panel=document.createElement('section');panel.id='fvFinancePanel';panel.className='panel manager-only';panel.style.cssText='grid-column:1/-1;display:none';
- panel.innerHTML=`<h2>Store Income & Expenses</h2>
- <p class="small">POS sales are pulled automatically. Capture only other income and operating expenses here.</p>
- <div class="fv-finance-filters fv-no-print">
-  <label>Store<br><select id="fvFinanceStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="ALL">Both Stores — Combined</option></select></label>
-  <label>From<br><input id="fvFinanceFrom" type="date"></label><label>To<br><input id="fvFinanceTo" type="date"></label>
-  <button type="button" class="primary" id="fvFinanceLoad">VIEW REPORT</button>
-  <div class="fv-period-buttons"><button type="button" class="secondary" id="fvFinanceToday">TODAY</button><button type="button" class="secondary" id="fvFinanceWeek">THIS WEEK</button><button type="button" class="secondary" id="fvFinanceMonth">THIS MONTH</button></div>
- </div><div id="fvFinanceStatus" class="fv-finance-status"></div>
- <div class="fv-finance-cards"><div class="fv-finance-card"><span>POS Sales</span><strong id="fvPosIncome">R0.00</strong></div><div class="fv-finance-card"><span>Other Income</span><strong id="fvOtherIncome">R0.00</strong></div><div class="fv-finance-card"><span>Total Expenses</span><strong id="fvTotalExpenses">R0.00</strong></div><div class="fv-finance-card"><span>Profit / (Loss)</span><strong id="fvNetProfit">R0.00</strong></div></div>
- <div class="fv-finance-box"><div class="fv-pnl-title"><h3>Profit or Loss Statement</h3><b id="fvPnlPeriod"></b></div><div style="overflow:auto"><table class="inv-table fv-pnl-table"><thead><tr><th>Income / Expense</th><th>Ndayeni</th><th>Sivana</th><th>Combined</th></tr></thead><tbody id="fvPnlRows"></tbody></table></div><p class="small">This is a cash-management profit or loss statement: stock and ingredients are recognised when captured as expenses.</p></div>
- <div class="fv-finance-actions fv-no-print"><button type="button" class="secondary" id="fvFinancePrint">PRINT / SAVE PDF</button><button type="button" class="secondary" id="fvFinanceCsv">DOWNLOAD CSV</button></div>
- <div class="fv-finance-box fv-no-print"><h3>Add Other Income</h3><div class="fv-finance-form">
-  <label>Date<br><input id="fvIncomeDate" type="date"></label><label>Category<br><select id="fvIncomeCategory"><option>Delivery Income</option><option>Catering</option><option>Refund Received</option><option>Other Income</option></select></label>
-  <label>Description<br><input id="fvIncomeDescription" placeholder="What was the income for?"></label><label>Payment<br><select id="fvIncomePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Mr D</option><option>Uber Eats</option><option>Other</option></select></label>
-  <label>Amount<br><input id="fvIncomeAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reference<br><input id="fvIncomeReference" placeholder="Optional"></label><button type="button" class="primary" id="fvSaveIncome">SAVE INCOME</button>
- </div></div>
- <div class="fv-finance-box fv-no-print"><h3>Add Expense</h3><div class="fv-finance-form">
-  <label>Date<br><input id="fvExpenseDate" type="date"></label><label>Category<br><select id="fvExpenseCategory"><option>Stock & Ingredients</option><option>Staff Wages</option><option>Electricity</option><option>Rent</option><option>Transport</option><option>Repairs & Maintenance</option><option>Packaging</option><option>Cleaning</option><option>Bank Charges</option><option>Internet & Airtime</option><option>Security</option><option>Other Expense</option></select></label>
-  <label>Supplier<br><input id="fvExpenseSupplier" placeholder="Supplier or payee"></label><label>Description<br><input id="fvExpenseDescription" placeholder="What was paid for?"></label><label>Payment<br><select id="fvExpensePayment"><option>Cash</option><option>Card</option><option>EFT</option><option>Other</option></select></label>
-  <label>Amount<br><input id="fvExpenseAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reference<br><input id="fvExpenseReference" placeholder="Invoice / receipt no."></label><button type="button" class="primary" id="fvSaveExpense">SAVE EXPENSE</button>
- </div></div>
- <div class="fv-finance-box"><h3>Income Details</h3><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Date</th><th>Store</th><th>Source</th><th>Description</th><th>Payment</th><th>Amount</th><th class="fv-no-print">Action</th></tr></thead><tbody id="fvIncomeRows"></tbody></table></div></div>
- <div class="fv-finance-box"><h3>Expense Details</h3><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Date</th><th>Store</th><th>Category</th><th>Supplier / Description</th><th>Payment</th><th>Reference</th><th>Amount</th><th class="fv-no-print">Action</th></tr></thead><tbody id="fvExpenseRows"></tbody></table></div></div>`;
- let anchor=$('accessPanel')||$('receiptPrint');anchor.parentNode.insertBefore(panel,anchor);
- let nav=$('managerInventoryNav')?.querySelector('.inventory-actions');if(nav&&!$('fvFinanceNav')){let b=document.createElement('button');b.type='button';b.className='cat';b.id='fvFinanceNav';b.textContent='INCOME & EXPENSES';b.dataset.managerTarget='fvFinancePanel';nav.appendChild(b)}
- $('fvFinanceFrom').value=monthStart();$('fvFinanceTo').value=today();$('fvIncomeDate').value=today();$('fvExpenseDate').value=today();$('fvFinanceStore').value=activeStore();
- $('fvFinanceLoad').onclick=load;$('fvSaveIncome').onclick=saveIncome;$('fvSaveExpense').onclick=saveExpense;$('fvFinancePrint').onclick=printReport;$('fvFinanceCsv').onclick=downloadCsv;
- $('fvFinanceToday').onclick=()=>setPeriod('today');$('fvFinanceWeek').onclick=()=>setPeriod('week');$('fvFinanceMonth').onclick=()=>setPeriod('month');
- $('fvFinanceStore').onchange=()=>{let all=selectedStore()==='ALL';$('fvSaveIncome').disabled=all;$('fvSaveExpense').disabled=all;setStatus(all?'Combined report selected. Choose one store to capture a transaction.':'');load().catch(showError)};
- }
- function setPeriod(period){let end=today(),d=new Date(end+'T12:00:00');if(period==='today')$('fvFinanceFrom').value=end;else if(period==='month')$('fvFinanceFrom').value=end.slice(0,8)+'01';else{let offset=(d.getDay()+6)%7;d.setDate(d.getDate()-offset);$('fvFinanceFrom').value=d.toLocaleDateString('en-CA',{timeZone:'Africa/Johannesburg'})}$('fvFinanceTo').value=end;load().catch(showError)}
- function queryStore(column){let s=selectedStore();return s==='ALL'?'':('&'+column+'=eq.'+encodeURIComponent(s))}
- async function load(){
-  if(!window.currentUser||window.currentUser.role!=='manager')return;
-  let from=$('fvFinanceFrom').value,to=$('fvFinanceTo').value;if(!from||!to||from>to){setStatus('Choose a valid From and To date.',true);return}
-  setStatus('Loading income and expenses...');
-  try{
-   let [sales,income,expenses]=await Promise.all([
-    api('pos_sales?select=id,store_code,sale_date,payment,total&sale_date=gte.'+from+'&sale_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=sale_date.desc'),
-    api('pos_other_income?select=id,store_code,transaction_date,category,description,payment_method,amount,reference&transaction_date=gte.'+from+'&transaction_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=transaction_date.desc'),
-    api('pos_store_expenses?select=id,store_code,expense_date,category,supplier,description,payment_method,amount,reference&expense_date=gte.'+from+'&expense_date=lte.'+to+'&store_code=in.(NDAYENI,SIVANA)&order=expense_date.desc')
-   ]);state={sales,income,expenses};render();setStatus('Report updated at '+new Date().toLocaleTimeString('en-ZA',{timeZone:'Africa/Johannesburg'}));
-  }catch(e){showError(e)}
- }
- function render(){
-  let selected=selectedStore(),matches=x=>selected==='ALL'||x.store_code===selected,sales=state.sales.filter(matches),income=state.income.filter(matches),expenseRows=state.expenses.filter(matches);
-  let pos=sales.reduce((a,x)=>a+Number(x.total||0),0),other=income.reduce((a,x)=>a+Number(x.amount||0),0),expenses=expenseRows.reduce((a,x)=>a+Number(x.amount||0),0),net=pos+other-expenses;
-  $('fvPosIncome').textContent=money(pos);$('fvOtherIncome').textContent=money(other);$('fvTotalExpenses').textContent=money(expenses);$('fvNetProfit').textContent=money(net);$('fvNetProfit').className=net>=0?'fv-positive':'fv-negative';
-  renderPnl();
-  let salesRows=sales.map(x=>`<tr><td>${esc(x.sale_date)}</td><td>${esc(x.store_code)}</td><td>POS Sale</td><td>POS transaction</td><td>${esc(x.payment||'—')}</td><td>${money(x.total)}</td><td class="fv-no-print">—</td></tr>`);
-  let otherRows=income.map(x=>`<tr><td>${esc(x.transaction_date)}</td><td>${esc(x.store_code)}</td><td>${esc(x.category)}</td><td>${esc(x.description)}</td><td>${esc(x.payment_method)}</td><td>${money(x.amount)}</td><td class="fv-no-print"><button type="button" class="remove" onclick="fvDeleteFinance('income',${Number(x.id)})">DELETE</button></td></tr>`);
-  $('fvIncomeRows').innerHTML=salesRows.concat(otherRows).join('')||'<tr><td colspan="7">No income for this period.</td></tr>';
-  $('fvExpenseRows').innerHTML=expenseRows.map(x=>`<tr><td>${esc(x.expense_date)}</td><td>${esc(x.store_code)}</td><td>${esc(x.category)}</td><td>${esc([x.supplier,x.description].filter(Boolean).join(' — '))}</td><td>${esc(x.payment_method)}</td><td>${esc(x.reference||'—')}</td><td>${money(x.amount)}</td><td class="fv-no-print"><button type="button" class="remove" onclick="fvDeleteFinance('expense',${Number(x.id)})">DELETE</button></td></tr>`).join('')||'<tr><td colspan="8">No expenses for this period.</td></tr>';
- }
- function storeTotals(store){let sales=state.sales.filter(x=>x.store_code===store).reduce((a,x)=>a+Number(x.total||0),0),other=state.income.filter(x=>x.store_code===store).reduce((a,x)=>a+Number(x.amount||0),0),categories={};state.expenses.filter(x=>x.store_code===store).forEach(x=>categories[x.category]=(categories[x.category]||0)+Number(x.amount||0));let expenses=Object.values(categories).reduce((a,x)=>a+x,0),total=sales+other,net=total-expenses;return{sales,other,total,categories,expenses,net,margin:total?net/total*100:0}}
- function renderPnl(){let n=storeTotals('NDAYENI'),s=storeTotals('SIVANA'),allCats=['Stock & Ingredients','Staff Wages','Electricity','Rent','Transport','Repairs & Maintenance','Packaging','Cleaning','Bank Charges','Internet & Airtime','Security','Other Expense'],seen=new Set(allCats);Object.keys(n.categories).concat(Object.keys(s.categories)).forEach(c=>seen.add(c));let rows=[['POS Sales',n.sales,s.sales,''],['Other Income',n.other,s.other,''],['Total Income',n.total,s.total,'fv-pnl-total']];[...seen].forEach(c=>rows.push([c,n.categories[c]||0,s.categories[c]||0,'']));rows.push(['Total Expenses',n.expenses,s.expenses,'fv-pnl-total'],['Net Profit / (Loss)',n.net,s.net,'fv-pnl-result'],['Net Profit %',n.margin,s.margin,'percent']);$('fvPnlRows').innerHTML=rows.map(r=>`<tr class="${r[3]}"><td>${esc(r[0])}</td><td class="${r[0]==='Net Profit / (Loss)'?(r[1]>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number(r[1]).toFixed(1)+'%':money(r[1])}</td><td class="${r[0]==='Net Profit / (Loss)'?(r[2]>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number(r[2]).toFixed(1)+'%':money(r[2])}</td><td class="${r[0]==='Net Profit / (Loss)'?((r[1]+r[2])>=0?'fv-positive':'fv-negative'):''}">${r[3]==='percent'?Number((n.total+s.total)?(n.net+s.net)/(n.total+s.total)*100:0).toFixed(1)+'%':money(r[1]+r[2])}</td></tr>`).join('');$('fvPnlPeriod').textContent=($('fvFinanceFrom').value||'')+' to '+($('fvFinanceTo').value||'')}
- async function saveIncome(){
-  let s=selectedStore(),amount=Number($('fvIncomeAmount').value),description=$('fvIncomeDescription').value.trim();if(s==='ALL'){setStatus('Choose Ndayeni or Sivana before saving.',true);return}if(!description||!(amount>0)){setStatus('Enter the income description and an amount above zero.',true);return}
-  try{setStatus('Saving income...');await api('pos_other_income',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:s,transaction_date:$('fvIncomeDate').value,category:$('fvIncomeCategory').value,description,payment_method:$('fvIncomePayment').value,amount,reference:$('fvIncomeReference').value.trim()||null,created_by:window.currentUser.id||window.currentUser.user_id})});$('fvIncomeDescription').value='';$('fvIncomeAmount').value='';$('fvIncomeReference').value='';await load();setStatus('Income saved successfully.') }catch(e){showError(e)}
- }
- async function saveExpense(){
-  let s=selectedStore(),amount=Number($('fvExpenseAmount').value),description=$('fvExpenseDescription').value.trim();if(s==='ALL'){setStatus('Choose Ndayeni or Sivana before saving.',true);return}if(!description||!(amount>0)){setStatus('Enter the expense description and an amount above zero.',true);return}
-  try{setStatus('Saving expense...');await api('pos_store_expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:s,expense_date:$('fvExpenseDate').value,category:$('fvExpenseCategory').value,supplier:$('fvExpenseSupplier').value.trim()||null,description,payment_method:$('fvExpensePayment').value,amount,reference:$('fvExpenseReference').value.trim()||null,created_by:window.currentUser.id||window.currentUser.user_id})});$('fvExpenseSupplier').value='';$('fvExpenseDescription').value='';$('fvExpenseAmount').value='';$('fvExpenseReference').value='';await load();setStatus('Expense saved successfully.') }catch(e){showError(e)}
- }
- window.fvDeleteFinance=async function(type,id){if(!confirm('Delete this '+type+' transaction?'))return;try{await api((type==='income'?'pos_other_income':'pos_store_expenses')+'?id=eq.'+id,{method:'DELETE',headers:{Prefer:'return=minimal'}});await load();setStatus('Transaction deleted.')}catch(e){showError(e)}};
- function showError(e){let m=String(e?.message||e);if(/pos_other_income|pos_store_expenses|schema cache|Could not find/i.test(m))m='Income & Expenses database setup is still required. Run SETUP_INCOME_EXPENSES.sql in Supabase first.';setStatus(m,true)}
- function printReport(){document.body.classList.add('fv-finance-print');window.addEventListener('afterprint',()=>document.body.classList.remove('fv-finance-print'),{once:true});window.print()}
- function csvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
- function downloadCsv(){let chosen=selectedStore(),ok=x=>chosen==='ALL'||x.store_code===chosen,rows=[['Type','Date','Store','Category / Source','Description','Payment','Reference','Amount']];state.sales.filter(ok).forEach(x=>rows.push(['Income',x.sale_date,x.store_code,'POS Sale','POS transaction',x.payment||'', '',Number(x.total||0).toFixed(2)]));state.income.filter(ok).forEach(x=>rows.push(['Income',x.transaction_date,x.store_code,x.category,x.description,x.payment_method,x.reference||'',Number(x.amount||0).toFixed(2)]));state.expenses.filter(ok).forEach(x=>rows.push(['Expense',x.expense_date,x.store_code,x.category,[x.supplier,x.description].filter(Boolean).join(' — '),x.payment_method,x.reference||'',Number(x.amount||0).toFixed(2)]));let blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Feasterville_Income_Expenses_'+selectedStore()+'_'+$('fvFinanceFrom').value+'_to_'+$('fvFinanceTo').value+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
- function revealForManager(){let u=window.currentUser;if(!u||u.role!=='manager')return;let p=$('fvFinancePanel');if(p&&p.style.display!=='none'&&token())load().catch(showError)}
- document.addEventListener('DOMContentLoaded',()=>{makePanel();setTimeout(revealForManager,1600)});
- document.addEventListener('click',e=>{if(e.target?.id==='fvFinanceNav'){let p=$('fvFinancePanel');if(p){p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'})}setTimeout(()=>load().catch(showError),100)}},true);
- document.addEventListener('change',e=>{if(e.target&&/store/i.test(e.target.id||'')&&e.target.id!=='fvFinanceStore'){let s=activeStore();if($('fvFinanceStore')&&['NDAYENI','SIVANA'].includes(s))$('fvFinanceStore').value=s}},true);
-})();
-</script>
-<!-- BUILD: STORE_FINANCE_PROFIT_LOSS_V68 -->
-
-<script>
-/* V75 RECOVERY — Manager shortcut to existing finance report */
-(function(){
-'use strict';
-function manager(){return window.currentUser&&window.currentUser.role==='manager';}
-function install(){
- if(!manager())return;
- var reports=document.getElementById('reportsPanel');
- if(!reports||document.getElementById('fvOpenFinanceRecovery'))return;
- var b=document.createElement('button');
- b.type='button'; b.id='fvOpenFinanceRecovery'; b.className='primary';
- b.textContent='OPEN STORE PROFIT / LOSS';
- b.style.margin='10px 0 0 0';
- b.onclick=function(){
-   var p=document.getElementById('fvFinancePanel');
-   if(p){p.style.display='block';p.scrollIntoView({behavior:'smooth',block:'start'});}
-   var nav=document.getElementById('fvFinanceNav'); if(nav)nav.click();
- };
- reports.insertBefore(b,reports.children[2]||null);
-}
-var n=0,t=setInterval(function(){n++;install();if(document.getElementById('fvOpenFinanceRecovery')||n>120)clearInterval(t)},250);
-})();
-</script>
-<!-- BUILD: RECOVERY_FINANCE_SHORTCUT_V75 -->
-
-
-<div id="fvCashupHistoryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;color:#111;width:min(1100px,96vw);max-height:90vh;overflow:auto;border-radius:14px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-      <h2 style="margin:0">Cash-Up History</h2>
-      <button type="button" id="fvCloseCashupHistory">CLOSE</button>
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
-      <label>Store
-        <select id="fvCashupHistoryStore">
-          <option value="">Both Stores</option>
-          <option value="NDAYENI">Ndayini</option>
-          <option value="SIVANA">Sivana</option>
-        </select>
-      </label>
-      <label>From <input type="date" id="fvCashupHistoryFrom"></label>
-      <label>To <input type="date" id="fvCashupHistoryTo"></label>
-      <button type="button" id="fvLoadCashupHistory">VIEW</button>
-      <button type="button" id="fvPrintCashupHistory">PRINT / PDF</button>
-    </div>
-    <div id="fvCashupHistorySummary" style="margin:10px 0;font-weight:700"></div>
-    <div id="fvCashupHistoryTableWrap">Loading...</div>
-  </div>
-</div>
-
-<script>
-/* FEASTERVILLE MANAGER CASH-UP HISTORY — CANDIDATE V2 */
-(function(){
- 'use strict';
- if(window.__fvCashupHistoryInstalled)return; window.__fvCashupHistoryInstalled=true;
- const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
- const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
- const money=n=>'R'+Number(n||0).toFixed(2);
- function U(){return window.currentUser||window.salesSessionUser||null}
- function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||''}
- function headers(){return {'apikey':KEY,'Authorization':'Bearer '+tok(),'Content-Type':'application/json'}}
- function iso(d){return d.toISOString().slice(0,10)}
- function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
- async function api(path){
-   const r=await fetch(BASE+'/'+path,{headers:headers()});
-   const t=await r.text();
-   if(!r.ok)throw Error(t||('HTTP '+r.status));
-   return t?JSON.parse(t):[];
- }
- function isManager(){const u=U();return !!(u&&u.role==='manager')}
- function setDefaultDates(){
-   const to=new Date(), from=new Date(); from.setDate(from.getDate()-30);
-   const f=document.getElementById('fvCashupHistoryFrom'), t=document.getElementById('fvCashupHistoryTo');
-   if(f&&!f.value)f.value=iso(from); if(t&&!t.value)t.value=iso(to);
- }
- async function loadHistory(){
-   if(!isManager()){alert('Manager access required.');return}
-   const store=document.getElementById('fvCashupHistoryStore').value;
-   const from=document.getElementById('fvCashupHistoryFrom').value;
-   const to=document.getElementById('fvCashupHistoryTo').value;
-   let q='pos_daily_cashups?select=store_code,cashup_date,salesperson_name,total_sales,expected_cash,actual_cash,variance,status,closed_at,notes&order=cashup_date.desc,closed_at.desc';
-   if(store)q+='&store_code=eq.'+encodeURIComponent(store);
-   if(from)q+='&cashup_date=gte.'+from;
-   if(to)q+='&cashup_date=lte.'+to;
-   const wrap=document.getElementById('fvCashupHistoryTableWrap');
-   wrap.innerHTML='Loading...';
-   try{
-     const rows=await api(q);
-     const total=rows.reduce((a,r)=>a+Number(r.total_sales||0),0);
-     const variance=rows.reduce((a,r)=>a+Number(r.variance||0),0);
-     document.getElementById('fvCashupHistorySummary').textContent=
-       rows.length+' cash-up record(s) | Total Sales '+money(total)+' | Net Variance '+money(variance);
-     if(!rows.length){wrap.innerHTML='<p>No cash-up records found for the selected period.</p>';return}
-     wrap.innerHTML=
-       '<table style="width:100%;border-collapse:collapse;font-size:14px">'+
-       '<thead><tr>'+
-       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Date</th>'+
-       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Store</th>'+
-       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Closed By</th>'+
-       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Total Sales</th>'+
-       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Expected Cash</th>'+
-       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Actual Cash</th>'+
-       '<th style="text-align:right;border-bottom:2px solid #222;padding:8px">Variance</th>'+
-       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Status</th>'+
-       '<th style="text-align:left;border-bottom:2px solid #222;padding:8px">Closed At</th>'+
-       '</tr></thead><tbody>'+
-       rows.map(r=>'<tr>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.cashup_date)+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.store_code==='SIVANA'?'Sivana':'Ndayini')+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.salesperson_name||'')+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.total_sales)+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.expected_cash)+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.actual_cash)+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd;text-align:right">'+money(r.variance)+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.status||'')+'</td>'+
-         '<td style="padding:8px;border-bottom:1px solid #ddd">'+esc(r.closed_at?new Date(r.closed_at).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg'}):'')+'</td>'+
-       '</tr>').join('')+
-       '</tbody></table>';
-   }catch(e){
-     console.error(e); wrap.innerHTML='<p>Could not load cash-up history: '+esc(e.message)+'</p>';
-   }
- }
- window.openFvCashupHistory=function(){
-   if(!isManager()){alert('Manager access required.');return}
-   setDefaultDates();
-   document.getElementById('fvCashupHistoryModal').style.display='flex';
-   loadHistory();
- }
- function installButton(){
-   if(!isManager()||document.getElementById('fvCashupHistoryBtn'))return;
-   const cash=document.getElementById('fvCashupBtn');
-   const target=(cash&&cash.parentElement)||document.querySelector('header .actions')||document.querySelector('header')||document.body;
-   const b=document.createElement('button');
-   b.id='fvCashupHistoryBtn'; b.type='button'; b.textContent='CASH-UP HISTORY';
-   b.style.marginLeft='8px';
-   b.onclick=openFvCashupHistory;
-   if(cash&&cash.nextSibling) target.insertBefore(b,cash.nextSibling); else target.appendChild(b);
- }
- document.addEventListener('click',e=>{
-   if(e.target&&e.target.id==='fvCloseCashupHistory')document.getElementById('fvCashupHistoryModal').style.display='none';
-   if(e.target&&e.target.id==='fvLoadCashupHistory')loadHistory();
-   if(e.target&&e.target.id==='fvPrintCashupHistory'){
-     const content=document.querySelector('#fvCashupHistoryModal > div').innerHTML;
-     const w=window.open('','_blank','width=1100,height=800');
-     w.document.write('<html><head><title>Cash-Up History</title><style>body{font-family:Arial;padding:20px}button{display:none}table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #ccc;font-size:12px}</style></head><body>'+content+'</body></html>');
-     w.document.close(); w.focus(); setTimeout(()=>w.print(),250);
-   }
- });
- let n=0,t=setInterval(()=>{n++;installButton();if(document.getElementById('fvCashupHistoryBtn')||n>120)clearInterval(t)},250);
-})();
-</script>
-
-<!-- BUILD: CASHUP_HISTORY_CANDIDATE_V2_20260907 -->
-
-
-<script>
-/* FEASTERVILLE LIVE MASTER PRODUCTION INPUT EDITOR — CANDIDATE V3 */
-(function(){
-  'use strict';
-  if(window.__fvLiveMasterInputEditorV3)return;
-  window.__fvLiveMasterInputEditorV3=true;
-
-  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
-  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-
-  const E=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
-  const user=()=>window.currentUser||null;
-  const isManager=()=>!!(user()&&user().role==='manager');
-
-  function store(){
-    const g=document.getElementById('masterProductionStoreSelect');
-    if(g&&g.value)return g.value;
-    const top=document.getElementById('storeLocationSelect');
-    if(top&&top.value)return top.value;
-    return localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
-  }
-
-  function headers(extra){
-    return Object.assign({
-      apikey:KEY,
-      Authorization:'Bearer '+token(),
-      'Content-Type':'application/json'
-    },extra||{});
-  }
-
-  async function api(path,opt={}){
-    const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:headers(opt.headers)}));
-    const t=await r.text();
-    if(!r.ok)throw Error(t||('HTTP '+r.status));
-    return t?JSON.parse(t):null;
-  }
-
-  let liveRows=[];
-
-  async function loadLiveEditor(){
-    const panel=document.getElementById('masterProductionEditorPanel');
-    if(!panel)return;
-    if(!isManager()){
-      panel.style.display='none';
-      return;
-    }
-    panel.style.display='block';
-
-    const sc=store();
-    localStorage.setItem('feastervilleStoreCode',sc);
-
-    const status=document.getElementById('fvLiveMasterInputStatus');
-    if(status)status.innerHTML='<b>LIVE DATABASE:</b> Loading '+(sc==='SIVANA'?'Sivana':'Ndayini')+' production inputs...';
-
-    liveRows=await api(
-      'pos_store_production_inputs?select=id,store_code,code,name,unit,category,reorder_level,active,purchase_group,purchase_cycle_days,safety_stock,target_stock,preferred_supplier,preferred_unit_cost'+
-      '&store_code=eq.'+encodeURIComponent(sc)+'&order=code.asc'
-    )||[];
-
-    const sel=document.getElementById('masterEditSelect');
-    const body=document.getElementById('oldMasterEditorBody');
-
-    if(sel){
-      sel.innerHTML='<option value="">-- Add New / Select Existing --</option>'+
-        liveRows.map(p=>'<option value="'+E(p.code)+'">'+E(p.code)+' — '+E(p.name)+'</option>').join('');
-    }
-
-    if(body){
-      body.innerHTML=liveRows.length
-        ? liveRows.map(p=>'<tr>'+
-            '<td>'+E(p.code)+'</td>'+
-            '<td>'+E(p.name)+'</td>'+
-            '<td>'+E(p.category||'')+'</td>'+
-            '<td>'+E(p.unit||'EA')+'</td>'+
-            '<td>'+Number(p.reorder_level||0)+'</td>'+
-            '<td>'+(p.active===false?'INACTIVE':'ACTIVE')+'</td>'+
-            '<td><button type="button" onclick="editOldMasterInput(\''+String(p.code).replace(/'/g,"\\'")+'\')">EDIT</button></td>'+
-          '</tr>').join('')
-        : '<tr><td colspan="7">No production inputs found for this store.</td></tr>';
-    }
-
-    // Make room for ACTIVE column if old header has only 6 columns.
-    const table=body&&body.closest('table');
-    if(table){
-      const ths=table.querySelectorAll('thead th');
-      if(ths.length===6){
-        const tr=table.querySelector('thead tr');
-        tr.innerHTML='<th>Code</th><th>Production Input</th><th>Category</th><th>Unit</th><th>Reorder Level</th><th>Status</th><th>Action</th>';
-      }
-    }
-
-    if(status)status.innerHTML='<b>LIVE DATABASE:</b> '+(sc==='SIVANA'?'Sivana':'Ndayini')+' — '+liveRows.length+' production input(s).';
-  }
-
-  window.renderOldMasterEditor=function(){
-    loadLiveEditor().catch(e=>{
-      console.error(e);
-      const b=document.getElementById('oldMasterEditorBody');
-      if(b)b.innerHTML='<tr><td colspan="7">Could not load production inputs: '+E(e.message)+'</td></tr>';
-    });
-  };
-
-  window.editOldMasterInput=function(code){
-    const p=liveRows.find(x=>x.code===code);
-    if(!p)return alert('Production input not found for this store.');
-    const sel=document.getElementById('masterEditSelect');
-    if(sel)sel.value=code;
-    const c=document.getElementById('masterEditCode');
-    c.value=p.code;c.disabled=true;
-    document.getElementById('masterEditName').value=p.name||'';
-    document.getElementById('masterEditCategory').value=p.category||'Ingredient';
-    document.getElementById('masterEditUnit').value=p.unit||'EA';
-    document.getElementById('masterEditReorder').value=Number(p.reorder_level||0);
-  };
-
-  window.clearOldMasterEditor=function(){
-    const sel=document.getElementById('masterEditSelect');
-    if(sel)sel.value='';
-    const c=document.getElementById('masterEditCode');
-    if(c){c.disabled=false;c.value='';}
-    const n=document.getElementById('masterEditName'); if(n)n.value='';
-    const cat=document.getElementById('masterEditCategory'); if(cat)cat.value='Ingredient';
-    const unit=document.getElementById('masterEditUnit'); if(unit)unit.value='EA';
-    const r=document.getElementById('masterEditReorder'); if(r)r.value='5';
-  };
-
-  window.saveOldMasterInput=async function(){
-    try{
-      if(!isManager())throw Error('Manager access required.');
-      const sc=store();
-      const c=document.getElementById('masterEditCode');
-      const code=(c?.value||'').trim().toUpperCase();
-      const name=(document.getElementById('masterEditName')?.value||'').trim();
-      const category=(document.getElementById('masterEditCategory')?.value||'Ingredient').trim()||'Ingredient';
-      const unit=document.getElementById('masterEditUnit')?.value||'EA';
-      const reorder=Number(document.getElementById('masterEditReorder')?.value||0);
-
-      if(!code||!name)throw Error('Please enter the input code and name.');
-      if(reorder<0)throw Error('Reorder level cannot be negative.');
-
-      const existing=liveRows.find(x=>x.code===code);
-
-      if(existing){
-        await api(
-          'pos_store_production_inputs?store_code=eq.'+encodeURIComponent(sc)+'&code=eq.'+encodeURIComponent(code),
-          {
-            method:'PATCH',
-            headers:{Prefer:'return=minimal'},
-            body:JSON.stringify({
-              name,category,unit,reorder_level:reorder,active:true,
-              updated_at:new Date().toISOString()
-            })
-          }
-        );
-      }else{
-        await api('pos_store_production_inputs',{
-          method:'POST',
-          headers:{Prefer:'return=minimal'},
-          body:JSON.stringify({
-            store_code:sc,
-            code,
-            name,
-            unit,
-            category,
-            reorder_level:reorder,
-            active:true,
-            purchase_group:'WEEKLY',
-            purchase_cycle_days:7,
-            safety_stock:0,
-            target_stock:0
-          })
-        });
-      }
-
-      window.clearOldMasterEditor();
-      await loadLiveEditor();
-
-      try{
-        if(typeof window.refreshStoreProductionData==='function')
-          await window.refreshStoreProductionData();
-      }catch(e){console.warn('Store input refresh:',e)}
-
-      try{
-        if(typeof window.refreshProductionInputs==='function')
-          window.refreshProductionInputs();
-      }catch(e){console.warn('Production panel refresh:',e)}
-
-      alert('Production input saved successfully to '+(sc==='SIVANA'?'Sivana':'Ndayini')+'.');
-    }catch(e){
-      console.error(e);
-      alert('Could not save Production Input: '+e.message);
-    }
-  };
-
-  function bind(){
-    const sel=document.getElementById('masterEditSelect');
-    if(sel&&!sel.dataset.liveBound){
-      sel.dataset.liveBound='1';
-      sel.addEventListener('change',function(){
-        if(this.value)window.editOldMasterInput(this.value);
-        else window.clearOldMasterEditor();
-      });
-    }
-
-    const storeSel=document.getElementById('masterProductionStoreSelect');
-    if(storeSel&&!storeSel.dataset.liveEditorBound){
-      storeSel.dataset.liveEditorBound='1';
-      storeSel.addEventListener('change',function(){
-        localStorage.setItem('feastervilleStoreCode',this.value);
-        window.clearOldMasterEditor();
-        loadLiveEditor().catch(e=>alert('Could not switch Production Input store: '+e.message));
-      });
-    }
-
-    document.querySelectorAll('[data-manager-target="masterProductionEditorPanel"]').forEach(btn=>{
-      if(btn.dataset.liveEditorBound)return;
-      btn.dataset.liveEditorBound='1';
-      btn.addEventListener('click',()=>{
-        setTimeout(()=>loadLiveEditor().catch(e=>alert('Could not load Production Inputs: '+e.message)),50);
-      });
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded',()=>{
-    let n=0;
-    const t=setInterval(()=>{
-      n++;
-      if(isManager()){
-        bind();
-        if(document.getElementById('masterProductionEditorPanel')){
-          loadLiveEditor().catch(console.error);
-        }
-        if(n>20)clearInterval(t);
-      }
-      if(n>100)clearInterval(t);
-    },250);
-  });
-
-  const obs=new MutationObserver(()=>{if(isManager())bind()});
-  obs.observe(document.documentElement,{childList:true,subtree:true});
-
-  window.refreshLiveMasterProductionEditorV3=loadLiveEditor;
-})();
-</script>
-<!-- BUILD: LIVE_MASTER_PRODUCTION_INPUT_EDITOR_CANDIDATE_V3_20260907 -->
-
-
-<!-- BUILD: SINGLE_CLICK_SALES_FIX_V4_20260907 -->
 </body>
 </html>
