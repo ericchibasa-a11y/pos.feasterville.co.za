@@ -2155,6 +2155,19 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   window.completeSale = async function() {
+    if (window.__feastervilleSaleSubmitting) {
+      return;
+    }
+    window.__feastervilleSaleSubmitting = true;
+    const saleButtons = Array.from(document.querySelectorAll('button')).filter(function(btn){
+      return String(btn.textContent || '').trim().toUpperCase().includes('COMPLETE SALE');
+    });
+    saleButtons.forEach(function(btn){
+      btn.disabled = true;
+      btn.dataset.originalText = btn.textContent;
+      btn.textContent = 'PROCESSING SALE...';
+    });
+    let saleSucceeded = false;
     try {
       if (!accessToken) throw new Error('Please sign in to the live POS.');
       if (typeof cart === 'undefined' || !Array.isArray(cart) || !cart.length) {
@@ -2251,10 +2264,22 @@ document.addEventListener('DOMContentLoaded',function(){
       try { if (typeof renderCartReliable === 'function') renderCartReliable(); } catch (_) {}
 
       await pullSales();
+      saleSucceeded = true;
       alert('LIVE sale completed - Order #' + String(saved.order_no).padStart(4,'0'));
     } catch (err) {
       console.error(err);
       alert('The live sale could not be completed. Error: ' + err.message);
+    } finally {
+      window.__feastervilleSaleSubmitting = false;
+      saleButtons.forEach(function(btn){
+        btn.disabled = false;
+        btn.textContent = btn.dataset.originalText || 'COMPLETE SALE';
+        delete btn.dataset.originalText;
+      });
+      if (saleSucceeded) {
+        const paymentEl = document.getElementById('payment');
+        if (paymentEl) paymentEl.focus();
+      }
     }
   };
 
