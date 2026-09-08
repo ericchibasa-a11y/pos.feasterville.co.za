@@ -497,6 +497,14 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
     <button type="button" class="secondary" id="plPrintBtn">PRINT / SAVE PDF</button>
   </div>
   <p id="plStatus" class="small"></p>
+  <div class="inv-grid" style="margin:12px 0">
+    <div class="inv-card" style="min-width:360px;flex:1"><h3 style="margin-top:0">Capture Other Income</h3><div class="order-head" style="align-items:end;flex-wrap:wrap">
+      <label><b>Store</b><br><select id="oiStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label><label><b>Date</b><br><input id="oiDate" type="date"></label><label><b>Category</b><br><select id="oiCategory"><option>Other Income</option><option>Commission</option><option>Delivery Income</option><option>Refund / Recovery</option><option>Sale of Waste / Scrap</option><option>Other</option></select></label><label><b>Amount</b><br><input id="oiAmount" type="number" min="0" step="0.01" placeholder="R0.00"></label><label><b>Description</b><br><input id="oiDescription" placeholder="Income details"></label><button type="button" class="primary" id="oiSaveBtn">SAVE OTHER INCOME</button>
+    </div></div>
+    <div class="inv-card" style="min-width:420px;flex:1"><h3 style="margin-top:0">Capture Other Expense</h3><div class="order-head" style="align-items:end;flex-wrap:wrap">
+      <label><b>Store</b><br><select id="oeStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></label><label><b>Date</b><br><input id="oeDate" type="date"></label><label><b>Category</b><br><select id="oeCategory"><option>Fuel</option><option>Maintenance</option><option>Staff Transport</option><option>Advertising</option><option>Electricity</option><option>Water</option><option>Rent</option><option>Wages / Salaries</option><option>Bank Charges</option><option>Cleaning</option><option>Security</option><option>Telephone / Data</option><option>Other Expenses</option></select></label><label><b>Amount</b><br><input id="oeAmount" type="number" min="0" step="0.01" placeholder="R0.00"></label><label><b>Supplier / Description</b><br><input id="oeDescription" placeholder="Expense details"></label><button type="button" class="primary" id="oeSaveBtn">SAVE EXPENSE</button>
+    </div></div>
+  </div><p id="otherCaptureStatus" class="small"></p>
   <div id="plPrintArea">
     <div class="inv-grid" style="margin-top:10px">
       <div class="inv-card">Sales Income<br><b id="plSales">R0.00</b></div>
@@ -6990,5 +6998,22 @@ document.addEventListener('click',e=>{if((e.target?.dataset?.managerTarget||'')=
 })();
 </script>
 <!-- BUILD: STORES_COMPARISON_FINAL_PL_V49 -->
+
+<script>
+/* V50 — OTHER INCOME + OTHER EXPENSE CAPTURE */
+(()=>{
+if(window.__fvOtherCaptureV50)return;window.__fvOtherCaptureV50=true;
+const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1/';
+const KEY='sb_publishable_Yh5av_kMSi5qWbN4YgDDFQ_0UDe_BcF';
+function token(){return localStorage.getItem('feastervilleAccessToken')||sessionStorage.getItem('feastervilleAccessToken')||localStorage.getItem('sb-sflyjcgbxbcwspfuzone-auth-token')?.match(/"access_token":"([^"]+)/)?.[1]||''}
+function today(){return new Date().toISOString().slice(0,10)}
+async function req(path,opt={}){const t=token();if(!t)throw Error('Manager session not available. Please sign in again.');const h=Object.assign({apikey:KEY,Authorization:'Bearer '+t,'Content-Type':'application/json'},opt.headers||{});const r=await fetch(BASE+path,Object.assign({},opt,{headers:h}));const x=await r.text();if(!r.ok)throw Error(x||('HTTP '+r.status));return x?JSON.parse(x):null}
+function status(m,bad=false){const e=document.getElementById('otherCaptureStatus');if(e){e.textContent=m;e.style.color=bad?'#b91c1c':''}}
+async function saveIncome(){const store=document.getElementById('oiStore').value,date=document.getElementById('oiDate').value,category=document.getElementById('oiCategory').value,amount=Number(document.getElementById('oiAmount').value||0),description=document.getElementById('oiDescription').value.trim();if(!(amount>0))return alert('Enter the other income amount.');try{await req('pos_other_income',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:store,transaction_date:date||today(),category,description:description||category,payment_method:'Other',amount,reference:null})});document.getElementById('oiAmount').value='';document.getElementById('oiDescription').value='';status('Other income saved successfully for '+store+'.');window.loadProfitLossV48?.();window.loadStoresComparisonV49?.()}catch(e){status('Could not save other income: '+e.message,true)}}
+async function saveExpense(){const store=document.getElementById('oeStore').value,date=document.getElementById('oeDate').value,category=document.getElementById('oeCategory').value,amount=Number(document.getElementById('oeAmount').value||0),description=document.getElementById('oeDescription').value.trim();if(!(amount>0))return alert('Enter the expense amount.');try{await req('pos_store_expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:store,expense_date:date||today(),category,supplier:null,description:description||category,payment_method:'Other',amount,reference:null})});document.getElementById('oeAmount').value='';document.getElementById('oeDescription').value='';status(category+' expense saved successfully for '+store+'.');window.loadProfitLossV48?.();window.loadStoresComparisonV49?.()}catch(e){status('Could not save expense: '+e.message,true)}}
+function init(){['oiDate','oeDate'].forEach(id=>{const e=document.getElementById(id);if(e&&!e.value)e.value=today()});document.getElementById('oiSaveBtn')?.addEventListener('click',saveIncome);document.getElementById('oeSaveBtn')?.addEventListener('click',saveExpense)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 </body>
 </html>
