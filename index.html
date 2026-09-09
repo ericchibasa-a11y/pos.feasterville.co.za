@@ -4082,7 +4082,7 @@ document.addEventListener('DOMContentLoaded',function(){
  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
  let totals=null;
  const money=n=>'R'+Number(n||0).toFixed(2);
- function u(){return window.salesSessionUser||window.currentUser||null}
+ function u(){if(window.currentUser&&String(window.currentUser.role||'').toLowerCase()==='manager')return window.currentUser;return window.salesSessionUser||window.currentUser||null}
  function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||''}
  function day(){let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
  function store(){const me=u();if(me&&me.role==='manager'){const sel=document.getElementById('fvManagerCashupStore');return (sel&&sel.value)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI'}return (me&&me.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI'}
@@ -7058,5 +7058,52 @@ window.loadICReceiptReviewV54=review;setTimeout(()=>{enforce();review();},700);s
 })();
 </script>
 <!-- BUILD: IC_RECEIVE_STOCK_REVIEW_V54 -->
+
+<script>
+/* CASH-UP VISIBILITY HARDENING V56 */
+(function(){
+ 'use strict';
+ if(window.__fvCashupVisibilityV56)return; window.__fvCashupVisibilityV56=true;
+ function user(){
+   if(window.currentUser && String(window.currentUser.role||'').toLowerCase()==='manager') return window.currentUser;
+   return window.salesSessionUser || window.currentUser || null;
+ }
+ function role(){ return String(user()?.role||'').toLowerCase(); }
+ function ensureManagerButton(){
+   const nav=document.querySelector('#managerInventoryNav .inventory-actions');
+   if(!nav)return;
+   let b=document.getElementById('fvManagerCashupNavV56');
+   if(!b){
+     b=document.createElement('button'); b.type='button'; b.id='fvManagerCashupNavV56'; b.className='cat';
+     b.textContent='STORE CASH-UP / CLOSE DAY';
+     b.addEventListener('click',function(){ if(typeof window.openFvCashup==='function') window.openFvCashup(); else alert('Cash-up is still loading. Please try again.'); });
+     nav.appendChild(b);
+   }
+   b.style.display=role()==='manager'?'':'none';
+ }
+ function ensureSalespersonButton(){
+   const complete=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').trim()==='COMPLETE SALE');
+   const host=complete?.parentElement;
+   if(!host)return;
+   let b=document.getElementById('fvSalespersonCashupV56');
+   if(!b){
+     b=document.createElement('button'); b.type='button'; b.id='fvSalespersonCashupV56'; b.className='secondary';
+     b.style.width='100%'; b.style.marginTop='8px'; b.style.fontWeight='800';
+     b.textContent='CLOSE DAY / CASH-UP';
+     b.addEventListener('click',function(){ if(typeof window.openFvCashup==='function') window.openFvCashup(); else alert('Cash-up is still loading. Please try again.'); });
+     complete.insertAdjacentElement('afterend',b);
+   }
+   b.style.display=role()==='salesperson'?'block':'none';
+ }
+ function hideOldFloating(){
+   const b=document.getElementById('fvCashupBtn');
+   if(b)b.style.display='none';
+ }
+ function sync(){ensureManagerButton();ensureSalespersonButton();hideOldFloating();}
+ setInterval(sync,600); setTimeout(sync,100); setTimeout(sync,1200); setTimeout(sync,3000);
+ document.addEventListener('click',()=>setTimeout(sync,80),true);
+})();
+</script>
+<!-- BUILD: CASHUP_VISIBILITY_HARDENING_V56 -->
 </body>
 </html>
