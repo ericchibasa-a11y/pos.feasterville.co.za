@@ -7266,5 +7266,76 @@ window.openHistoricalCashupV59=open;window.loadHistoricalCashupV59=load;
 })();
 </script>
 <!-- BUILD: V59_MANAGER_HISTORICAL_CASHUP_REVIEW_20260910 -->
+
+<style>
+#fvSalespersonCashupV60{width:100%;margin-top:8px;font-weight:800}
+</style>
+<script>
+/* V60 — AUTHORITATIVE CASH-UP ROLE VISIBILITY FIX */
+(function(){
+ 'use strict';
+ if(window.__fvCashupRoleVisibilityV60)return;window.__fvCashupRoleVisibilityV60=true;
+
+ function activeRole(){
+   const su=window.salesSessionUser;
+   if(su && String(su.role||'').toLowerCase()==='salesperson') return 'salesperson';
+   const iu=window.inventorySessionUser;
+   if(iu && ['inventory_control','inventory controller','inventory_controller'].includes(String(iu.role||'').toLowerCase())) return 'inventory_control';
+   const cu=window.currentUser;
+   return String(cu?.role||'').toLowerCase();
+ }
+ function activeUser(){
+   const r=activeRole();
+   if(r==='salesperson') return window.salesSessionUser;
+   if(r==='inventory_control') return window.inventorySessionUser;
+   return window.currentUser||null;
+ }
+ function mount(){
+   const r=activeRole();
+
+   // Manager cash-up must never show in a salesperson or inventory-controller session.
+   ['fvManagerCashupHeaderV58','fvManagerCashupNavV56','fvCashupBtn'].forEach(function(id){
+     const el=document.getElementById(id);
+     if(el) el.style.setProperty('display', r==='manager' && id==='fvManagerCashupHeaderV58' ? 'inline-block':'none','important');
+   });
+
+   // Historical cash-up is manager-only.
+   const hist=document.getElementById('fvHistoricalCashupBtnV59');
+   if(hist) hist.style.setProperty('display',r==='manager'?'inline-block':'none','important');
+
+   // Remove/hide all older salesperson cash-up mounts to avoid competition.
+   ['fvSalespersonCashupV56','fvSalespersonCashupV58'].forEach(function(id){
+     const el=document.getElementById(id); if(el)el.style.setProperty('display','none','important');
+   });
+
+   let sb=document.getElementById('fvSalespersonCashupV60');
+   if(r==='salesperson'){
+     const complete=Array.from(document.querySelectorAll('button')).find(function(b){return (b.textContent||'').trim()==='COMPLETE SALE';});
+     if(complete && !sb){
+       sb=document.createElement('button');
+       sb.id='fvSalespersonCashupV60'; sb.type='button'; sb.className='secondary';
+       sb.textContent='CLOSE DAY / CASH-UP';
+       sb.onclick=function(){ if(typeof window.openFvCashup==='function')window.openFvCashup(); else alert('Cash-up is still loading. Please try again.'); };
+       complete.insertAdjacentElement('afterend',sb);
+     }
+     if(sb)sb.style.setProperty('display','block','important');
+   } else if(sb){
+     sb.style.setProperty('display','none','important');
+   }
+
+   // Expose the active session identity for cash-up without changing sale logic.
+   window.fvActiveCashupUserV60=activeUser();
+   document.documentElement.setAttribute('data-feasterville-build','V60');
+ }
+
+ // Run after all older visibility loops so V60 remains authoritative.
+ setInterval(mount,250);
+ setTimeout(mount,25); setTimeout(mount,500); setTimeout(mount,1500);
+ document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')mount();});
+ document.addEventListener('click',function(){setTimeout(mount,20);},true);
+ window.fvCashupMountV60=mount;
+})();
+</script>
+<!-- BUILD: V60_SALESPERSON_CASHUP_ROLE_VISIBILITY_FIX_20260910 -->
 </body>
 </html>
