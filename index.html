@@ -7160,5 +7160,111 @@ window.loadICReceiptReviewV54=review;setTimeout(()=>{enforce();review();},700);s
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')mount()});
  window.fvCashupMountV58=mount;
 })();
-</script>\n<!-- BUILD: V58_AUTHORITATIVE_CASHUP_SESSION_FIX_20260910 -->\n</body>
+</script>\n<!-- BUILD: V58_AUTHORITATIVE_CASHUP_SESSION_FIX_20260910 -->\n
+<style>
+#fvHistoricalCashupBtnV59{background:#fff;color:#111;border:1px solid #ddd;border-radius:8px;padding:9px 12px;font-weight:800;cursor:pointer;margin-right:8px}
+#fvHistoricalCashupModalV59{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100120;display:none;align-items:center;justify-content:center;padding:18px}
+#fvHistoricalCashupCardV59{background:#fff;color:#171717;width:min(1200px,98vw);max-height:94vh;overflow:auto;border-radius:14px;padding:18px;box-shadow:0 15px 50px rgba(0,0,0,.35)}
+#fvHistoricalCashupFiltersV59{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:12px 0}
+#fvHistoricalCashupFiltersV59 label{font-weight:700;font-size:12px;display:block;margin-bottom:4px}
+#fvHistoricalCashupFiltersV59 select,#fvHistoricalCashupFiltersV59 input{min-width:150px}
+#fvHistoricalCashupTableV59{width:100%;border-collapse:collapse;font-size:12px}
+#fvHistoricalCashupTableV59 th,#fvHistoricalCashupTableV59 td{border:1px solid #ddd;padding:7px;vertical-align:top;white-space:nowrap}
+#fvHistoricalCashupTableV59 th{background:#f3f5f0;position:sticky;top:0;z-index:1}
+#fvHistoricalCashupSummaryV59{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+#fvHistoricalCashupSummaryV59>div{background:#f6f8f2;border:1px solid #dce8c9;border-radius:9px;padding:9px}
+#fvHistoricalCashupSummaryV59 b{display:block;font-size:16px;margin-top:3px}
+#fvHistoricalCashupStatusV59{min-height:18px;font-size:12px;margin:7px 0}
+@media print{#fvHistoricalCashupModalV59{position:static!important;display:block!important;background:#fff!important;padding:0!important}#fvHistoricalCashupCardV59{width:100%!important;max-height:none!important;box-shadow:none!important;padding:0!important}.fvHistNoPrintV59{display:none!important}#fvHistoricalCashupTableV59 th{position:static!important}}
+</style>
+<div id="fvHistoricalCashupModalV59">
+  <div id="fvHistoricalCashupCardV59">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+      <div><h2 style="margin:0">Historical Store Cash-Up</h2><div class="small">Manager view only — previous cash-ups cannot be edited here.</div></div>
+      <div class="fvHistNoPrintV59" style="display:flex;gap:8px"><button type="button" id="fvHistPrintV59" class="secondary">PRINT / SAVE PDF</button><button type="button" id="fvHistCloseV59" class="danger">CLOSE</button></div>
+    </div>
+    <div id="fvHistoricalCashupFiltersV59" class="fvHistNoPrintV59">
+      <div><label>Store</label><select id="fvHistStoreV59"><option value="ALL">All Stores</option><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option></select></div>
+      <div><label>From Date</label><input id="fvHistFromV59" type="date"></div>
+      <div><label>To Date</label><input id="fvHistToV59" type="date"></div>
+      <button type="button" id="fvHistLoadV59" class="primary">VIEW CASH-UPS</button>
+      <button type="button" id="fvHistThisMonthV59" class="secondary">THIS MONTH</button>
+    </div>
+    <div id="fvHistoricalCashupStatusV59"></div>
+    <div id="fvHistoricalCashupSummaryV59"></div>
+    <div style="overflow:auto;max-height:58vh">
+      <table id="fvHistoricalCashupTableV59">
+        <thead><tr><th>Date</th><th>Store</th><th>Closed By</th><th>Sales</th><th>Cash</th><th>Card</th><th>Mr D</th><th>Uber Eats</th><th>Other</th><th>Opening Float</th><th>Expected Cash</th><th>Actual Cash</th><th>Variance</th><th>Sale Count</th><th>Status</th><th>Closed At</th><th>Notes</th></tr></thead>
+        <tbody id="fvHistoricalCashupBodyV59"><tr><td colspan="17">Select a period and click VIEW CASH-UPS.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+/* V59 — MANAGER HISTORICAL CASH-UP REVIEW — VIEW ONLY */
+(function(){
+'use strict';
+if(window.__fvHistoricalCashupV59)return;window.__fvHistoricalCashupV59=true;
+const ROOT='https://sflyjcgbxbcwspfuzone.supabase.co',KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N=v=>Number(v||0),M=v=>'R'+N(v).toFixed(2);
+const user=()=>window.currentUser||null, role=()=>String(user()?.role||'').toLowerCase();
+function token(){return sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||''}
+function refreshToken(){return sessionStorage.getItem('feastervilleCloudRefreshToken')||localStorage.getItem('feastervilleCloudRefreshToken')||''}
+async function refreshAuth(){
+ const rt=refreshToken();if(!rt)throw Error('Your login session has expired. Please log in again.');
+ const r=await fetch(ROOT+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});
+ const text=await r.text();let d={};try{d=text?JSON.parse(text):{}}catch(_){d={}}
+ if(!r.ok||!d.access_token)throw Error(d.message||d.error_description||'Could not renew login session. Please log in again.');
+ sessionStorage.setItem('feastervilleCloudAccessToken',d.access_token);localStorage.setItem('feastervilleCloudAccessToken',d.access_token);
+ if(d.refresh_token){sessionStorage.setItem('feastervilleCloudRefreshToken',d.refresh_token);localStorage.setItem('feastervilleCloudRefreshToken',d.refresh_token)}
+ return d.access_token;
+}
+async function api(path){
+ async function run(){const r=await fetch(ROOT+'/rest/v1/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+token()}});const text=await r.text();return{r,text}}
+ let x=await run();
+ if(!x.r.ok&&(x.r.status===401||/PGRST303|JWT expired|jwt.*expired/i.test(x.text))){await refreshAuth();x=await run()}
+ if(!x.r.ok)throw Error(x.text||('HTTP '+x.r.status));
+ return x.text?JSON.parse(x.text):[];
+}
+function localDate(d=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)}
+function setMonth(){const now=new Date(),first=new Date(now.getFullYear(),now.getMonth(),1);document.getElementById('fvHistFromV59').value=localDate(first);document.getElementById('fvHistToV59').value=localDate(now)}
+function status(t,bad=false){const el=document.getElementById('fvHistoricalCashupStatusV59');if(el){el.textContent=t;el.style.color=bad?'#b91c1c':'#185b00'}}
+function closedAt(v){if(!v)return'';try{return new Intl.DateTimeFormat('en-ZA',{timeZone:'Africa/Johannesburg',dateStyle:'short',timeStyle:'medium'}).format(new Date(v))}catch(_){return String(v)}}
+function summary(rows){
+ const s=rows.reduce((a,r)=>{a.sales+=N(r.total_sales);a.cash+=N(r.cash_sales);a.expected+=N(r.expected_cash);a.actual+=N(r.actual_cash);a.variance+=N(r.variance??(N(r.actual_cash)-N(r.expected_cash)));a.count+=N(r.sale_count);return a},{sales:0,cash:0,expected:0,actual:0,variance:0,count:0});
+ document.getElementById('fvHistoricalCashupSummaryV59').innerHTML='<div>Cash-Ups<b>'+rows.length+'</b></div><div>Sales<b>'+M(s.sales)+'</b></div><div>Cash Sales<b>'+M(s.cash)+'</b></div><div>Expected Cash<b>'+M(s.expected)+'</b></div><div>Actual Cash<b>'+M(s.actual)+'</b></div><div>Variance<b>'+M(s.variance)+'</b></div><div>Sale Count<b>'+s.count+'</b></div>';
+}
+async function load(){
+ if(role()!=='manager'){status('Manager access required.',true);return}
+ const store=document.getElementById('fvHistStoreV59').value,from=document.getElementById('fvHistFromV59').value,to=document.getElementById('fvHistToV59').value;
+ if(!from||!to)return status('Select From Date and To Date.',true);if(from>to)return status('From Date cannot be after To Date.',true);
+ status('Loading historical cash-ups...');
+ try{
+  let q='pos_daily_cashups?cashup_date=gte.'+encodeURIComponent(from)+'&cashup_date=lte.'+encodeURIComponent(to);
+  if(store!=='ALL')q+='&store_code=eq.'+encodeURIComponent(store);
+  q+='&select=id,store_code,cashup_date,user_id,salesperson_name,opening_float,cash_sales,card_sales,mr_d_sales,uber_eats_sales,other_sales,total_sales,expected_cash,actual_cash,variance,sale_count,closed_at,notes,status&order=cashup_date.desc,closed_at.desc';
+  const rows=await api(q),body=document.getElementById('fvHistoricalCashupBodyV59');
+  body.innerHTML=rows.map(r=>'<tr><td>'+E(r.cashup_date)+'</td><td>'+E(r.store_code==='SIVANA'?'Sivana':'Ndayeni')+'</td><td>'+E(r.salesperson_name)+'</td><td><b>'+M(r.total_sales)+'</b></td><td>'+M(r.cash_sales)+'</td><td>'+M(r.card_sales)+'</td><td>'+M(r.mr_d_sales)+'</td><td>'+M(r.uber_eats_sales)+'</td><td>'+M(r.other_sales)+'</td><td>'+M(r.opening_float)+'</td><td>'+M(r.expected_cash)+'</td><td>'+M(r.actual_cash)+'</td><td>'+M(r.variance??(N(r.actual_cash)-N(r.expected_cash)))+'</td><td>'+N(r.sale_count)+'</td><td>'+E(r.status)+'</td><td>'+E(closedAt(r.closed_at))+'</td><td style="white-space:normal;min-width:180px">'+E(r.notes||'')+'</td></tr>').join('')||'<tr><td colspan="17">No cash-ups found for this period.</td></tr>';
+  summary(rows);status(rows.length+' historical cash-up record'+(rows.length===1?'':'s')+' loaded.');
+ }catch(e){status('Could not load historical cash-ups: '+e.message,true)}
+}
+function open(){if(role()!=='manager')return alert('Manager access required.');const m=document.getElementById('fvHistoricalCashupModalV59');m.style.display='flex';if(!document.getElementById('fvHistFromV59').value)setMonth();load()}
+function close(){document.getElementById('fvHistoricalCashupModalV59').style.display='none'}
+function mount(){
+ let b=document.getElementById('fvHistoricalCashupBtnV59');
+ if(role()==='manager'){
+  const h=document.querySelector('header');
+  if(h&&!b){b=document.createElement('button');b.id='fvHistoricalCashupBtnV59';b.type='button';b.textContent='HISTORICAL CASH-UP';b.onclick=open;const live=document.getElementById('fvManagerCashupHeaderV58');h.insertBefore(b,live||Array.from(h.querySelectorAll('button')).find(x=>/LOGOUT/i.test(x.textContent||''))||null)}
+  if(b)b.style.setProperty('display','inline-block','important');
+ }else if(b)b.style.setProperty('display','none','important');
+ document.documentElement.setAttribute('data-feasterville-build','V59');
+}
+function init(){setMonth();document.getElementById('fvHistLoadV59')?.addEventListener('click',load);document.getElementById('fvHistThisMonthV59')?.addEventListener('click',()=>{setMonth();load()});document.getElementById('fvHistCloseV59')?.addEventListener('click',close);document.getElementById('fvHistPrintV59')?.addEventListener('click',()=>window.print());setInterval(mount,700);setTimeout(mount,50);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+window.openHistoricalCashupV59=open;window.loadHistoricalCashupV59=load;
+})();
+</script>
+<!-- BUILD: V59_MANAGER_HISTORICAL_CASHUP_REVIEW_20260910 -->
+</body>
 </html>
