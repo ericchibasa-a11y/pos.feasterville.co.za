@@ -7105,5 +7105,88 @@ window.loadICReceiptReviewV54=review;setTimeout(()=>{enforce();review();},700);s
 })();
 </script>
 <!-- BUILD: CASHUP_VISIBILITY_HARDENING_V56 -->
+
+
+<script>
+/* V57 STABILITY FIX — SESSION AUTO-REFRESH + CASH-UP ROLE/VISIBILITY LOCK */
+(function(){
+ 'use strict';
+ if(window.__fvV57StabilityFix)return; window.__fvV57StabilityFix=true;
+ const SB='https://sflyjcgbxbcwspfuzone.supabase.co';
+ const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+ const TK='feastervilleCloudAccessToken', RK='feastervilleCloudRefreshToken', UK='fvCashupStableUserV57';
+ const nativeFetch=window.fetch.bind(window);
+ let refreshing=null;
+ function access(){return sessionStorage.getItem(TK)||''}
+ function refresh(){
+   if(refreshing)return refreshing;
+   refreshing=(async()=>{
+     const rt=sessionStorage.getItem(RK)||'';
+     if(!rt)throw new Error('Session expired. Please sign in again.');
+     const r=await nativeFetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});
+     const text=await r.text(); let d={}; try{d=text?JSON.parse(text):{}}catch(_){d={}}
+     if(!r.ok||!d.access_token)throw new Error((d&&d.message)||'Session expired. Please sign in again.');
+     sessionStorage.setItem(TK,d.access_token);
+     if(d.refresh_token)sessionStorage.setItem(RK,d.refresh_token);
+     return d.access_token;
+   })().finally(()=>{refreshing=null});
+   return refreshing;
+ }
+ function supabaseUrl(input){try{return String(typeof input==='string'?input:input.url||'').startsWith(SB)}catch(_){return false}}
+ function withFreshBearer(input,init){
+   if(!supabaseUrl(input))return [input,init];
+   const token=access(); if(!token)return [input,init];
+   if(typeof input==='string'){
+     const next=Object.assign({},init||{}); const h=new Headers(next.headers||{});
+     if(h.has('Authorization'))h.set('Authorization','Bearer '+token);
+     next.headers=h; return [input,next];
+   }
+   try{
+     const h=new Headers(input.headers||{}); if(h.has('Authorization'))h.set('Authorization','Bearer '+token);
+     const req=new Request(input,{headers:h}); return [req,init];
+   }catch(_){return [input,init]}
+ }
+ window.fetch=async function(input,init){
+   let pair=withFreshBearer(input,init), response=await nativeFetch(pair[0],pair[1]);
+   if(!supabaseUrl(input)||String(typeof input==='string'?input:input.url||'').includes('/auth/v1/token'))return response;
+   if(response.status!==401)return response;
+   let expired=false; try{const t=await response.clone().text();expired=/PGRST303|JWT expired|jwt.*expired/i.test(t)}catch(_){}
+   if(!expired)return response;
+   try{
+     await refresh();
+     pair=withFreshBearer(input,init);
+     return await nativeFetch(pair[0],pair[1]);
+   }catch(e){
+     console.warn('V57 session refresh failed',e);
+     return response;
+   }
+ };
+ function liveUser(){
+   const a=window.currentUser,b=window.salesSessionUser;
+   const u=(a&&['manager','salesperson'].includes(String(a.role||'').toLowerCase()))?a:(b&&String(b.role||'').toLowerCase()==='salesperson'?b:null);
+   if(u){try{sessionStorage.setItem(UK,JSON.stringify(u))}catch(_){};return u}
+   try{return JSON.parse(sessionStorage.getItem(UK)||'null')}catch(_){return null}
+ }
+ function r(){return String(liveUser()?.role||'').toLowerCase()}
+ function show(el,on){if(el)el.style.setProperty('display',on?'':'none','important')}
+ function sync(){
+   const role=r(); if(!['manager','salesperson'].includes(role))return;
+   let mb=document.getElementById('fvManagerCashupNavV56');
+   const nav=document.querySelector('#managerInventoryNav .inventory-actions');
+   if(role==='manager'&&nav&&!mb){mb=document.createElement('button');mb.id='fvManagerCashupNavV56';mb.type='button';mb.className='cat';mb.textContent='STORE CASH-UP / CLOSE DAY';mb.onclick=()=>window.openFvCashup?.();nav.appendChild(mb)}
+   show(mb,role==='manager');
+   let sb=document.getElementById('fvSalespersonCashupV56');
+   const complete=Array.from(document.querySelectorAll('button')).find(x=>(x.textContent||'').trim()==='COMPLETE SALE');
+   if(role==='salesperson'&&complete&&!sb){sb=document.createElement('button');sb.id='fvSalespersonCashupV56';sb.type='button';sb.className='secondary';sb.textContent='CLOSE DAY / CASH-UP';sb.style.width='100%';sb.style.marginTop='8px';sb.style.fontWeight='800';sb.onclick=()=>window.openFvCashup?.();complete.insertAdjacentElement('afterend',sb)}
+   show(sb,role==='salesperson');
+   const old=document.getElementById('fvCashupBtn'); if(old)show(old,false);
+ }
+ const obs=new MutationObserver(()=>sync());
+ if(document.body)obs.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});
+ setInterval(sync,750); setTimeout(sync,50); setTimeout(sync,1000);
+ window.fvRefreshSessionV57=refresh;
+})();
+</script>
+<!-- BUILD: V57_SESSION_REFRESH_CASHUP_STABILITY_20260909 -->
 </body>
 </html>
