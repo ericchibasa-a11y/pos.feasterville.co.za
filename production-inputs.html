@@ -184,13 +184,17 @@ function receiptStatus(msg,ok=true){const e=document.getElementById('receipt_sta
 function setReceiptDate(){const e=document.getElementById('r_date');if(e&&!e.value)e.value=new Date().toISOString().slice(0,10);}
 function clearReceipt(){['r_supplier','r_reference','r_qty','r_cost'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});setReceiptDate();receiptStatus('');}
 async function populateReceiptInputs(){
- const store=document.getElementById('r_store')?.value||'NDAYENI', sel=document.getElementById('r_input'); if(!sel)return;
+ const store=document.getElementById('r_store')?.value||'NDAYENI';
+ const sel=document.getElementById('r_input'); if(!sel)return;
  const current=sel.value;
  try{
    sel.innerHTML='<option value="">Loading Production Inputs...</option>';
-   const items=await request('/rest/v1/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&select=code,name,unit,preferred_unit_cost,preferred_supplier&order=name.asc');
+   const data=await api('/rest/v1/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&select=code,name,unit,preferred_unit_cost,preferred_supplier&order=name.asc');
+   const items=Array.isArray(data)?data:[];
    sel.innerHTML='<option value="">Select Production Input</option>'+items.map(x=>'<option value="'+esc(x.code)+'" data-name="'+esc(x.name)+'" data-unit="'+esc(x.unit||'EA')+'" data-cost="'+esc(x.preferred_unit_cost??'')+'" data-supplier="'+esc(x.preferred_supplier||'')+'">'+esc(x.code)+' — '+esc(x.name)+'</option>').join('');
    if(items.some(x=>x.code===current))sel.value=current;
+   if(!items.length) receiptStatus('No active Production Inputs found for '+store+'.',false);
+   else receiptStatus(items.length+' Production Inputs ready for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.');
  }catch(e){
    sel.innerHTML='<option value="">Could not load Production Inputs</option>';
    receiptStatus('Could not load Production Inputs: '+e.message,false);
@@ -239,5 +243,5 @@ function render(){
 }
 function edit(x){document.getElementById('store').value=x.store_code;document.getElementById('code').value=x.code;document.getElementById('name').value=x.name;document.getElementById('category').value=x.category||'';document.getElementById('unit').value=x.unit||'EA';document.getElementById('reorder').value=x.reorder_level||0;document.getElementById('safety').value=x.safety_stock||0;document.getElementById('target').value=x.target_stock||0;document.getElementById('cycle').value=x.purchase_cycle_days||7;document.getElementById('group').value=x.purchase_group||'WEEKLY';document.getElementById('supplier').value=x.preferred_supplier||'';document.getElementById('cost').value=x.preferred_unit_cost??'';document.getElementById('active').value=String(x.active!==false);go('add')}
 document.getElementById('store').value=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';document.getElementById('listStore').value=document.getElementById('store').value;refreshAdmin();
-document.addEventListener('DOMContentLoaded',()=>{setReceiptDate();setTimeout(()=>populateReceiptInputs(),300);document.getElementById('r_store')?.addEventListener('change',async()=>{await populateReceiptInputs();});document.getElementById('r_input')?.addEventListener('change',applyReceiptDefaults);});
+document.addEventListener('DOMContentLoaded',()=>{setReceiptDate();setTimeout(()=>populateReceiptInputs(),800);document.getElementById('r_store')?.addEventListener('change',async()=>{await populateReceiptInputs();});document.getElementById('r_input')?.addEventListener('change',applyReceiptDefaults);});
 </script></body></html>
