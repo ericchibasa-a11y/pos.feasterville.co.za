@@ -922,38 +922,73 @@ function printReceipt(){
     'button{display:none!important}'+
     '</style></head><body><div class="receipt-wrap">'+receiptHtml+'</div>
 <script>
-/* FEASTERVILLE ICE CREAM -> PRODUCTION INPUTS 1:1 — isolated data migration */
+/* ICE CREAM -> LIVE PRODUCTION INPUTS + 1:1 RECIPE LINK V69
+   Idempotent: adds only missing live DB rows and preserves all unrelated recipes. */
 (function(){
 'use strict';
-if(window.__fvIceCreamInputs1to1)return; window.__fvIceCreamInputs1to1=true;
+if(window.__fvIceCreamInputsV69)return; window.__fvIceCreamInputsV69=true;
 const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1';
 const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
-const ICE=[{"code":"ICE-001","name":"ICup Tin Roof","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-002","name":"ICup Mango","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-003","name":"ICup Almond","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-004","name":"ICup Pistachio Nuts","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-005","name":"ICup Bufree","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-006","name":"Polar Sundae","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-007","name":"Polar I Cone","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-008","name":"Milky Pie Almond","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-009","name":"Maxi Choc Almond","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-010","name":"Maxi White Almond","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-011","name":"Maxi Classic","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-012","name":"Cone Ice Cream","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-013","name":"Cup Ice Cream","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-014","name":"Bubblegum","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-015","name":"Flavour Mania Cups","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-016","name":"Jolly Jelly Ice Cream","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-017","name":"Split Mix","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-018","name":"Snow Pie","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-019","name":"Rave Strawberry","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-020","name":"Choc Overload","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-021","name":"Banana Berry","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-022","name":"Banana Split","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-023","name":"Ice Cream Panda Pops","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-024","name":"Polar Eish","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-025","name":"Three in One","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-026","name":"Polar Split","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-027","name":"Litchilik","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-028","name":"Custard & Jelly","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-029","name":"Milky Mix","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-030","name":"Rave Blackcurrant","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-031","name":"Caramello","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-032","name":"Choc 99","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-033","name":"Fruity Licks Mix","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-034","name":"Polar Raspberry","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-035","name":"Polar Pop Orange","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-036","name":"Polar Tropaz","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-037","name":"Polar Apple","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-038","name":"Polar Pineapple","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-039","name":"Grandelch","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-040","name":"Top Hat","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-041","name":"Polar Pop","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-042","name":"Banana and Strawberry 500ml","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-043","name":"Vanilla and Strawberry 500ml","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-044","name":"Vanilla Flavoured 500ml","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-045","name":"Chocolate, Vanilla and Strawberry 500ml","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-046","name":"Chocolate and Vanilla 500ml","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-047","name":"Caramel Dip","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-048","name":"Nice Cream 500ml Banana Split","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-049","name":"Nice Cream 500ml Vanilla","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-050","name":"Nice Cream 500ml Vanilla/Strawberry","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true},{"code":"ICE-051","name":"Milky Pie","unit":"EA","category":"Ice Cream","reorder_level":5,"active":true}];
-function user(){return window.inventorySessionUser||window.currentUser||window.salesSessionUser||null;}
-function token(){let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken');if(v)return v;for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token')){try{let j=JSON.parse(localStorage.getItem(k));if(j.access_token)return j.access_token}catch(_){}}}return '';}
-function hdr(extra){return Object.assign({apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},extra||{});}
-async function api(path,opt={}){const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:hdr(opt.headers)}));const t=await r.text();if(!r.ok)throw Error(t||('HTTP '+r.status));return t?JSON.parse(t):null;}
-async function migrate(){
- const u=user(); if(!u||u.role!=='manager'||!token())return false;
- if(localStorage.getItem('fvIceCreamInputs1to1_v1')==='done')return true;
- for(const store of ['NDAYENI','SIVANA']){
-   const existing=await api('pos_store_production_inputs?store_code=eq.'+store+'&code=like.ICE-*&select=code');
-   const have=new Set((existing||[]).map(x=>x.code));
-   const missing=ICE.filter(x=>!have.has(x.code)).map(x=>Object.assign({store_code:store},x));
-   if(missing.length)await api('pos_store_production_inputs',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(missing)});
+const ICE=[{"code": "ICE-001", "name": "ICup Tin Roof"}, {"code": "ICE-002", "name": "ICup Mango"}, {"code": "ICE-003", "name": "ICup Almond"}, {"code": "ICE-004", "name": "ICup Pistachio Nuts"}, {"code": "ICE-005", "name": "ICup Bufree"}, {"code": "ICE-006", "name": "Polar Sundae"}, {"code": "ICE-007", "name": "Polar I Cone"}, {"code": "ICE-008", "name": "Milky Pie Almond"}, {"code": "ICE-009", "name": "Maxi Choc Almond"}, {"code": "ICE-010", "name": "Maxi White Almond"}, {"code": "ICE-011", "name": "Maxi Classic"}, {"code": "ICE-012", "name": "Cone Ice Cream"}, {"code": "ICE-013", "name": "Cup Ice Cream"}, {"code": "ICE-014", "name": "Bubblegum"}, {"code": "ICE-015", "name": "Flavour Mania Cups"}, {"code": "ICE-016", "name": "Jolly Jelly Ice Cream"}, {"code": "ICE-017", "name": "Split Mix"}, {"code": "ICE-018", "name": "Snow Pie"}, {"code": "ICE-019", "name": "Rave Strawberry"}, {"code": "ICE-020", "name": "Choc Overload"}, {"code": "ICE-021", "name": "Banana Berry"}, {"code": "ICE-022", "name": "Banana Split"}, {"code": "ICE-023", "name": "Ice Cream Panda Pops"}, {"code": "ICE-024", "name": "Polar Eish"}, {"code": "ICE-025", "name": "Three in One"}, {"code": "ICE-026", "name": "Polar Split"}, {"code": "ICE-027", "name": "Litchilik"}, {"code": "ICE-028", "name": "Custard & Jelly"}, {"code": "ICE-029", "name": "Milky Mix"}, {"code": "ICE-030", "name": "Rave Blackcurrant"}, {"code": "ICE-031", "name": "Caramello"}, {"code": "ICE-032", "name": "Choc 99"}, {"code": "ICE-033", "name": "Fruity Licks Mix"}, {"code": "ICE-034", "name": "Polar Raspberry"}, {"code": "ICE-035", "name": "Polar Pop Orange"}, {"code": "ICE-036", "name": "Polar Tropaz"}, {"code": "ICE-037", "name": "Polar Apple"}, {"code": "ICE-038", "name": "Polar Pineapple"}, {"code": "ICE-039", "name": "Grandelch"}, {"code": "ICE-040", "name": "Top Hat"}, {"code": "ICE-041", "name": "Polar Pop"}, {"code": "ICE-042", "name": "Banana and Strawberry 500ml"}, {"code": "ICE-043", "name": "Vanilla and Strawberry 500ml"}, {"code": "ICE-044", "name": "Vanilla Flavoured 500ml"}, {"code": "ICE-045", "name": "Chocolate, Vanilla and Strawberry 500ml"}, {"code": "ICE-046", "name": "Chocolate and Vanilla 500ml"}, {"code": "ICE-047", "name": "Caramel Dip"}, {"code": "ICE-048", "name": "Nice Cream 500ml Banana Split"}, {"code": "ICE-049", "name": "Nice Cream 500ml Vanilla"}, {"code": "ICE-050", "name": "Nice Cream 500ml Vanilla/Strawberry"}, {"code": "ICE-051", "name": "Milky Pie"}];
+function tok(){
+ let v=sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken'); if(v)return v;
+ for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(k&&k.includes('auth-token')){try{let j=JSON.parse(localStorage.getItem(k));if(j.access_token)return j.access_token}catch(_){}}}
+ return '';
+}
+function manager(){const u=window.inventorySessionUser||window.currentUser||window.salesSessionUser||null;return u&&u.role==='manager';}
+async function api(path,opt={}){
+ const h=Object.assign({apikey:KEY,Authorization:'Bearer '+tok(),'Content-Type':'application/json'},opt.headers||{});
+ const r=await fetch(BASE+'/'+path,Object.assign({},opt,{headers:h})); const t=await r.text();
+ if(!r.ok)throw Error(t||('HTTP '+r.status)); return t?JSON.parse(t):null;
+}
+async function installStore(sc){
+ const products=await api('pos_store_products?store_code=eq.'+encodeURIComponent(sc)+'&active=eq.true&select=code,name,category');
+ const iceProducts=(products||[]).filter(p=>String(p.category||'').toUpperCase()==='ICE CREAM'||/^ICE-\d{3}$/.test(String(p.code||'')));
+ const allowed=new Map(iceProducts.map(p=>[p.code,p]));
+ const existing=await api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(sc)+'&select=code');
+ const have=new Set((existing||[]).map(x=>x.code));
+ let added=0;
+ for(const def of ICE){
+   const p=allowed.get(def.code); if(!p||have.has(def.code))continue;
+   await api('pos_store_production_inputs',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({store_code:sc,code:def.code,name:p.name||def.name,category:'Ice Cream',unit:'EA',reorder_level:5,active:true})});
+   have.add(def.code); added++;
  }
+ return {added,codes:[...allowed.keys()]};
+}
+async function linkRecipes(codes){
  const rr=await api('pos_state?key=eq.recipes&select=value');
  let all=(rr&&rr[0]&&rr[0].value)||{}; if(typeof all==='string'){try{all=JSON.parse(all)}catch(_){all={}}}
- ICE.forEach(x=>{all[x.code]=[{inputCode:x.code,qty:1}];});
- await api('pos_state?key=eq.recipes',{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({value:all})});
- try{localStorage.setItem('feastervilleRecipes',JSON.stringify(all));if(typeof recipes!=='undefined')recipes=all;localStorage.setItem('fvIceCreamInputs1to1_v1','done');}catch(_){}
- if(typeof window.loadReceiveProductionInputsV61==='function')window.loadReceiveProductionInputsV61().catch(()=>{});
- return true;
+ let changed=0;
+ for(const code of codes){
+   const list=Array.isArray(all[code])?all[code]:[];
+   const hit=list.find(x=>x.inputCode===code);
+   if(hit){if(Number(hit.qty)!==1){hit.qty=1;changed++;}}
+   else {list.push({inputCode:code,qty:1});all[code]=list;changed++;}
+ }
+ if(changed) await api('pos_state?key=eq.recipes',{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({value:all})});
+ try{localStorage.setItem('feastervilleRecipes',JSON.stringify(all)); if(typeof recipes!=='undefined')recipes=all;}catch(_){}
+ return changed;
 }
-window.migrateIceCreamProductionInputs=migrate;
-let tries=0,t=setInterval(async()=>{tries++;try{if(await migrate())clearInterval(t)}catch(e){console.error('Ice cream input migration',e)}if(tries>120)clearInterval(t);},1000);
+async function run(){
+ if(!manager()||!tok())return false;
+ if(sessionStorage.getItem('fvIceCreamInputsV69Done')==='1')return true;
+ try{
+   const a=await installStore('NDAYENI');
+   const b=await installStore('SIVANA');
+   const codes=[...new Set(a.codes.concat(b.codes))];
+   await linkRecipes(codes);
+   sessionStorage.setItem('fvIceCreamInputsV69Done','1');
+   if(typeof window.loadStoreInputsForReceive==='function')window.loadStoreInputsForReceive().catch(()=>{});
+   if(typeof window.refreshLiveProductionLedger==='function')window.refreshLiveProductionLedger().catch(()=>{});
+   console.log('Ice cream production inputs ready',{ndayeni:a.added,sivana:b.added,linked:codes.length});
+   return true;
+ }catch(e){console.error('Ice cream input setup V69 failed',e);return false;}
+}
+let tries=0;const timer=setInterval(async()=>{tries++;if(await run()||tries>120)clearInterval(timer);},1000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')run();});
 })();
 </script>
+
 </body></html>';
 
   w.document.open();
