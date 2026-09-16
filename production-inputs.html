@@ -137,18 +137,19 @@ async function saveInput(){
   if(!guard())return;
   const m=document.getElementById('msg');
   const store=document.getElementById('store').value;
-  const code=val('code').toUpperCase(), name=val('name');
+  const code=String(document.getElementById('code').value||'').trim().toUpperCase();
+  const name=String(document.getElementById('name').value||'').trim();
   if(!code||!name){m.textContent='Input Code and Input Name are required.';m.className='msg bad';return}
   const payload={
-    store_code:store,code,name,category:val('category')||null,
+    store_code:store,code,name,category:String(document.getElementById('category').value||'').trim()||null,
     unit:document.getElementById('unit').value||'EA',
     reorder_level:Number(document.getElementById('reorder').value||0),
     safety_stock:Number(document.getElementById('safety').value||0),
     target_stock:Number(document.getElementById('target').value||0),
     purchase_cycle_days:Number(document.getElementById('cycle').value||7),
     purchase_group:document.getElementById('group').value||'WEEKLY',
-    preferred_supplier:val('supplier')||null,
-    preferred_unit_cost:val('cost')===''?null:Number(val('cost')),
+    preferred_supplier:String(document.getElementById('supplier').value||'').trim()||null,
+    preferred_unit_cost:String(document.getElementById('cost').value||'').trim()===''?null:Number(document.getElementById('cost').value),
     active:document.getElementById('active').value==='true'
   };
   try{
@@ -184,7 +185,8 @@ async function loadInputs(){
   }
 }
 function render(){
-  const q=val('search').toLowerCase();
+  const searchEl=document.getElementById('search');
+  const q=String(searchEl?searchEl.value:'').trim().toLowerCase();
   const a=rows.filter(x=>!q||[x.code,x.name,x.category].some(v=>String(v||'').toLowerCase().includes(q)));
   document.getElementById('tbody').innerHTML=a.map(x=>`<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td>${esc(x.category||'')}</td><td>${esc(x.unit)}</td><td>${esc(x.reorder_level)}</td><td><span class="pill ${x.active?'':'inactive'}">${x.active?'ACTIVE':'INACTIVE'}</span></td><td><button class="secondary" onclick='edit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>EDIT</button></td></tr>`).join('')||'<tr><td colspan="7">No inputs found.</td></tr>';
 }
