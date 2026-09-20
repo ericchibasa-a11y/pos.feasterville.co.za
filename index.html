@@ -193,7 +193,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
 <div class="row"><span>Discount</span><input id="discount" type="number" min="0" value="0" style="width:100px"></div>
 <div class="row grand"><span>TOTAL</span><span id="total">R0.00</span></div>
 <div class="pay">
-<label>Payment<br><select id="payment"><option>Cash</option><option>Card</option><option>EFT</option><option>Other</option></select></label>
+<label>Payment<br><select id="payment"><option>Cash</option><option>Card</option><option>Mr D</option><option>Uber Eats</option></select></label>
 <label>Amount Received<br><input id="received" type="number" min="0" value="0" oninput="render()"></label>
 </div>
 <div class="row"><span>Change</span><b id="change">R0.00</b></div>
@@ -620,6 +620,7 @@ body.print-report #reportContent { position:absolute; left:0; top:0; width:100%;
     <button type="button" class="cat" data-manager-target="profitLossPanel">PROFIT & LOSS</button>
     <button type="button" class="cat" data-manager-target="storesComparisonPanel">STORES COMPARISON & FINAL P&L</button>
     <button type="button" class="cat" data-manager-target="costingProfitPanel">COSTING & PROFITABILITY</button>
+    <button type="button" class="cat" onclick="location.href='feasterville-audit-reporting.html'">AUDIT & FINANCIAL REPORTING</button>
   </div>
 </div>
 
@@ -834,7 +835,14 @@ const activeProducts=()=>{
 let cart=[];
 let sales=JSON.parse(localStorage.getItem('feastervilleSales')||'[]');
 let orderCounter=Number(localStorage.getItem('feastervilleOrderNo')||0)+1;
-document.getElementById('date').value=new Date().toISOString().slice(0,10);
+{
+ const parts=new Intl.DateTimeFormat('en-ZA',{
+   timeZone:'Africa/Johannesburg',
+   year:'numeric',month:'2-digit',day:'2-digit'
+ }).formatToParts(new Date());
+ const d=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+ document.getElementById('date').value=d.year+'-'+d.month+'-'+d.day;
+}
 document.getElementById('orderNo').textContent='Order #'+String(orderCounter).padStart(4,'0');
 
 const money=n=>'R'+Number(n||0).toFixed(2);
@@ -4114,17 +4122,17 @@ document.addEventListener('DOMContentLoaded',function(){
  function payBucket(p){p=String(p||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(p==='cash')return'cash';if(p==='card')return'card';if(p==='mrd')return'mrd';if(p==='ubereats')return'uber';return'other'}
  async function calc(){
    const me=u();if(!me)throw Error('Please sign in.');
-   const result=await api('rpc/pos_cashup_totals',{method:'POST',body:JSON.stringify({p_store_code:store(),p_sale_date:day()})});
-   const r=Array.isArray(result)?(result[0]||{}):(result||{});
-   return {
-     cash:Number(r.cash_sales||0),
-     card:Number(r.card_sales||0),
-     mrd:Number(r.mr_d_sales||0),
-     uber:Number(r.uber_eats_sales||0),
-     other:Number(r.other_sales||0),
-     total:Number(r.total_sales||0),
-     count:Number(r.sale_count||0)
-   };
+   let rows=[];
+   if(me.role==='manager'){
+     rows=await api('pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&select=id,total,payment,cashier');
+   }else{
+     const q='pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&cashier=eq.'+encodeURIComponent(me.name||me.display_name||me.email||'')+'&select=id,total,payment,cashier';
+     rows=await api(q);
+     // Some historic cashier values may differ from display name. For salesperson, use current user's email/name variants if exact name has no rows.
+     if(!rows.length && me.email){rows=await api('pos_sales?store_code=eq.'+encodeURIComponent(store())+'&sale_date=eq.'+day()+'&select=id,total,payment,cashier');rows=rows.filter(x=>[me.name,me.display_name,me.email].filter(Boolean).map(String).map(v=>v.toLowerCase()).includes(String(x.cashier||'').toLowerCase()));}
+   }
+   let x={cash:0,card:0,mrd:0,uber:0,other:0,total:0,count:rows.length};
+   rows.forEach(r=>{let v=Number(r.total||0),b=payBucket(r.payment);x[b]+=v;x.total+=v});return x;
  }
  async function existing(){const me=u();if(!me||!me.id)return[];return api('pos_daily_cashups?store_code=eq.'+encodeURIComponent(store())+'&cashup_date=eq.'+day()+'&user_id=eq.'+encodeURIComponent(me.id)+'&select=*')}
  function variance(){if(!totals)return;let f=Number(document.getElementById('fvOpeningFloat').value||0),e=Number(document.getElementById('fvCashExpense').value||0),a=Number(document.getElementById('fvActualCash').value||0),expected=totals.cash+f-e,v=a-expected;document.getElementById('fvCashupVariance').textContent='Expected cash: '+money(expected)+' (after cash expense '+money(e)+') | Difference: '+money(v)}
@@ -4155,13 +4163,12 @@ document.addEventListener('DOMContentLoaded',function(){
     await api('pos_daily_cashups',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify(payload)});if(e>0)await api('pos_store_expenses',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify({store_code:store(),expense_date:day(),category:expenseType,supplier:null,description:expenseNotes||('Cash paid from till — '+expenseType),payment_method:'Cash',amount:e,reference:'Cash-Up '+day()})});closeFvCashupModal();alert('Day closed successfully. Expected cash '+money(expected)+' | Actual cash '+money(a)+' | Difference '+money(a-expected));
    }catch(e){console.error(e);alert('Cash-up could not be saved: '+e.message)}
  };
- function addButton(){let me=u();if(!me||!['salesperson','manager'].includes(me.role)||document.getElementById('fvCashupBtn'))return;let target=document.querySelector('header .actions')||document.querySelector('header')||document.querySelector('.topbar')||document.body;let b=document.createElement('button');b.id='fvCashupBtn';b.type='button';b.textContent=me.role==='manager'?'STORE CASH-UP / CLOSE DAY':'CLOSE DAY / CASH-UP';b.onclick=openFvCashup;target.appendChild(b)}
+ function addButton(){return;let me=u();if(!me||!['salesperson','manager'].includes(me.role)||document.getElementById('fvCashupBtn'))return;let target=document.querySelector('header .actions')||document.querySelector('header')||document.querySelector('.topbar')||document.body;let b=document.createElement('button');b.id='fvCashupBtn';b.type='button';b.textContent=me.role==='manager'?'STORE CASH-UP / CLOSE DAY':'CLOSE DAY / CASH-UP';b.onclick=openFvCashup;target.appendChild(b)}
  // Keep checking after login/navigation so the cash-up button cannot disappear when the UI is rebuilt.
  setInterval(addButton,1000);addButton();
 })();
 </script>
 <!-- BUILD: SALESPERSON_MANAGER_DAILY_CASHUP_V55_20260909 -->
-<!-- BUILD: V77_CASHUP_CREATED_BY_SALES_PULL_FIX_20260918 -->
 
 
 <script>
@@ -7105,7 +7112,7 @@ window.loadICReceiptReviewV54=review;setTimeout(()=>{enforce();review();},700);s
    }
    b.style.display=role()==='manager'?'':'none';
  }
- function ensureSalespersonButton(){
+ function ensureSalespersonButton(){return;
    const complete=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').trim()==='COMPLETE SALE');
    const host=complete?.parentElement;
    if(!host)return;
@@ -7150,7 +7157,7 @@ window.loadICReceiptReviewV54=review;setTimeout(()=>{enforce();review();},700);s
    }else if(mb){mb.style.setProperty('display','none','important')}
    const oldManager=document.getElementById('fvManagerCashupNavV56');if(oldManager)oldManager.style.setProperty('display','none','important');
    let sb=document.getElementById('fvSalespersonCashupV58');
-   if(r==='salesperson'){
+   if(false&&r==='salesperson'){
      const complete=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').trim()==='COMPLETE SALE');
      if(complete&&!sb){sb=document.createElement('button');sb.id='fvSalespersonCashupV58';sb.type='button';sb.className='secondary';sb.textContent='CLOSE DAY / CASH-UP';sb.style.cssText='width:100%;margin-top:8px;font-weight:800';sb.onclick=()=>window.openFvCashup?.();complete.insertAdjacentElement('afterend',sb)}
      if(sb)sb.style.setProperty('display','block','important');
@@ -7519,6 +7526,80 @@ window.openHistoricalCashupV59=open;window.loadHistoricalCashupV59=load;
 })();
 </script>
 <!-- BUILD: V68.3_VISIBLE_REPORT_PREVIEW_PDF_20260912 -->
+<script>
+/* V71 — MANAGER OPENING BALANCES: store-specific finished products and production inputs */
+(function(){
+  const BASE='https://sflyjcgbxbcwspfuzone.supabase.co/rest/v1/';
+  const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';
+  const token=()=>sessionStorage.getItem('feastervilleCloudAccessToken')||'';
+  const today=()=>new Date().toISOString().slice(0,10);
+  const store=()=>{
+    const u=window.currentUser||window.salesSessionUser||{};
+    return u.role==='manager' ? (localStorage.getItem('feastervilleStoreCode')||'NDAYENI') : (u.store_code||'NDAYENI');
+  };
+  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  async function api(path,opt={}){
+    const r=await fetch(BASE+path,{...opt,headers:{apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json',...(opt.headers||{})}});
+    const body=await r.text();
+    if(!r.ok)throw new Error(body||('HTTP '+r.status));
+    return body?JSON.parse(body):[];
+  }
+  async function products(s){
+    const r=await fetch('https://sflyjcgbxbcwspfuzone.supabase.co/functions/v1/pos-product-admin',{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({action:'list',store_code:s})});
+    const b=await r.text(); if(!r.ok)throw new Error(b||'Could not load sellable items.');
+    return (JSON.parse(b).items||[]).filter(x=>x.active!==false);
+  }
+  function panel(){
+    let p=document.getElementById('fvOpeningBalancesPanel');
+    if(p)return p;
+    p=document.createElement('section'); p.id='fvOpeningBalancesPanel'; p.className='panel manager-only'; p.style.gridColumn='1/-1';
+    p.innerHTML='<h2>Opening Balances</h2><p class="small">Manager only. Set the opening quantity for the selected store. Production-input balances and sellable-item balances are kept separately. Use this for opening stock only; use stock received and counts for normal daily movements.</p><div class="order-head"><label><b>Store</b><br><select id="fvOpeningStore"><option value="NDAYENI">Ndayini</option><option value="SIVANA">Sivana</option></select></label><label><b>Item Type</b><br><select id="fvOpeningType"><option value="raw">Production Inputs</option><option value="finished">Sellable Items</option></select></label><button type="button" class="primary" id="fvOpeningRefresh">REFRESH</button></div><p class="small" id="fvOpeningMessage"></p><div style="overflow:auto"><table class="inv-table"><thead><tr><th>Code</th><th>Item</th><th>Unit</th><th>Current Opening Balance</th><th>New Opening Balance</th><th>Action</th></tr></thead><tbody id="fvOpeningRows"></tbody></table></div>';
+    const host=document.getElementById('inventoryListingPanel')||document.getElementById('sellableItemsPanel')||document.querySelector('.manager-only');
+    if(host&&host.parentNode)host.parentNode.insertBefore(p,host.nextSibling); else document.body.appendChild(p);
+    p.querySelector('#fvOpeningStore').addEventListener('change',render);
+    p.querySelector('#fvOpeningType').addEventListener('change',render);
+    p.querySelector('#fvOpeningRefresh').addEventListener('click',render);
+    return p;
+  }
+  function message(t,bad){const e=document.getElementById('fvOpeningMessage');if(e){e.textContent=t;e.style.color=bad?'#a00':'#185b00';}}
+  async function render(){
+    if((window.currentUser||{}).role!=='manager')return;
+    const p=panel(), s=p.querySelector('#fvOpeningStore').value, type=p.querySelector('#fvOpeningType').value, body=p.querySelector('#fvOpeningRows');
+    body.innerHTML='<tr><td colspan="6">Loading opening balances…</td></tr>'; message('');
+    try{
+      let items, counts, key, unit;
+      if(type==='raw'){
+        [items,counts]=await Promise.all([api('pos_store_production_inputs?store_code=eq.'+encodeURIComponent(s)+'&active=eq.true&select=code,name,unit&order=name.asc'),api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&count_date=eq.'+today()+'&select=input_code,opening_qty')]);
+        key='input_code'; unit=x=>x.unit||'';
+      }else{
+        [items,counts]=await Promise.all([products(s),api('pos_store_product_counts?store_code=eq.'+encodeURIComponent(s)+'&count_date=eq.'+today()+'&select=product_code,opening_qty')]);
+        key='product_code'; unit=()=> 'EA';
+      }
+      const map=Object.fromEntries((counts||[]).map(x=>[x[key],x]));
+      body.innerHTML=(items||[]).map(x=>{const v=Number(map[x.code]?.opening_qty||0);return '<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.name)+'</td><td>'+esc(unit(x))+'</td><td>'+v.toFixed(3)+'</td><td><input class="stock-input fvOpeningValue" type="number" min="0" step="0.001" value="'+v+'" data-code="'+esc(x.code)+'"></td><td><button type="button" class="primary fvOpeningSave" data-code="'+esc(x.code)+'">SAVE</button></td></tr>';}).join('')||'<tr><td colspan="6">No active items for this store.</td></tr>';
+      body.querySelectorAll('.fvOpeningSave').forEach(b=>b.addEventListener('click',()=>save(b.dataset.code)));
+      message('Opening balances loaded for '+(s==='SIVANA'?'Sivana':'Ndayini')+'.');
+    }catch(e){body.innerHTML='<tr><td colspan="6">Could not load opening balances.</td></tr>';message('Could not load: '+e.message,true);}
+  }
+  async function save(code){
+    if((window.currentUser||{}).role!=='manager'){alert('Manager access required.');return;}
+    const p=panel(), s=p.querySelector('#fvOpeningStore').value, type=p.querySelector('#fvOpeningType').value;
+    const input=p.querySelector('.fvOpeningValue[data-code="'+CSS.escape(code)+'"]'); const opening=Number(input?.value);
+    if(!Number.isFinite(opening)||opening<0){alert('Enter a valid opening balance of zero or more.');return;}
+    try{
+      if(type==='raw'){
+        const old=(await api('pos_store_input_counts?store_code=eq.'+encodeURIComponent(s)+'&input_code=eq.'+encodeURIComponent(code)+'&count_date=eq.'+today()+'&select=received_qty,used_qty,physical_count&limit=1'))[0]||{};
+        await api('pos_store_input_counts?on_conflict=store_code,input_code,count_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({store_code:s,input_code:code,count_date:today(),opening_qty:opening,received_qty:Number(old.received_qty||0),used_qty:Number(old.used_qty||0),physical_count:Number(old.physical_count||0)})});
+      }else{
+        await api('pos_store_product_counts?on_conflict=store_code,product_code,count_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({store_code:s,product_code:code,count_date:today(),opening_qty:opening})});
+      }
+      message(code+' opening balance saved for '+(s==='SIVANA'?'Sivana':'Ndayini')+'.');
+      if(type==='raw'&&window.refreshStoreProductionData)window.refreshStoreProductionData().catch(()=>{});
+    }catch(e){message('Could not save '+code+': '+e.message,true);}
+  }
+  let tries=0, timer=setInterval(()=>{tries++;if((window.currentUser||{}).role==='manager'){clearInterval(timer);const p=panel();p.querySelector('#fvOpeningStore').value=store();render();}else if(tries>120)clearInterval(timer);},250);
+})();
+</script>
 </body>
 
 
@@ -7556,86 +7637,5 @@ window.openHistoricalCashupV59=open;window.loadHistoricalCashupV59=load;
 })();
 </script>
 <!-- BUILD: V75_CASHUP_RESTORE_PLUS_PRODUCTION_ADMIN_20260918 -->
-
-<style id="fvCashupSingleButtonV76Style">
-/* V76: older salesperson cash-up mounts must never be visible. */
-#fvSalespersonCashupV56,#fvSalespersonCashupV58,#fvCashupBtn{display:none!important}
-#fvSalespersonCashupV76{width:100%;margin-top:8px;font-weight:800}
-</style>
-<script>
-/* V76 — FINAL AUTHORITATIVE SINGLE CASH-UP BUTTON */
-(function(){
- 'use strict';
- if(window.__fvSingleCashupV76)return; window.__fvSingleCashupV76=true;
- let cleaning=false;
- function role(){
-   if(String(window.currentUser?.role||'').toLowerCase()==='manager')return 'manager';
-   if(window.salesSessionUser&&String(window.salesSessionUser.role||'').toLowerCase()==='salesperson')return 'salesperson';
-   if(window.inventorySessionUser)return String(window.inventorySessionUser.role||'').toLowerCase();
-   return String(window.currentUser?.role||'').toLowerCase();
- }
- function ensureManager(){
-   const r=role();
-   let mb=document.getElementById('fvManagerCashupHeaderV58');
-   if(r==='manager'){
-     const h=document.querySelector('header');
-     if(h&&!mb){
-       mb=document.createElement('button');
-       mb.id='fvManagerCashupHeaderV58';mb.type='button';mb.textContent='STORE CASH-UP / CLOSE DAY';
-       mb.onclick=function(){if(typeof window.openFvCashup==='function')window.openFvCashup();else alert('Cash-up is still loading. Please try again.');};
-       const logout=Array.from(h.querySelectorAll('button')).find(b=>/LOGOUT/i.test(b.textContent||''));
-       h.insertBefore(mb,logout||null);
-     }
-     if(mb)mb.style.setProperty('display','inline-block','important');
-   }else if(mb)mb.style.setProperty('display','none','important');
-   const hist=document.getElementById('fvHistoricalCashupBtnV59');
-   if(hist)hist.style.setProperty('display',r==='manager'?'inline-block':'none','important');
- }
- function ensureSalesperson(){
-   const r=role();
-   const complete=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').trim()==='COMPLETE SALE');
-   let keep=document.getElementById('fvSalespersonCashupV76');
-   if(r==='salesperson'&&complete){
-     if(!keep){
-       keep=document.createElement('button');
-       keep.id='fvSalespersonCashupV76';keep.type='button';keep.className='secondary';
-       keep.textContent='CLOSE DAY / CASH-UP';
-       keep.onclick=function(){if(typeof window.openFvCashup==='function')window.openFvCashup();else alert('Cash-up is still loading. Please try again.');};
-       complete.insertAdjacentElement('afterend',keep);
-     }
-     keep.style.setProperty('display','block','important');
-   }else if(keep){
-     keep.style.setProperty('display','none','important');
-   }
-
-   // Hide/remove every competing salesperson cash-up button, including V60.
-   ['fvSalespersonCashupV56','fvSalespersonCashupV58','fvSalespersonCashupV60','fvCashupBtn'].forEach(function(id){
-     const el=document.getElementById(id);
-     if(el&&el!==keep){
-       el.style.setProperty('display','none','important');
-       if(id!=='fvCashupBtn') el.remove();
-     }
-   });
-   Array.from(document.querySelectorAll('button')).forEach(function(b){
-     if(b===keep)return;
-     if((b.textContent||'').trim()==='CLOSE DAY / CASH-UP'){
-       b.style.setProperty('display','none','important');
-       b.remove();
-     }
-   });
- }
- function clean(){
-   if(cleaning)return; cleaning=true;
-   try{ensureManager();ensureSalesperson();document.documentElement.setAttribute('data-feasterville-build','V76');}
-   finally{cleaning=false;}
- }
- [20,100,300,700,1200,2000,3000,5000,8000].forEach(ms=>setTimeout(clean,ms));
- document.addEventListener('click',function(){setTimeout(clean,0);},true);
- document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(clean,0);});
- const obs=new MutationObserver(function(){setTimeout(clean,0);});
- if(document.documentElement)obs.observe(document.documentElement,{childList:true,subtree:true});
- window.fvCashupSingleButtonV76=clean;
-})();
-</script>
-<!-- BUILD: V76_FINAL_SINGLE_CASHUP_20260918 -->
+<!-- BUILD: STABLE_SALESPERSON_FIX_V2_20260920 -->
 </html>
