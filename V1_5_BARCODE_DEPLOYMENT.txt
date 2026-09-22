@@ -1,0 +1,22 @@
+NOSHVILLE POS V1.5 - BARCODE SCANNER & LABELS
+Date: 21 September 2026
+
+WHAT WAS ADDED
+- SALE screen Scan Barcode field for USB/Bluetooth keyboard-wedge scanners.
+- Enter after scan automatically finds the item and adds it to the current order.
+- Searches product name, brand, SKU, primary barcode and barcode aliases.
+- Manager Barcode Management panel under PRODUCTS & PRICING.
+- Link manufacturer barcodes to existing products.
+- Generate Noshville Code 128 internal barcodes.
+- Multiple barcodes can link to one product.
+- Duplicate barcode protection.
+- Printable Code 128 barcode labels with product name and selling price.
+
+DATABASE
+The live Noshville Supabase database was already migrated for product_barcodes and barcode conflict checks.
+Existing active products were assigned Noshville internal barcode aliases without changing stock or prices.
+
+DEPLOYMENT
+Upload the contents of this ZIP to the same GitHub repository/root currently hosting Noshville POS.
+Replace index.html, app.js and styles.css with these V1.5 files.
+Keep the existing Supabase project and domain settings unchanged.

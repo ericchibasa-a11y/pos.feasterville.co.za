@@ -1,0 +1,18 @@
+NOSHVILLE POS V1.8 - FRUITS & VEGETABLES / LOOSE & PACK SUPPORT
+
+Changes:
+- Added FRUITS and VEGETABLES categories in the live Supabase database.
+- Product setup now supports sale units: Single/Unit, Loose, Pack, Per kg, and Bunch.
+- A sellable product can link to a base stock product using Stock Source.
+- Stock Multiplier controls how much base stock one sale consumes.
+- Linked pack/loose products display availability from the base stock item.
+- Cart quantity checks use linked stock availability.
+- Existing barcode, sale, stock, cash-up, and reporting functions are preserved.
+
+Example:
+1. Create "Tomato Loose" with Category VEGETABLES, Sale Unit Loose, Own stock, Opening Stock 60.
+2. Create "Tomato Pack 6" with Category VEGETABLES, Sale Unit Pack, Stock Source Tomato Loose, Multiplier 6.
+3. Selling 1 Tomato Pack deducts 6 units from Tomato Loose stock.
+4. Selling 1 Tomato Loose deducts 1 unit from the same stock.
+
+For weight-based produce, use Per kg as the base item. Cart quantities accept decimals (for example 0.5 kg).

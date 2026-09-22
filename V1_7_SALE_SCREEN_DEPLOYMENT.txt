@@ -1,0 +1,20 @@
+NOSHVILLE POS V1.7 - FEASTERVILLE-STYLE SALE SCREEN
+
+Changes:
+- Feasterville-style category buttons across the top of SALE screen.
+- ALL ITEMS button first.
+- Active category highlighted in green.
+- Search bar with CLEAR button.
+- Category heading and visible item count.
+- Cleaner product tiles showing SKU, product name, detail, price and stock.
+- Improved Current Order panel with Item / Qty / Total headings.
+- Existing barcode scanning, sales, stock, cash-up and reports retained.
+
+Deployment:
+1. Extract the ZIP.
+2. Upload/replace all files in the Noshville POS GitHub repository.
+3. Commit the changes.
+4. Wait for the hosting deployment to finish.
+5. Hard refresh the live POS (Ctrl+F5).
+
+No database migration is required for the V1.7 layout change itself.

@@ -1,0 +1,11 @@
+NOSHVILLE POS V1.4 DEPLOYMENT
+
+1. Keep V1.3 ZIP safely as your rollback/stable base.
+2. Run v1_4_staff_security_patch.sql once in Supabase SQL Editor.
+3. Deploy Supabase Edge Function folder: supabase/functions/manage-staff (JWT verification ON).
+4. Replace GitHub Pages files with index.html, app.js, styles.css and README.md from this package.
+5. Wait for GitHub Pages deployment, then Ctrl+F5.
+6. Sign in as manager and open USERS / STAFF.
+7. Create one test salesperson, sign out, then test their login.
+
+IMPORTANT: Do not place the Supabase service-role key in app.js or GitHub. The Edge Function receives it securely from Supabase runtime environment.
