@@ -1,0 +1,476 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feasterville - Production Inputs</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#17212b}.top{position:sticky;top:0;z-index:20;background:#111827;padding:10px;box-shadow:0 2px 8px #0003}.nav{max-width:1180px;margin:auto;display:flex;gap:8px;flex-wrap:wrap}.nav button,.nav a{border:0;border-radius:8px;padding:11px 14px;font-weight:700;cursor:pointer;text-decoration:none;background:#fff;color:#111827}.nav .primary{background:#16a34a;color:white}.wrap{max-width:1180px;margin:18px auto;padding:0 14px}.card{background:#fff;border:1px solid #d9dee5;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 1px 3px #0001}h1,h2{margin-top:0}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}label{font-weight:700;font-size:13px}input,select{width:100%;padding:10px;border:1px solid #b9c2cc;border-radius:7px;margin-top:5px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}button.save{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:11px 18px;font-weight:800;cursor:pointer}button.secondary{background:#334155;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}.msg{margin-top:10px;font-weight:700}.ok{color:#15803d}.bad{color:#b91c1c}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.toolbar>*{max-width:320px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left}th{background:#f8fafc;position:sticky;top:60px}.tablewrap{overflow:auto;max-height:520px}.tablewrap th{top:0;z-index:2}.pill{padding:3px 7px;border-radius:12px;background:#dcfce7;color:#166534;font-weight:700}.inactive{background:#fee2e2;color:#991b1b}@media(max-width:760px){.grid{grid-template-columns:1fr}.nav button,.nav a{flex:1 1 auto;text-align:center}th{top:105px}}
+</style></head><body>
+<div class="top"><div class="nav">
+<a href="index.html">POS HOME</a><button class="primary" onclick="go('add')">ADD PRODUCTION INPUT</button><button onclick="go('list')">EXISTING INPUTS</button><button onclick="go('sellable')">SELLABLE ITEMS</button><button onclick="go('receipt')">RECEIVE STOCK</button><button onclick="go('receiptHistory')">RECEIPT HISTORY</button><a href="production-input-consumption-report.html">MOVEMENT HISTORY</a><a href="month-end-closure-report.html">MONTH-END REPORT</a><button onclick="refreshAdmin()">REFRESH</button><button onclick="window.scrollTo({top:0,behavior:'smooth'})">TOP</button>
+</div></div>
+<div class="wrap">
+<div class="card"><h1>Production Input Administration</h1>
+<div id="who">Checking Manager session…</div>
+<div id="adminLogin" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #ddd">
+  <h3 style="margin:0 0 10px">Manager Login</h3>
+  <div class="grid">
+    <div><label>Manager Email<input id="adminEmail" type="email" autocomplete="username" placeholder="Manager email"></label></div>
+    <div><label>Password<input id="adminPassword" type="password" autocomplete="current-password" placeholder="Password"></label></div>
+  </div>
+  <div class="actions"><button class="save" type="button" onclick="adminSignIn()">MANAGER SIGN IN</button></div>
+  <div id="loginMsg" class="msg"></div>
+</div></div>
+<div class="card" id="add"><h2>Add / Edit Production Input</h2>
+<div class="grid">
+<div><label>Store<select id="store"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BIRCH_ACRES">Birch Acres</option></select></label></div>
+<div><label>Input Code<input id="code" placeholder="e.g. ICI-052"></label></div>
+<div><label>Input Name<input id="name" placeholder="Input name"></label></div>
+<div><label>Category<input id="category" placeholder="e.g. Ice Cream"></label></div>
+<div><label>Unit<select id="unit"><option>EA</option><option>KG</option><option>G</option><option>L</option><option>ML</option><option>PACK</option><option>BOX</option></select></label></div>
+<div><label>Reorder Level<input id="reorder" type="number" step="0.01" value="0"></label></div>
+<div><label>Safety Stock<input id="safety" type="number" step="0.01" value="0"></label></div>
+<div><label>Target Stock<input id="target" type="number" step="0.01" value="0"></label></div>
+<div><label>Purchase Cycle (days)<input id="cycle" type="number" value="7"></label></div>
+<div><label>Purchase Group<select id="group"><option>WEEKLY</option><option>DAILY</option><option>MONTHLY</option><option>OTHER</option></select></label></div>
+<div><label>Preferred Supplier<input id="supplier"></label></div>
+<div><label>Preferred Unit Cost (R)<input id="cost" type="number" step="0.01"></label></div>
+<div><label>Status<select id="active"><option value="true">Active</option><option value="false">Inactive</option></select></label></div>
+</div><div class="actions"><button class="save" onclick="saveInput()">SAVE INPUT</button><button class="secondary" onclick="clearForm()">CLEAR FORM</button></div><div id="msg" class="msg"></div></div>
+<div class="card" id="sellable">
+<h2>Sellable Items — Add / Edit</h2>
+<p style="margin-top:-6px;color:#475569">Manager only. Add new sellable items or edit the live menu for each store. Existing item codes are locked during editing to protect sales and recipe history.</p>
+<div class="grid">
+<div><label>Store<select id="s_store"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BIRCH_ACRES">Birch Acres</option></select></label></div>
+<div><label>Item Code<input id="s_code" placeholder="e.g. K12"></label></div>
+<div><label>Item Description<input id="s_name" placeholder="Sellable item description"></label></div>
+<div><label>Category<input id="s_category" placeholder="e.g. KOTA, CHIPS, DRINKS"></label></div>
+<div><label>Selling Price (R)<input id="s_price" type="number" min="0" step="0.01" placeholder="0.00"></label></div>
+<div><label>Status<select id="s_active"><option value="true">Active</option><option value="false">Inactive</option></select></label></div>
+</div>
+<div class="actions">
+<button class="save" type="button" onclick="saveSellableItem()">SAVE ITEM</button>
+<button class="secondary" type="button" onclick="clearSellableForm()">CLEAR FORM</button>
+<button class="secondary" type="button" onclick="loadSellableItems()">REFRESH ITEMS</button>
+</div>
+<div id="sellableMsg" class="msg"></div>
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:18px 0">
+<h2 style="font-size:18px">Existing Sellable Items</h2>
+<div class="toolbar">
+<select id="s_listStore"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BIRCH_ACRES">Birch Acres</option></select>
+<input id="s_search" placeholder="Search code, description or category" oninput="renderSellableItems()">
+</div>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Code</th><th>Description</th><th>Category</th><th>Price</th><th>Status</th><th>Action</th></tr></thead>
+<tbody id="sellableBody"><tr><td colspan="6">Sign in as Manager to load sellable items.</td></tr></tbody>
+</table>
+</div>
+</div>
+
+<div class="card" id="receipt">
+<h2>Receive Production Input Stock</h2>
+<p class="muted">Capture opening stock or supplier receipts. Each receipt is saved to the live stock receipt register for audit and reconciliation.</p>
+<div class="grid">
+<label>Store<select id="r_store"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BIRCH_ACRES">Birch Acres</option></select></label>
+<label>Production Input<select id="r_input"></select></label>
+<label>Receipt Date<input id="r_date" type="date"></label>
+<label>Supplier<input id="r_supplier" placeholder="e.g. Big Save"></label>
+<label>Reference<input id="r_reference" placeholder="Invoice / Opening Stock"></label>
+<label>Quantity Received<input id="r_qty" type="number" min="0" step="0.001"></label>
+<label>Unit Cost (R)<input id="r_cost" type="number" min="0" step="0.01"></label>
+</div>
+<div class="actions"><button class="primary" onclick="saveReceipt()">SAVE STOCK RECEIPT</button><button onclick="clearReceipt()">CLEAR</button></div>
+<div id="receipt_status" class="msg"></div>
+</div>
+
+<div class="card" id="receiptHistory">
+<h2>Stock Received — Review Captured Entries</h2>
+<p style="margin-top:-6px;color:#475569">View-only receipt history from the live stock receipt register.</p>
+<div class="toolbar">
+  <select id="receiptHistoryStore">
+    <option value="NDAYENI">Ndayeni</option>
+    <option value="SIVANA">Sivana</option><option value="BIRCH_ACRES">Birch Acres</option>
+  </select>
+  <button class="secondary" type="button" onclick="loadReceiptHistory()">REFRESH RECEIPTS</button>
+</div>
+<div id="receiptHistoryMsg" class="msg"></div>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Date</th><th>Input</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total Cost</th><th>Supplier</th><th>Reference</th><th>Received By</th></tr></thead>
+<tbody id="receiptHistoryBody"><tr><td colspan="9">Loading receipts...</td></tr></tbody>
+</table>
+</div>
+</div>
+
+<div class="card" id="list"><h2>Existing Production Inputs</h2><div class="toolbar"><select id="listStore" onchange="loadInputs()"><option value="NDAYENI">Ndayeni</option><option value="SIVANA">Sivana</option><option value="BIRCH_ACRES">Birch Acres</option></select><input id="search" placeholder="Search code, name or category" oninput="render()"></div><div class="tablewrap"><div id="listMsg" class="msg"></div><table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Unit</th><th>Reorder</th><th>Status</th><th>Action</th></tr></thead><tbody id="tbody"></tbody></table></div></div>
+</div>
+<script>
+const ROOT='https://sflyjcgbxbcwspfuzone.supabase.co';
+const BASE=ROOT+'/rest/v1';
+const KEY='sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM';let rows=[];
+function tok(){return sessionStorage.getItem('feastervilleCloudAccessToken')||localStorage.getItem('feastervilleCloudAccessToken')||''}
+let verifiedUser=null;
+function user(){return verifiedUser}
+async function request(path,options){
+  options=options||{};
+  const headers=Object.assign({'apikey':'sb_publishable_iASq-tni6KYrFK0R2S35zA_mpwt4MqM','Content-Type':'application/json'},options.headers||{});
+  const token=tok();
+  if(token)headers.Authorization='Bearer '+token;
+  const response=await fetch('https://sflyjcgbxbcwspfuzone.supabase.co'+path,Object.assign({},options,{headers}));
+  const raw=await response.text();
+  let body=null;
+  if(raw){try{body=JSON.parse(raw)}catch(_){body=raw}}
+  if(!response.ok){
+    const detail=(body&&typeof body==='object'&&(body.msg||body.message||body.error_description||body.error))||raw||('HTTP '+response.status);
+    throw new Error(detail);
+  }
+  return body;
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function guard(){
+  const w=document.getElementById('who'), box=document.getElementById('adminLogin');
+  if(!verifiedUser||verifiedUser.role!=='manager'){
+    w.innerHTML='<span class="bad">Manager sign-in required for Production Input Administration.</span>';
+    if(box)box.style.display='block';
+    return false;
+  }
+  if(box)box.style.display='none';
+  w.innerHTML='<span class="ok">Manager session active: '+esc(verifiedUser.name||'Manager')+'</span>';
+  return true;
+}
+async function getManagerProfile(authUser){
+  const rows=await request('/rest/v1/pos_profiles?user_id=eq.'+encodeURIComponent(authUser.id)+'&select=user_id,display_name,role,store_code,active');
+  const p=Array.isArray(rows)&&rows.length?rows[0]:null;
+  if(!p||String(p.role||'').toLowerCase()!=='manager'||p.active===false)throw new Error('Manager access required.');
+  return p;
+}
+async function activateAdmin(authData){
+  if(!authData||!authData.access_token||!authData.user)throw new Error('No login session was returned.');
+  sessionStorage.setItem('feastervilleCloudAccessToken',authData.access_token);
+  if(authData.refresh_token)sessionStorage.setItem('feastervilleCloudRefreshToken',authData.refresh_token);
+  const p=await getManagerProfile(authData.user);
+  verifiedUser={id:authData.user.id,name:p.display_name||authData.user.email,display_name:p.display_name||authData.user.email,role:'manager',store_code:p.store_code||null};
+  guard();
+}
+async function verifyManager(){
+  const token=tok();
+  if(!token){verifiedUser=null;guard();return false}
+  try{
+    const au=await request('/auth/v1/user');
+    const p=await getManagerProfile(au);
+    verifiedUser={id:au.id,name:p.display_name||au.email,display_name:p.display_name||au.email,role:'manager',store_code:p.store_code||null};
+    guard();return true;
+  }catch(_){
+    verifiedUser=null;guard();return false;
+  }
+}
+async function adminSignIn(){
+  const m=document.getElementById('loginMsg');
+  try{
+    m.textContent='Signing in...';m.className='msg';
+    const email=document.getElementById('adminEmail').value.trim();
+    const password=document.getElementById('adminPassword').value;
+    if(!email||!password)throw new Error('Enter email and password.');
+    const data=await request('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:email,password:password})});
+    await activateAdmin(data);
+    m.textContent='Manager signed in successfully.';m.className='msg ok';
+    document.getElementById('adminPassword').value='';
+    await loadInputs();
+    await loadSellableItems();
+  }catch(err){
+    console.error(err);
+    m.textContent=err.message;m.className='msg bad';
+  }
+}
+async function api(path,opt={}){
+  let p=path.startsWith('/')?path:'/rest/v1/'+path;
+  return request(p,opt);
+}
+async function refreshAdmin(){if(await verifyManager()){await loadInputs();await loadSellableItems();await loadReceiptHistory();}}
+function val(id){return (document.getElementById(id)?.value||'').trim()}
+function go(where){
+  const el=document.getElementById(where);
+  if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function clearForm(){
+  ['code','name','category','supplier','cost'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''});
+  document.getElementById('unit').value='EA';
+  document.getElementById('reorder').value='0';
+  document.getElementById('safety').value='0';
+  document.getElementById('target').value='0';
+  document.getElementById('cycle').value='7';
+  document.getElementById('group').value='WEEKLY';
+  document.getElementById('active').value='true';
+  const m=document.getElementById('msg');if(m){m.textContent='';m.className='msg'}
+}
+async function saveInput(){
+  if(!guard())return;
+  const m=document.getElementById('msg');
+  const store=document.getElementById('store').value;
+  const code=String(document.getElementById('code').value||'').trim().toUpperCase();
+  const name=String(document.getElementById('name').value||'').trim();
+  if(!code||!name){m.textContent='Input Code and Input Name are required.';m.className='msg bad';return}
+  const payload={
+    store_code:store,code,name,category:String(document.getElementById('category').value||'').trim()||null,
+    unit:document.getElementById('unit').value||'EA',
+    reorder_level:Number(document.getElementById('reorder').value||0),
+    safety_stock:Number(document.getElementById('safety').value||0),
+    target_stock:Number(document.getElementById('target').value||0),
+    purchase_cycle_days:Number(document.getElementById('cycle').value||7),
+    purchase_group:document.getElementById('group').value||'WEEKLY',
+    preferred_supplier:String(document.getElementById('supplier').value||'').trim()||null,
+    preferred_unit_cost:String(document.getElementById('cost').value||'').trim()===''?null:Number(document.getElementById('cost').value),
+    active:document.getElementById('active').value==='true'
+  };
+  try{
+    m.textContent='Saving Production Input...';m.className='msg';
+    await request('/rest/v1/pos_store_production_inputs?on_conflict=store_code,code',{
+      method:'POST',
+      headers:{Prefer:'resolution=merge-duplicates,return=representation'},
+      body:JSON.stringify(payload)
+    });
+    m.textContent='Production Input saved successfully.';m.className='msg ok';
+    document.getElementById('listStore').value=store;
+    await loadInputs();
+  }catch(e){m.textContent='Could not save Production Input: '+e.message;m.className='msg bad'}
+}
+
+let sellableRows=[];
+function sellableStatus(msg,ok=true){
+  const e=document.getElementById('sellableMsg');
+  if(!e)return;
+  e.textContent=msg||'';
+  e.className='msg '+(ok?'ok':'bad');
+}
+async function adminProduct(action,payload={}){
+  const token=tok();
+  if(!token)throw new Error('Manager cloud session is missing. Please sign in again.');
+  const response=await fetch(ROOT+'/functions/v1/pos-product-admin',{
+    method:'POST',
+    headers:{'apikey':KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify(Object.assign({action},payload))
+  });
+  const raw=await response.text();
+  let body=null; try{body=raw?JSON.parse(raw):null}catch(_){body={error:raw}}
+  if(!response.ok)throw new Error((body&&body.error)||(body&&body.message)||raw||('HTTP '+response.status));
+  return body||{};
+}
+function clearSellableForm(){
+  ['s_code','s_name','s_category','s_price'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  const code=document.getElementById('s_code');if(code)code.readOnly=false;
+  const active=document.getElementById('s_active');if(active)active.value='true';
+  sellableStatus('');
+}
+async function loadSellableItems(){
+  if(!guard())return;
+  const store=document.getElementById('s_listStore')?.value||document.getElementById('s_store')?.value||'NDAYENI';
+  const body=document.getElementById('sellableBody');
+  if(body)body.innerHTML='<tr><td colspan="6">Loading live sellable items...</td></tr>';
+  sellableStatus('Loading from shared database...');
+  try{
+    const result=await adminProduct('list',{store_code:store});
+    sellableRows=Array.isArray(result.items)?result.items:[];
+    renderSellableItems();
+    sellableStatus(sellableRows.length+' sellable item(s) loaded for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.');
+  }catch(e){
+    sellableRows=[];
+    if(body)body.innerHTML='<tr><td colspan="6">'+esc(e.message)+'</td></tr>';
+    sellableStatus('Could not load sellable items: '+e.message,false);
+  }
+}
+function renderSellableItems(){
+  const q=String(document.getElementById('s_search')?.value||'').trim().toLowerCase();
+  const body=document.getElementById('sellableBody');if(!body)return;
+  const list=sellableRows.filter(x=>!q||[x.code,x.name,x.category].some(v=>String(v||'').toLowerCase().includes(q)));
+  body.innerHTML=list.map(x=>`<tr><td><b>${esc(x.code)}</b></td><td>${esc(x.name)}</td><td>${esc(x.category||'')}</td><td>R${Number(x.price||0).toFixed(2)}</td><td><span class="pill ${x.active===false?'inactive':''}">${x.active===false?'INACTIVE':'ACTIVE'}</span></td><td><button class="secondary" type="button" onclick='editSellableItem(${JSON.stringify(x).replace(/'/g,"&#39;")})'>EDIT</button></td></tr>`).join('')||'<tr><td colspan="6">No sellable items found.</td></tr>';
+}
+function editSellableItem(x){
+  const store=x.store_code||document.getElementById('s_listStore')?.value||'NDAYENI';
+  document.getElementById('s_store').value=store;
+  document.getElementById('s_listStore').value=store;
+  const code=document.getElementById('s_code');code.value=x.code||'';code.readOnly=true;
+  document.getElementById('s_name').value=x.name||'';
+  document.getElementById('s_category').value=x.category||'';
+  document.getElementById('s_price').value=Number(x.price||0);
+  document.getElementById('s_active').value=String(x.active!==false);
+  sellableStatus('Editing '+(x.code||'item')+'. Change the details and click SAVE ITEM.');
+  go('sellable');
+}
+async function saveSellableItem(){
+  if(!guard())return;
+  const store=document.getElementById('s_store').value;
+  const code=String(document.getElementById('s_code').value||'').trim().toUpperCase();
+  const name=String(document.getElementById('s_name').value||'').trim();
+  const category=String(document.getElementById('s_category').value||'').trim();
+  const price=Number(document.getElementById('s_price').value);
+  const active=document.getElementById('s_active').value==='true';
+  if(!code||!name||!category||!Number.isFinite(price)||price<0){sellableStatus('Item Code, Item Description, Category and a valid Selling Price are required.',false);return;}
+  try{
+    sellableStatus('Saving sellable item...');
+    await adminProduct('save',{store_code:store,code,name,category,price});
+    await adminProduct('active',{store_code:store,code,active});
+    document.getElementById('s_listStore').value=store;
+    clearSellableForm();
+    await loadSellableItems();
+    sellableStatus(code+' saved successfully for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.');
+  }catch(e){sellableStatus('Could not save sellable item: '+e.message,false);}
+}
+
+function receiptStatus(msg,ok=true){const e=document.getElementById('receipt_status');if(!e)return;e.textContent=msg||'';e.style.color=ok?'#166534':'#b91c1c';}
+function setReceiptDate(){const e=document.getElementById('r_date');if(e&&!e.value)e.value=new Date().toISOString().slice(0,10);}
+function clearReceipt(){['r_supplier','r_reference','r_qty','r_cost'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});setReceiptDate();receiptStatus('');}
+async function populateReceiptInputs(){
+ const store=document.getElementById('r_store')?.value||'NDAYENI';
+ const sel=document.getElementById('r_input'); if(!sel)return;
+ const current=sel.value;
+ try{
+   sel.innerHTML='<option value="">Loading Production Inputs...</option>';
+   const data=await api('/rest/v1/pos_store_production_inputs?store_code=eq.'+encodeURIComponent(store)+'&active=eq.true&select=code,name,unit,preferred_unit_cost,preferred_supplier&order=name.asc');
+   const items=Array.isArray(data)?data:[];
+   sel.innerHTML='<option value="">Select Production Input</option>'+items.map(x=>'<option value="'+esc(x.code)+'" data-name="'+esc(x.name)+'" data-unit="'+esc(x.unit||'EA')+'" data-cost="'+esc(x.preferred_unit_cost??'')+'" data-supplier="'+esc(x.preferred_supplier||'')+'">'+esc(x.code)+' — '+esc(x.name)+'</option>').join('');
+   if(items.some(x=>x.code===current))sel.value=current;
+   if(!items.length) receiptStatus('No active Production Inputs found for '+store+'.',false);
+   else receiptStatus(items.length+' Production Inputs ready for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.');
+ }catch(e){
+   sel.innerHTML='<option value="">Could not load Production Inputs</option>';
+   receiptStatus('Could not load Production Inputs: '+e.message,false);
+ }
+}
+function applyReceiptDefaults(){const s=document.getElementById('r_input'),o=s?.options[s.selectedIndex];if(!o||!o.value)return;const a=document.getElementById('r_supplier'),c=document.getElementById('r_cost');if(a&&!a.value)a.value=o.dataset.supplier||'';if(c&&!c.value)c.value=o.dataset.cost||'';}
+async function saveReceipt(){
+ if(!guard()){receiptStatus('Manager sign-in is required before saving stock receipts.',false);return;}
+ const manager=user();
+ const store=document.getElementById('r_store').value,sel=document.getElementById('r_input'),o=sel.options[sel.selectedIndex];
+ const input_code=sel.value,input_name=o?.dataset.name||'',unit=o?.dataset.unit||'EA',receipt_date=document.getElementById('r_date').value;
+ const supplier=String(document.getElementById('r_supplier').value||'').trim(),reference=String(document.getElementById('r_reference').value||'').trim();
+ const qty=Number(document.getElementById('r_qty').value),unit_cost=Number(document.getElementById('r_cost').value||0);
+ if(!input_code){receiptStatus('Select a Production Input.',false);return;} if(!receipt_date){receiptStatus('Enter the receipt date.',false);return;}
+ if(!Number.isFinite(qty)||qty<=0){receiptStatus('Quantity received must be greater than zero.',false);return;}
+ if(!Number.isFinite(unit_cost)||unit_cost<0){receiptStatus('Unit cost cannot be negative.',false);return;}
+ const payload={receipt_date,supplier:supplier||null,reference:reference||null,input_code,input_name,unit,qty,unit_cost,received_by:manager.name||manager.display_name||'Manager',created_by:manager.id,store_code:store};
+ try{
+   receiptStatus('Saving stock receipt...');
+   await request('/rest/v1/pos_stock_receipts',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(payload)});
+   receiptStatus('Stock receipt saved successfully.');
+   const hs=document.getElementById('receiptHistoryStore'); if(hs)hs.value=store;
+   await loadReceiptHistory();
+ }
+ catch(e){receiptStatus('Could not save stock receipt: '+e.message,false);}
+}
+
+
+async function loadReceiptHistory(){
+  if(!guard())return;
+  const store=(document.getElementById('receiptHistoryStore')?.value||document.getElementById('r_store')?.value||'NDAYENI');
+  const body=document.getElementById('receiptHistoryBody');
+  const msg=document.getElementById('receiptHistoryMsg');
+  if(body)body.innerHTML='<tr><td colspan="9">Loading receipt history...</td></tr>';
+  if(msg){msg.textContent='Loading live stock receipts...';msg.className='msg';}
+  try{
+    const data=await request('/rest/v1/pos_stock_receipts?store_code=eq.'+
+      encodeURIComponent(store)+
+      '&select=id,receipt_date,input_code,input_name,qty,unit,unit_cost,supplier,reference,received_by,created_at&order=receipt_date.desc,created_at.desc&limit=200');
+    const items=Array.isArray(data)?data:[];
+    if(body){
+      body.innerHTML=items.length?items.map(x=>{
+        const qty=Number(x.qty||0);
+        const unitCost=Number(x.unit_cost||0);
+        const total=qty*unitCost;
+        return '<tr>'+
+          '<td>'+esc(x.receipt_date||'')+'</td>'+
+          '<td><b>'+esc(x.input_code||'')+'</b> — '+esc(x.input_name||'')+'</td>'+
+          '<td>'+qty.toFixed(3).replace(/\.?0+$/,'')+'</td>'+
+          '<td>'+esc(x.unit||'EA')+'</td>'+
+          '<td>R'+unitCost.toFixed(2)+'</td>'+
+          '<td>R'+total.toFixed(2)+'</td>'+
+          '<td>'+esc(x.supplier||'')+'</td>'+
+          '<td>'+esc(x.reference||'')+'</td>'+
+          '<td>'+esc(x.received_by||'')+'</td>'+
+        '</tr>';
+      }).join(''):'<tr><td colspan="9">No stock receipts found for this store.</td></tr>';
+    }
+    if(msg){msg.textContent=items.length+' receipt(s) loaded for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.';msg.className='msg ok';}
+  }catch(e){
+    if(body)body.innerHTML='<tr><td colspan="9">'+esc(e.message)+'</td></tr>';
+    if(msg){msg.textContent='Could not load receipt history: '+e.message;msg.className='msg bad';}
+  }
+}
+
+async function loadInputs(){
+  if(!guard())return;
+  const store=document.getElementById('listStore').value||'NDAYENI';
+  const body=document.getElementById('tbody');
+  const msg=document.getElementById('listMsg');
+  if(body)body.innerHTML='<tr><td colspan="7">Loading live Production Inputs...</td></tr>';
+  if(msg){msg.textContent='Loading from shared database...';msg.className='msg'}
+  try{
+    const data=await request('/rest/v1/pos_store_production_inputs?store_code=eq.'+
+      encodeURIComponent(store)+
+      '&select=id,store_code,code,name,category,unit,reorder_level,safety_stock,target_stock,purchase_cycle_days,purchase_group,preferred_supplier,preferred_unit_cost,active&order=category.asc,code.asc');
+    rows=Array.isArray(data)?data:[];
+    render();
+    if(msg){msg.textContent=rows.length+' Production Input(s) loaded for '+(store==='SIVANA'?'Sivana':'Ndayeni')+'.';msg.className='msg ok'}
+  }catch(e){
+    rows=[];
+    if(body)body.innerHTML='<tr><td colspan="7">'+esc(e.message)+'</td></tr>';
+    if(msg){msg.textContent='Could not load Production Inputs: '+e.message;msg.className='msg bad'}
+  }
+}
+function render(){
+  const searchEl=document.getElementById('search');
+  const q=String(searchEl?searchEl.value:'').trim().toLowerCase();
+  const a=rows.filter(x=>!q||[x.code,x.name,x.category].some(v=>String(v||'').toLowerCase().includes(q)));
+  document.getElementById('tbody').innerHTML=a.map(x=>`<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td>${esc(x.category||'')}</td><td>${esc(x.unit)}</td><td>${esc(x.reorder_level)}</td><td><span class="pill ${x.active?'':'inactive'}">${x.active?'ACTIVE':'INACTIVE'}</span></td><td><button class="secondary" onclick='edit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>EDIT</button></td></tr>`).join('')||'<tr><td colspan="7">No inputs found.</td></tr>';
+}
+function edit(x){document.getElementById('store').value=x.store_code;document.getElementById('code').value=x.code;document.getElementById('name').value=x.name;document.getElementById('category').value=x.category||'';document.getElementById('unit').value=x.unit||'EA';document.getElementById('reorder').value=x.reorder_level||0;document.getElementById('safety').value=x.safety_stock||0;document.getElementById('target').value=x.target_stock||0;document.getElementById('cycle').value=x.purchase_cycle_days||7;document.getElementById('group').value=x.purchase_group||'WEEKLY';document.getElementById('supplier').value=x.preferred_supplier||'';document.getElementById('cost').value=x.preferred_unit_cost??'';document.getElementById('active').value=String(x.active!==false);go('add')}
+document.getElementById('store').value=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';document.getElementById('listStore').value=document.getElementById('store').value;refreshAdmin();
+document.addEventListener('DOMContentLoaded',()=>{
+  setReceiptDate();
+  const initialStore=localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+  const rs=document.getElementById('r_store'); if(rs)rs.value=initialStore;
+  const hs=document.getElementById('receiptHistoryStore'); if(hs)hs.value=initialStore;
+  setTimeout(async()=>{await populateReceiptInputs();await loadReceiptHistory();},800);
+  document.getElementById('r_store')?.addEventListener('change',async(e)=>{
+    const store=e.target.value;
+    const hist=document.getElementById('receiptHistoryStore'); if(hist)hist.value=store;
+    await populateReceiptInputs();
+    await loadReceiptHistory();
+  });
+  document.getElementById('receiptHistoryStore')?.addEventListener('change',loadReceiptHistory);
+  document.getElementById('r_input')?.addEventListener('change',applyReceiptDefaults);
+  const ss=document.getElementById('s_store'); if(ss)ss.value=initialStore;
+  const sls=document.getElementById('s_listStore'); if(sls)sls.value=initialStore;
+  document.getElementById('s_store')?.addEventListener('change',(e)=>{const list=document.getElementById('s_listStore');if(list)list.value=e.target.value;clearSellableForm();loadSellableItems();});
+  document.getElementById('s_listStore')?.addEventListener('change',(e)=>{const form=document.getElementById('s_store');if(form)form.value=e.target.value;clearSellableForm();loadSellableItems();});
+});
+</script>
+<!-- BUILD: PRODUCTION_INPUT_ADMIN_PLUS_SELLABLE_ITEMS_V1_20260921 -->
+
+<script id="fvBirchAcresCoverageV91">
+/* V91 — Birch Acres full store-selector compatibility */
+(function(){
+  'use strict';
+  if(window.__fvBirchAcresCoverageV91)return;
+  window.__fvBirchAcresCoverageV91=true;
+  const CODE='BIRCH_ACRES', NAME='Birch Acres';
+  function ensureSelect(sel){
+    if(!sel || sel.tagName!=='SELECT') return;
+    const vals=Array.from(sel.options||[]).map(o=>String(o.value||'').toUpperCase());
+    if(vals.includes('NDAYENI') && vals.includes('SIVANA') && !vals.includes(CODE)){
+      const o=document.createElement('option');o.value=CODE;o.textContent=NAME;
+      const siv=Array.from(sel.options).find(x=>String(x.value||'').toUpperCase()==='SIVANA');
+      if(siv && siv.nextSibling) sel.insertBefore(o,siv.nextSibling); else sel.appendChild(o);
+    }
+  }
+  function apply(){document.querySelectorAll('select').forEach(ensureSelect);}
+  document.addEventListener('DOMContentLoaded',apply);
+  [50,250,750,1500,3000].forEach(ms=>setTimeout(apply,ms));
+  const obs=new MutationObserver(()=>apply());
+  obs.observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('change',function(e){
+    if(e.target && e.target.tagName==='SELECT' && String(e.target.value||'').toUpperCase()===CODE){
+      try{localStorage.setItem('feastervilleStoreCode',CODE)}catch(_){ }
+    }
+  },true);
+  window.ensureBirchAcresCoverageV91=apply;
+})();
+</script>
+
+</body></html>
