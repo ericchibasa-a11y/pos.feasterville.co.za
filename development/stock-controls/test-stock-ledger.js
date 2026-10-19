@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {calculateAfterCount}=require('./stock-ledger');
+const at='2026-10-19T09:30:00+02:00';
+const sale=(qty)=>({ref:'sale-1',type:'sale',qty,at:'2026-10-19T10:00:00+02:00'});
+assert.equal(calculateAfterCount({countQty:56,countedAt:at,movements:[sale(9)]}).balance,47);
+assert.equal(calculateAfterCount({countQty:33,countedAt:at,movements:[sale(9)]}).balance,24);
+assert.equal(calculateAfterCount({countQty:21,countedAt:at,movements:[sale(5)]}).balance,16);
+assert.throws(()=>calculateAfterCount({countQty:10,countedAt:at,movements:[sale(1),sale(1)]}),/Duplicate/);
+assert.throws(()=>calculateAfterCount({countQty:10,countedAt:at,movements:[{ref:'adj',type:'adjustment_in',qty:1,at:'2026-10-19T11:00:00+02:00'}]}),/approval/);
+console.log('5 integration smoke tests passed');
