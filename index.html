@@ -2115,6 +2115,9 @@ document.addEventListener('DOMContentLoaded',function(){
         '&select=code,name,category,price,active&order=category.asc,code.asc');
       liveStoreProducts[su.store_code] = Array.isArray(rows) ? rows : [];
       window.liveStoreProducts = liveStoreProducts;
+      // Refresh the V42 menu renderer after the async catalogue request completes.
+      // This avoids the initial empty menu persisting after a successful 200 response.
+      try { if(typeof window.refreshSalesSelectionV42==='function') window.refreshSalesSelectionV42(); } catch(e) { console.warn('Sales menu refresh',e); }
 
       // Build the sales catalogue directly, no production/report refreshes.
       try { cats(); } catch (_) {}
@@ -4718,6 +4721,10 @@ let currentCategory='ALL';
 
 function getProducts(){
   try{
+    const user=window.salesSessionUser||window.currentUser;
+    const store=(user&&user.store_code)||localStorage.getItem('feastervilleStoreCode')||'NDAYENI';
+    const cloud=window.liveStoreProducts&&window.liveStoreProducts[store];
+    if(Array.isArray(cloud)&&cloud.length) return cloud.filter(p=>p.active!==false);
     return (typeof activeProducts==='function'?activeProducts():[])||[];
   }catch(e){
     console.error('V42 active products',e);
