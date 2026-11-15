@@ -38,6 +38,17 @@ function stockInfo(p) {
   };
 }
 function maxSaleQty(p){ return stockInfo(p).available; }
+
+// Cross-POS navigation. Manager may switch; Birch Acres salesperson requires
+// an explicit Noshville user ID allowlist, not a self-selected store name.
+const birchAcresNoshvilleUserIds = new Set([]); // Populate after verifying staff account IDs.
+function updateCrossPosSwitch(){
+  const link=document.getElementById('noshvilleSwitchToFeasterville');
+  if(!link)return;
+  const allowed=!!profile?.is_active && (profile.role==='manager'||(profile.role==='salesperson'&&birchAcresNoshvilleUserIds.has(session?.user?.id)));
+  link.classList.toggle('hidden',!allowed);
+}
+
 async function loadProfile() {
   const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
   if(error) throw error; profile=data;
@@ -47,6 +58,7 @@ async function loadProfile() {
     throw new Error('This staff account is inactive. Please contact the manager.');
   }
   $('userInfo').textContent=`${profile.full_name||session.user.email} • ${profile.role}`;
+  updateCrossPosSwitch();
   document.querySelectorAll('[data-manager]').forEach(el=>el.classList.toggle('hidden',profile.role!=='manager'));
 }
 async function refreshBase() {
