@@ -2209,19 +2209,31 @@ document.addEventListener('DOMContentLoaded',function(){
 
     // Manager keeps the existing full live initialization.
     applyProfile(authData.user, profile);
-    // Populate the same live catalogue consumed by the V42 sales renderer.
-    // Read-only; never changes inventory, pricing or historical transactions.
-    try {
+    // Manager catalogue is read-only, and is reloaded on each store change.
+    // Do not hide authentication/catalogue errors behind an empty menu.
+    window.refreshManagerSalesCatalogue = async function() {
+      if (!window.currentUser || window.currentUser.role !== 'manager') return;
       const store = localStorage.getItem('feastervilleStoreCode') || 'NDAYENI';
-      const rows = await api('/rest/v1/pos_store_products?store_code=eq.' +
-        encodeURIComponent(store) +
-        '&select=code,name,category,price,active&order=category.asc,code.asc');
-      window.liveStoreProducts = window.liveStoreProducts || {};
-      window.liveStoreProducts[store] = Array.isArray(rows) ? rows : [];
-      if (typeof window.refreshSalesSelectionV42 === 'function') window.refreshSalesSelectionV42();
-    } catch (catalogueError) {
-      console.error('Manager live catalogue could not load', catalogueError);
-    }
+      try {
+        const rows = await api('/rest/v1/pos_store_products?store_code=eq.' +
+          encodeURIComponent(store) +
+          '&select=code,name,category,price,active&order=category.asc,code.asc');
+        window.liveStoreProducts = window.liveStoreProducts || {};
+        window.liveStoreProducts[store] = Array.isArray(rows) ? rows : [];
+        if (typeof window.refreshSalesSelectionV42 === 'function') window.refreshSalesSelectionV42();
+        if (!rows || !rows.length) console.warn('No live products returned for', store);
+      } catch (catalogueError) {
+        console.error('Manager live catalogue could not load', catalogueError);
+        const box = document.getElementById('products');
+        if (box) box.textContent = 'Unable to load live products: ' + catalogueError.message;
+      }
+    };
+    document.addEventListener('change', function(event) {
+      if (event.target && /store/i.test(event.target.id || '')) {
+        setTimeout(window.refreshManagerSalesCatalogue, 100);
+      }
+    });
+    await window.refreshManagerSalesCatalogue();
     el('liveLoginOverlay').style.display = 'none';
     el('liveLogout').style.display = '';
     setStatus('ONLINE - shared database');
