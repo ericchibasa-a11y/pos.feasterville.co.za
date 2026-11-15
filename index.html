@@ -1935,7 +1935,25 @@ document.addEventListener('DOMContentLoaded',function(){
 
     if (accessToken) headers.Authorization = 'Bearer ' + accessToken;
 
-    const response = await fetch(SUPABASE_URL + path, Object.assign({}, options, {headers}));
+    let response = await fetch(SUPABASE_URL + path, Object.assign({}, options, {headers}));
+    // Renew expired access tokens once, then retry the original request.
+    // Never replay a request that already succeeded.
+    if (response.status === 401 && !path.startsWith('/auth/v1/token') &&
+        sessionStorage.getItem(REFRESH_KEY)) {
+      const refreshResponse = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method:'POST',
+        headers:{apikey:API_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({refresh_token:sessionStorage.getItem(REFRESH_KEY)})
+      });
+      if (refreshResponse.ok) {
+        const refreshed = await refreshResponse.json();
+        accessToken = refreshed.access_token;
+        sessionStorage.setItem(TOKEN_KEY, accessToken);
+        if (refreshed.refresh_token) sessionStorage.setItem(REFRESH_KEY, refreshed.refresh_token);
+        headers.Authorization = 'Bearer ' + accessToken;
+        response = await fetch(SUPABASE_URL + path, Object.assign({}, options, {headers}));
+      }
+    }
     const raw = await response.text();
     let body = null;
 
@@ -2191,6 +2209,19 @@ document.addEventListener('DOMContentLoaded',function(){
 
     // Manager keeps the existing full live initialization.
     applyProfile(authData.user, profile);
+    // Populate the same live catalogue consumed by the V42 sales renderer.
+    // Read-only; never changes inventory, pricing or historical transactions.
+    try {
+      const store = localStorage.getItem('feastervilleStoreCode') || 'NDAYENI';
+      const rows = await api('/rest/v1/pos_store_products?store_code=eq.' +
+        encodeURIComponent(store) +
+        '&select=code,name,category,price,active&order=category.asc,code.asc');
+      window.liveStoreProducts = window.liveStoreProducts || {};
+      window.liveStoreProducts[store] = Array.isArray(rows) ? rows : [];
+      if (typeof window.refreshSalesSelectionV42 === 'function') window.refreshSalesSelectionV42();
+    } catch (catalogueError) {
+      console.error('Manager live catalogue could not load', catalogueError);
+    }
     el('liveLoginOverlay').style.display = 'none';
     el('liveLogout').style.display = '';
     setStatus('ONLINE - shared database');
